@@ -1,6 +1,9 @@
 import { Agent, type AgentConfig } from "@openacme/agent-core";
 import {
+  compilePolicy,
   createAgentStore,
+  createTeamStore,
+  describePolicy,
   loadConfig,
   loadGlobalMcpServers,
   saveGlobalMcpServers,
@@ -10,6 +13,8 @@ import {
   type Config,
   type MCPServerConfig,
   type ModelConfig,
+  type TeamDefinition,
+  type TeamStore,
 } from "@openacme/config";
 import { createLogger } from "@openacme/config/logger";
 
@@ -41,11 +46,13 @@ import {
   bindAgentTool,
   bindPingUser,
   bindDeferSession,
+  bindToolHost,
   closeAllShellSessions,
   sweepOverflow,
   deleteSessionToolCalls,
   SYSTEM_TOOLS,
 } from "@openacme/tools";
+import { ToolHostManager } from "@openacme/tool-host";
 import * as fs from "node:fs";
 import { MemoryStore } from "@openacme/memory";
 import { TaskStore } from "@openacme/tasks";
@@ -59,10 +66,13 @@ import { SessionBroadcaster } from "./broadcaster.js";
 import {
   MCPClient,
   FileMCPTokenStore,
+  jsonSchemaToZod,
   type MCPTokenStore,
   type OAuthCallback,
+  type ServerState,
   type ServerStatus,
 } from "@openacme/mcp-client";
+import type { McpServerDiscovery } from "@openacme/tool-host";
 import {
   awaitLoopbackCallback,
   openBrowser,
@@ -146,6 +156,10 @@ export class AgentManager {
    *  can reach it. */
   readonly dispatcher: Dispatcher;
   readonly agentStore: AgentStore;
+  readonly teamStore: TeamStore;
+  /** Per-agent sandboxed workers executing the raw (worker-runtime)
+   *  tools. Lazy: nothing spawns until the first such tool call. */
+  readonly toolHostManager: ToolHostManager;
   readonly browserManager: BrowserManager;
   readonly agentCatalog: AgentCatalog;
   /** In-memory per-session pub/sub for SSE clients. Shared by scheduler,
@@ -153,6 +167,12 @@ export class AgentManager {
   readonly broadcaster: SessionBroadcaster;
   private config: Config;
   private mcpClients = new Map<string, MCPClient>();
+  /** Worker-run stdio MCP servers per agent: last discovery snapshot +
+   *  the daemon-side proxy tool names registered from it. */
+  private stdioMcp = new Map<
+    string,
+    { discovery: McpServerDiscovery[]; toolNames: string[] }
+  >();
   readonly skillRegistry: SkillRegistry;
 
   constructor(config: Config) {
@@ -193,6 +213,10 @@ export class AgentManager {
     // state in config.yaml.
     this.agentsDir = path.join(config.dataDir, "agents");
     this.agentStore = createAgentStore(this.agentsDir);
+    // Teams live as folders at <dataDir>/teams/<id>/TEAM.md, same
+    // filesystem-backed idiom as agents. Human-owned: written via the
+    // HTTP routes / disk only, never by agent tools.
+    this.teamStore = createTeamStore(path.join(config.dataDir, "teams"));
     this.agentsMd = readAgentsMd(config.dataDir);
     // One MemoryStore per AgentManager — shared between every Agent
     // instance and the `memory` tool's binding so the in-process mutex
@@ -383,6 +407,30 @@ export class AgentManager {
         this.ensureBrowserOverridesAtAcquire(id, current),
     });
     bindBrowser({ manager: this.browserManager });
+
+    // Per-agent tool-host workers: worker-runtime tools (filesystem,
+    // shell, exec, process) route here instead of running in the daemon.
+    // Policy is compiled fresh at every worker (re)spawn so AGENT.md /
+    // TEAM.md edits take effect on the next worker without bookkeeping.
+    this.toolHostManager = new ToolHostManager({
+      dataDir: config.dataDir,
+      compilePolicyFor: (agentId) =>
+        compilePolicy({
+          agentId,
+          agentDefs: this.agentStore.list(),
+          teams: this.teamStore.list(),
+          dataDir: config.dataDir,
+        }),
+      // stdio MCP servers run as children of the sandboxed worker so
+      // they inherit the agent's confinement. URL servers stay daemon-
+      // side (no local process; OAuth machinery untouched).
+      stdioMcpServersFor: (agentId) => {
+        const def = this.agentStore.get(agentId);
+        if (!def) return {};
+        return this.partitionServers(this.serversForAgent(def)).stdio;
+      },
+    });
+    bindToolHost(this.toolHostManager);
 
     // agent_list: surface the workforce directory + the calling agent's peer
     // notes inline so a delegating agent sees canonical role plus their
@@ -577,6 +625,31 @@ export class AgentManager {
     return out;
   }
 
+  /** Split an agent's effective server map by where they run: stdio
+   *  servers (local child processes) belong inside the sandboxed worker;
+   *  URL servers stay daemon-side. */
+  private partitionServers(servers: Record<string, MCPServerConfig>): {
+    stdio: Record<string, MCPServerConfig>;
+    url: Record<string, MCPServerConfig>;
+  } {
+    const stdio: Record<string, MCPServerConfig> = {};
+    const url: Record<string, MCPServerConfig> = {};
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (cfg.command) stdio[name] = cfg;
+      else url[name] = cfg;
+    }
+    return { stdio, url };
+  }
+
+  /** Drop the daemon-side proxy registrations for an agent's worker-run
+   *  stdio MCP tools. */
+  private deregisterStdioMcp(id: string): void {
+    const prev = this.stdioMcp.get(id);
+    if (!prev) return;
+    for (const name of prev.toolNames) toolRegistry.deregister(name);
+    this.stdioMcp.delete(id);
+  }
+
   /**
    * Tear down and rebuild the MCP client for one agent. Called from
    * `initMCP` and agent CRUD. (No file watcher: editing `mcp.json`
@@ -593,6 +666,7 @@ export class AgentManager {
         await stale.disconnect();
         this.mcpClients.delete(id);
       }
+      this.deregisterStdioMcp(id);
       return;
     }
 
@@ -601,26 +675,72 @@ export class AgentManager {
       await existing.disconnect();
       this.mcpClients.delete(id);
     }
+    // Restart the worker so its stdio MCP children come up under the
+    // current config (the init payload is computed at spawn time).
+    this.deregisterStdioMcp(id);
+    await this.toolHostManager.stopWorker(id);
 
-    const servers = this.serversForAgent(def);
-    if (Object.keys(servers).length === 0) {
+    const { stdio, url } = this.partitionServers(this.serversForAgent(def));
+    if (Object.keys(stdio).length + Object.keys(url).length === 0) {
       // Drop the cached Agent so any tool change (not just MCP) lands
       // on the next chat call.
       this.agents.delete(id);
       return;
     }
 
-    const mcpClient = new MCPClient(toolRegistry, {
-      tokenStore: this.mcpTokenStore(),
-      oauthRedirectUrl: this.mcpOAuthRedirectUrl(),
-      onUnauthorized: this.mcpOAuthCallback,
-    });
-    // Boot/reinit don't drive the browser flow — they'd block for up to
-    // 5min waiting for the loopback. Servers needing auth land in
-    // `awaiting_oauth`; the user explicitly hits the connect endpoint
-    // (which omits skipOAuth) to authorize.
-    await mcpClient.connect(servers, { skipOAuth: true });
-    this.mcpClients.set(id, mcpClient);
+    if (Object.keys(url).length > 0) {
+      const mcpClient = new MCPClient(toolRegistry, {
+        tokenStore: this.mcpTokenStore(),
+        oauthRedirectUrl: this.mcpOAuthRedirectUrl(),
+        onUnauthorized: this.mcpOAuthCallback,
+      });
+      // Boot/reinit don't drive the browser flow — they'd block for up to
+      // 5min waiting for the loopback. Servers needing auth land in
+      // `awaiting_oauth`; the user explicitly hits the connect endpoint
+      // (which omits skipOAuth) to authorize.
+      await mcpClient.connect(url, { skipOAuth: true });
+      this.mcpClients.set(id, mcpClient);
+    }
+
+    if (Object.keys(stdio).length > 0) {
+      // Eager worker spawn: tool definitions must exist at prompt-build
+      // time, and only MCP discovery is dynamic. Failure-tolerant — a
+      // broken stdio server (or worker) must not block agent creation.
+      try {
+        const discovery = await this.toolHostManager.discoverMcp(id);
+        const toolNames: string[] = [];
+        for (const server of discovery) {
+          for (const tool of server.tools) {
+            const registryName = `mcp_${server.server}__${tool.name}`;
+            toolRegistry.register({
+              name: registryName,
+              toolset: `mcp-${server.server}`,
+              description:
+                tool.description ??
+                `Tool from MCP server '${server.server}'`,
+              parameters: jsonSchemaToZod(tool.inputSchema),
+              emoji: "🔌",
+              parallelSafe: true,
+              // Execution happens in the worker, where the real MCP
+              // client registered the same name; this daemon-side entry
+              // is schema + routing only.
+              runtime: "worker",
+              handler: async () =>
+                JSON.stringify({
+                  error: `MCP tool '${registryName}' requires the agent's tool-host worker`,
+                }),
+            });
+            toolNames.push(registryName);
+          }
+        }
+        this.stdioMcp.set(id, { discovery, toolNames });
+      } catch (e) {
+        log.warn(
+          { err: e, agentId: id },
+          "stdio MCP discovery via tool-host failed; agent comes up without those tools"
+        );
+      }
+    }
 
     // System prompt + tool list both depend on MCP discovery — evict
     // the cached Agent so the next chat picks up the new tool set.
@@ -633,10 +753,25 @@ export class AgentManager {
    * MCP server status, optionally scoped to one agent.
    */
   getMcpStatus(agentId?: string): Array<{ agentId: string; servers: ServerStatus[] }> {
-    const ids = agentId ? [agentId] : [...this.mcpClients.keys()];
+    const ids = agentId
+      ? [agentId]
+      : [...new Set([...this.mcpClients.keys(), ...this.stdioMcp.keys()])];
     return ids.map((id) => ({
       agentId: id,
-      servers: this.mcpClients.get(id)?.getStatus() ?? [],
+      servers: [
+        ...(this.mcpClients.get(id)?.getStatus() ?? []),
+        // Worker-run stdio servers, reshaped to the ServerStatus contract.
+        ...(this.stdioMcp.get(id)?.discovery ?? []).map((d) => ({
+          name: d.server,
+          state: d.state as ServerState,
+          connected: d.connected,
+          toolCount: d.tools.length,
+          tools: d.tools.map((t) => `mcp_${d.server}__${t.name}`),
+          lastError: d.lastError,
+          attemptCount: 0,
+          transport: "stdio" as const,
+        })),
+      ],
     }));
   }
 
@@ -719,6 +854,12 @@ export class AgentManager {
   async createAgent(def: AgentDefinition): Promise<Agent> {
     const provisioned = await this.ensureAgentBrowserProfile(def);
     this.agentStore.upsert(provisioned);
+    // A new agent changes every OTHER agent's compiled path policy (its
+    // memory/sessions dirs join their deny-read lists) — drop all cached
+    // Agents and workers so the next call rebuilds with fresh policies.
+    // Rare + cheap (workers respawn lazily).
+    this.agents.clear();
+    await this.toolHostManager.stopAll();
     await this.reinitMCPForAgent(provisioned.id);
     const agent = this.createAgentFromDef(provisioned);
     this.agents.set(provisioned.id, agent);
@@ -1018,13 +1159,46 @@ export class AgentManager {
       hasOwn(updates, "mcpServers") || hasOwn(updates, "mcpDisabled");
 
     if (mcpChanged) {
+      // reinit restarts the worker itself (stdio MCP children must come
+      // up under the new config).
       await this.reinitMCPForAgent(id);
     } else {
-      // Tool list / persona / model only — just evict the cached Agent.
+      // Tool list / persona / model only — evict the cached Agent and
+      // restart the worker: definition changes (e.g. `paths` grants)
+      // alter the compiled sandbox profile.
       this.agents.delete(id);
+      await this.toolHostManager.stopWorker(id);
     }
 
     return updated;
+  }
+
+  /**
+   * Create a team. Member agents' cached Agent instances are evicted so
+   * their next chat rebuilds the system prompt with the `## Teams`
+   * section (and, later, the recompiled access policy).
+   */
+  createTeam(team: TeamDefinition): TeamDefinition {
+    if (this.teamStore.get(team.id)) {
+      throw new Error(`Team already exists: ${team.id}`);
+    }
+    this.teamStore.upsert(team);
+    for (const member of team.members) this.evictAgent(member);
+    return this.teamStore.get(team.id)!;
+  }
+
+  /**
+   * Update a team definition. Evicts the union of old + new members —
+   * removed members must lose the section, added members must gain it.
+   */
+  updateTeam(id: string, updates: Partial<TeamDefinition>): TeamDefinition {
+    const existing = this.teamStore.get(id);
+    if (!existing) throw new Error(`Team not found: ${id}`);
+    const updated: TeamDefinition = { ...existing, ...updates, id };
+    this.teamStore.upsert(updated);
+    const affected = new Set([...existing.members, ...updated.members]);
+    for (const member of affected) this.evictAgent(member);
+    return this.teamStore.get(id)!;
   }
 
   /**
@@ -1050,7 +1224,12 @@ export class AgentManager {
       await mcpClient.disconnect();
       this.mcpClients.delete(id);
     }
-    this.agents.delete(id);
+    // Removing an agent changes every other agent's compiled path policy
+    // (deny-read entries for the removed dirs disappear) — clear all,
+    // and kill every worker so stale sandbox profiles don't linger.
+    this.agents.clear();
+    this.deregisterStdioMcp(id);
+    await this.toolHostManager.stopAll();
 
     // Kill the agent's browser session BEFORE agentStore.delete blows away
     // the on-disk profile dir. Per-agent now; orphan Chrome would prevent
@@ -1116,6 +1295,9 @@ export class AgentManager {
    */
   evictAgent(id: string): void {
     this.agents.delete(id);
+    // Kill the agent's tool-host worker too — the next worker-runtime
+    // tool call respawns it under a freshly compiled policy.
+    void this.toolHostManager.stopWorker(id);
   }
 
   /** For events emitted by TaskStore before the new sessionId column
@@ -1419,6 +1601,9 @@ export class AgentManager {
         mcpToolNames.push(...status.tools);
       }
     }
+    // Worker-run stdio MCP tools (registered as daemon-side proxies).
+    const stdioMcp = this.stdioMcp.get(def.id);
+    if (stdioMcp) mcpToolNames.push(...stdioMcp.toolNames);
 
     // Compute skills index for system prompt injection
     let skillsIndex: string | undefined;
@@ -1469,6 +1654,27 @@ export class AgentManager {
       .listResources(def.id)
       .map((r) => ({ relPath: r.relPath, size: r.size, absPath: r.path }));
 
+    // Non-archived teams this agent belongs to — drives the prompt's
+    // `## Teams` section. Snapshot at build time; team mutations evict
+    // member agents so the next chat rebuilds.
+    const teams = this.teamStore.teamsFor(def.id).map((t) => ({
+      id: t.id,
+      name: t.name,
+      members: t.members,
+      charter: t.charter,
+      workspaceDir: this.teamStore.workspaceDir(t.id)!,
+    }));
+
+    // Compiled filesystem policy — one object drives both the sandbox
+    // profile (tool host, later phases) and the prompt's `## Access`
+    // section, so the agent's stated rules and the kernel's can't drift.
+    const policy = compilePolicy({
+      agentId: def.id,
+      agentDefs: this.agentStore.list(),
+      teams: this.teamStore.list(),
+      dataDir: this.config.dataDir,
+    });
+
     const agentConfig: AgentConfig = {
       id: def.id,
       name: def.name,
@@ -1495,7 +1701,13 @@ export class AgentManager {
         summarizerModel: b.compressionSummarizerModel,
       },
       agentsMd: this.agentsMd,
+      teams,
       workspaceDir,
+      accessSection:
+        describePolicy(policy) +
+        (this.toolHostManager.degradeReason
+          ? `\n\n> NOTE: OS-level enforcement is currently unavailable on this machine (${this.toolHostManager.degradeReason}). The rules above still apply — follow them.`
+          : ""),
       resources,
     };
 
@@ -1592,6 +1804,7 @@ export class AgentManager {
       await mcpClient.disconnect();
     }
     closeAllShellSessions();
+    await this.toolHostManager.close();
     await this.browserManager.close();
     this.db.close();
   }

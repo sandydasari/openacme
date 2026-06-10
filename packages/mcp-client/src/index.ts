@@ -1,6 +1,8 @@
 export {
   MCPClient,
+  jsonSchemaToZod,
   type MCPClientOptions,
+  type McpToolSchema,
   type OAuthCallback,
   type ServerStatus,
   type ServerState,

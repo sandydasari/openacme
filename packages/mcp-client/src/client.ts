@@ -49,9 +49,20 @@ interface ServerRecord {
   client?: Client;
   transport?: AnyTransport;
   toolNames: string[];
+  /** Raw (JSON Schema) tool definitions from the last discovery — kept
+   *  so out-of-process consumers (tool-host worker → daemon) can rebuild
+   *  registry entries without re-querying the server. */
+  toolSchemas?: McpToolSchema[];
   lastError?: string;
   attemptCount: number;
   resolvedTransport?: ResolvedTransport;
+}
+
+export interface McpToolSchema {
+  /** Bare MCP tool name (no `mcp_<server>__` prefix). */
+  name: string;
+  description?: string;
+  inputSchema: unknown;
 }
 
 export interface ServerStatus {
@@ -810,9 +821,15 @@ export class MCPClient {
       ? new Set(config.allowedTools)
       : null;
     const toolNames: string[] = [];
+    const toolSchemas: McpToolSchema[] = [];
 
     for (const tool of response.tools) {
       if (allow && !allow.has(tool.name)) continue;
+      toolSchemas.push({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      });
 
       const registryName = `mcp_${serverName}__${tool.name}`;
       const toolset = `mcp-${serverName}`;
@@ -838,7 +855,16 @@ export class MCPClient {
       toolNames.push(registryName);
     }
 
+    const rec = this.servers.get(serverName);
+    if (rec) rec.toolSchemas = toolSchemas;
+
     return toolNames;
+  }
+
+  /** Raw tool schemas from the last discovery for one server. Empty
+   *  until the server has connected at least once. */
+  getToolSchemas(serverName: string): McpToolSchema[] {
+    return this.servers.get(serverName)?.toolSchemas ?? [];
   }
 
   /**
@@ -890,57 +916,67 @@ export class MCPClient {
   // ── JSON Schema → Zod ────────────────────────────────────────────────────
 
   private jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
-    if (!schema || typeof schema !== "object") {
-      return z.record(z.string(), z.unknown());
-    }
+    return jsonSchemaToZod(schema);
+  }
+}
 
-    const s = schema as Record<string, unknown>;
-
-    if (s.type === "object" && s.properties && typeof s.properties === "object") {
-      const props = s.properties as Record<string, Record<string, unknown>>;
-      const required = new Set(Array.isArray(s.required) ? s.required : []);
-
-      const shape: Record<string, z.ZodTypeAny> = {};
-      for (const [key, propSchema] of Object.entries(props)) {
-        let propZod = this.jsonSchemaPrimitiveToZod(propSchema);
-        if (propSchema.description && typeof propSchema.description === "string") {
-          propZod = propZod.describe(propSchema.description);
-        }
-        if (!required.has(key)) {
-          propZod = propZod.optional();
-        }
-        shape[key] = propZod;
-      }
-      return z.object(shape);
-    }
-
+/**
+ * Convert an MCP tool's JSON Schema into a Zod schema for the registry.
+ * Exported so the daemon can rebuild parameters for tools whose schemas
+ * were discovered inside a tool-host worker (raw JSON crosses the RPC
+ * boundary; Zod functions can't).
+ */
+export function jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
+  if (!schema || typeof schema !== "object") {
     return z.record(z.string(), z.unknown());
   }
 
-  private jsonSchemaPrimitiveToZod(schema: Record<string, unknown>): z.ZodTypeAny {
-    switch (schema.type) {
-      case "string":
-        if (Array.isArray(schema.enum)) {
-          return z.enum(schema.enum as [string, ...string[]]);
-        }
-        return z.string();
-      case "number":
-      case "integer":
-        return z.number();
-      case "boolean":
-        return z.boolean();
-      case "array":
-        if (schema.items && typeof schema.items === "object") {
-          return z.array(
-            this.jsonSchemaPrimitiveToZod(schema.items as Record<string, unknown>)
-          );
-        }
-        return z.array(z.unknown());
-      case "object":
-        return this.jsonSchemaToZod(schema);
-      default:
-        return z.unknown();
+  const s = schema as Record<string, unknown>;
+
+  if (s.type === "object" && s.properties && typeof s.properties === "object") {
+    const props = s.properties as Record<string, Record<string, unknown>>;
+    const required = new Set(Array.isArray(s.required) ? s.required : []);
+
+    const shape: Record<string, z.ZodTypeAny> = {};
+    for (const [key, propSchema] of Object.entries(props)) {
+      let propZod = jsonSchemaPrimitiveToZod(propSchema);
+      if (propSchema.description && typeof propSchema.description === "string") {
+        propZod = propZod.describe(propSchema.description);
+      }
+      if (!required.has(key)) {
+        propZod = propZod.optional();
+      }
+      shape[key] = propZod;
     }
+    return z.object(shape);
+  }
+
+  return z.record(z.string(), z.unknown());
+}
+
+function jsonSchemaPrimitiveToZod(schema: Record<string, unknown>): z.ZodTypeAny {
+  switch (schema.type) {
+    case "string":
+      if (Array.isArray(schema.enum)) {
+        return z.enum(schema.enum as [string, ...string[]]);
+      }
+      return z.string();
+    case "number":
+    case "integer":
+      return z.number();
+    case "boolean":
+      return z.boolean();
+    case "array":
+      if (schema.items && typeof schema.items === "object") {
+        return z.array(
+          jsonSchemaPrimitiveToZod(schema.items as Record<string, unknown>)
+        );
+      }
+      return z.array(z.unknown());
+    case "object":
+      return jsonSchemaToZod(schema);
+    default:
+      return z.unknown();
   }
 }
 

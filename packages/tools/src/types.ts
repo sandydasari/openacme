@@ -29,6 +29,12 @@ export interface ToolEntry {
   emoji?: string;
   /** Whether this tool is safe to run in parallel with other tools */
   parallelSafe?: boolean;
+  /** Execution locality. `"worker"` routes the call to the per-agent
+   *  sandboxed tool-host process when one is bound (raw filesystem /
+   *  process-spawning tools); absent or `"daemon"` runs the handler
+   *  in-process (mediated platform-API tools). Handlers stay identical
+   *  either way — the worker imports the same module. */
+  runtime?: "daemon" | "worker";
   /** Max result size in characters before the registry spills the result to
    *  a file in the agent's workspace and returns a preview + path. Defaults
    *  to the spill module's `DEFAULT_SPILL_THRESHOLD` when unset. */

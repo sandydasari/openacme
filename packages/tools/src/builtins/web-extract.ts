@@ -80,6 +80,7 @@ function rateLimitMessage(err: WebRateLimitError): string {
 registry.register({
   name: "web_extract",
   toolset: "web",
+  runtime: "worker",
   description:
     "Fetch a URL and extract its main readable content as markdown (default), plain text, or cleaned HTML. " +
     "Works zero-config via Jina Reader's free tier. With FIRECRAWL_API_KEY uses Firecrawl for higher reliability on JS-heavy / bot-protected sites. " +

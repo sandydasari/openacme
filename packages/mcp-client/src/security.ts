@@ -5,10 +5,22 @@ const log = createLogger("mcp-client.security");
 
 /**
  * Environment variables that are safe to pass through to MCP stdio subprocesses.
- * Mirrors Hermes mcp_tool.py _SAFE_ENV_KEYS.
+ * Mirrors Hermes mcp_tool.py _SAFE_ENV_KEYS, plus connectivity config:
+ * proxy + CA-trust vars are not credentials, and inside the sandboxed
+ * tool-host they are the ONLY route to the network — stripping them
+ * blackholes every server that fetches anything (npx-based ones first).
  */
 const SAFE_ENV_KEYS = new Set([
   "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR",
+  // Proxy routing (srt's filtering proxies, or a corporate proxy).
+  "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+  "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+  "FTP_PROXY", "ftp_proxy",
+  // CA trust for proxy-minted certs (srt TLS termination).
+  "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "CURL_CA_BUNDLE",
+  "REQUESTS_CA_BUNDLE", "PIP_CERT", "GIT_SSL_CAINFO", "AWS_CA_BUNDLE",
+  // Sandbox marker so children can detect confinement.
+  "SANDBOX_RUNTIME",
 ]);
 
 /**

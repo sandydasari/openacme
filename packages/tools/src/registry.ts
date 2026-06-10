@@ -4,6 +4,7 @@ import type { ToolEntry, ToolDefinition, ToolInfo } from "./types.js";
 import { SYSTEM_TOOLS } from "./system.js";
 import { maybeSpill } from "./spill.js";
 import { toolCallContext } from "./session-context.js";
+import { getToolHostDispatcher } from "./tool-host-binding.js";
 
 const log = createLogger("tools.registry");
 
@@ -147,6 +148,19 @@ export class ToolRegistry {
             store.toolCallId = opts.toolCallId;
           }
           try {
+            // Worker-runtime tools route to the per-agent sandboxed tool
+            // host when one is bound. The worker re-enters the context,
+            // runs the same handler module, and applies spill — so no
+            // daemon-side maybeSpill here (the spill dir is only writable
+            // by the worker). Unbound (tests, scripts) → local fallback.
+            if (entry.runtime === "worker" && store) {
+              const dispatcher = getToolHostDispatcher();
+              if (dispatcher) {
+                return await dispatcher.dispatch(entry.name, args, {
+                  ...store,
+                });
+              }
+            }
             const result = await entry.handler(args);
             return maybeSpill(result, entry);
           } finally {
@@ -173,8 +187,22 @@ export class ToolRegistry {
     if (!entry) {
       return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
+    // Validate + apply schema defaults, mirroring what the AI SDK does
+    // before `execute`. Without this, optional-with-default params (e.g.
+    // shell's `timeout`) arrive undefined on the dispatch path — the
+    // tool-host worker routes every call through here.
+    const parsed = entry.parameters.safeParse(args);
+    if (!parsed.success) {
+      return JSON.stringify({
+        error: `Invalid arguments for ${name}: ${parsed.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ")}`,
+      });
+    }
     try {
-      const result = await entry.handler(args);
+      const result = await entry.handler(
+        parsed.data as Record<string, unknown>
+      );
       return await maybeSpill(result, entry);
     } catch (error) {
       const message =

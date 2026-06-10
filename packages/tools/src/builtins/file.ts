@@ -195,6 +195,7 @@ function exposeAsSessionFile(srcPath: string, basename: string): string | null {
 registry.register({
   name: "read_file",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "Read a file by path. Handles text, images (PNG/JPEG/GIF/WebP), and PDFs. " +
     "Image and PDF content is delivered as a vision input on multimodal models " +
@@ -287,6 +288,7 @@ registry.register({
 registry.register({
   name: "write_file",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "Write content to a file. Creates the file and any parent directories " +
     "if they don't exist. Relative paths resolve against your agent's " +
@@ -324,6 +326,7 @@ registry.register({
 registry.register({
   name: "list_files",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "List files and directories at the given path. Returns names, types, " +
     "and sizes. Relative paths resolve against your agent's workspace dir.",
@@ -407,6 +410,7 @@ registry.register({
 registry.register({
   name: "search_files",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "Search for a text pattern across files using grep. Returns matching " +
     "lines with file paths and line numbers. Relative paths resolve " +

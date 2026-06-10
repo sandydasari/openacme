@@ -253,6 +253,13 @@ registry.register({
     recurrence: RecurrenceParamsSchema.optional().describe(
       "Schedule the task to fire repeatedly. Marking it done schedules the next fire; cancel to stop."
     ),
+    team: z
+      .string()
+      .optional()
+      .describe(
+        "Team tag (team id) when the work belongs to a team's charter. " +
+          "Organizational only — assignment and wake-up still run on `assignee`."
+      ),
   }),
   emoji: "🆕",
   parallelSafe: false,
@@ -270,6 +277,7 @@ registry.register({
       due_at?: string;
       session?: string;
       recurrence?: Recurrence;
+      team?: string;
     };
     const agentId = getCurrentAgentId();
     if (!agentId) {
@@ -328,6 +336,7 @@ registry.register({
         due_at: a.due_at ?? null,
         session_id: inheritedSession,
         recurrence: a.recurrence ?? null,
+        team: a.team ?? null,
       });
       const warnings: string[] = [];
       if (task.status === "blocked") {
@@ -402,6 +411,11 @@ registry.register({
     recurrence: RecurrenceParamsSchema.nullable()
       .optional()
       .describe("Set/change recurrence; pass null to strip and make one-shot."),
+    team: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Team tag (team id); null to clear. Organizational only."),
   }),
   emoji: "✏️",
   parallelSafe: false,
@@ -420,6 +434,7 @@ registry.register({
       start_at?: string | null;
       due_at?: string | null;
       recurrence?: Recurrence | null;
+      team?: string | null;
     };
     const agentId = getCurrentAgentId();
     if (!agentId) {
@@ -462,6 +477,9 @@ registry.register({
             : {}),
           ...(Object.prototype.hasOwnProperty.call(a, "recurrence")
             ? { recurrence: a.recurrence }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(a, "team")
+            ? { team: a.team }
             : {}),
         },
         { actor: agentId }

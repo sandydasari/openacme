@@ -46,6 +46,7 @@
     "@openacme/llm-provider": "workspace:*",
     "@openacme/memory": "workspace:*",
     "@openacme/tasks": "workspace:*",
+    "@openacme/tool-host": "workspace:*",
     "@openacme/tools": "workspace:*",
     "@openacme/agent-core": "workspace:*",
     "@openacme/mcp-client": "workspace:*",

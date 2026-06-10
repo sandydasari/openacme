@@ -169,6 +169,7 @@ function clip(s: string): string {
 registry.register({
   name: "execute_code",
   toolset: "code",
+  runtime: "worker",
   description:
     "Execute Python code in a persistent REPL. Variables, imports, and " +
     "function definitions persist across calls within the same agent " +

@@ -30,6 +30,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerUploadsRoutes, type UploadsContext } from "./routes/uploads.js";
 import { registerFilesRoutes } from "./routes/files.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
+import { registerTeamRoutes } from "./routes/teams.js";
 import { registerSetupRoutes, setDefaultModelIfUnset } from "./routes/setup.js";
 import { registerSkillsHubRoutes } from "./routes/skills-hub.js";
 import { registerAgentResourceRoutes } from "./routes/agent-resources.js";
@@ -151,6 +152,10 @@ export async function createApp(config: Config): Promise<{ app: Hono; manager: A
   // Tasks: founder read/edit/delete. POST is intentionally absent — task
   // creation is agent-only via the `task_create` tool.
   registerTaskRoutes(app, manager);
+
+  // Teams: human-owned rosters + charters. No DELETE (archive instead);
+  // no agent-side write path by design.
+  registerTeamRoutes(app, manager);
 
   // Per-agent resource files under `<agentDir>/resources/`. Mounted
   // before the generic /api/agents/:id routes since the path-collisions
@@ -317,8 +322,10 @@ export async function createApp(config: Config): Promise<{ app: Hono; manager: A
     }
     // messages cascade-delete via FK; FTS triggers keep the index in sync
     manager.sessionStore.delete(id);
-    // Reap the per-session bash subprocess if one was running.
+    // Reap the per-session bash subprocess if one was running — local
+    // (unbound test paths) and in the agent's tool-host worker.
     closeShellSession(session.agentId, id);
+    manager.toolHostManager.notifySessionClosed(session.agentId, id);
     // Drop the broadcaster's ring buffer + subscriber set for this
     // session so a deleted session's last 50 events don't sit in
     // memory until process restart.
@@ -1557,6 +1564,25 @@ async function runChatTurn(args: {
     kind: "session_state",
     state: "running",
   });
+
+  // Sandbox degradation is loud: every turn carries a transient warning
+  // chip so unconfined tool execution is never silent.
+  if (manager.toolHostManager.degradeReason) {
+    const sandboxStatusId = `sandbox-${responseMessageId}`;
+    manager.broadcaster.broadcast(sessionId, {
+      kind: "ui_message_part",
+      part: {
+        type: "data-status",
+        id: sandboxStatusId,
+        data: {
+          id: sandboxStatusId,
+          kind: "warn",
+          message: `Sandbox unavailable — tools are running unconfined: ${manager.toolHostManager.degradeReason}`,
+        },
+        transient: true,
+      },
+    });
+  }
 
   // Preflight: compact the session in place if the next request would
   // exceed the configured threshold. The session id is preserved

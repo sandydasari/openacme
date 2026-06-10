@@ -50,6 +50,11 @@ export {
   bindDeferSession,
   type DeferSessionBindings,
 } from "./builtins/defer-session.js";
+export {
+  bindToolHost,
+  getToolHostDispatcher,
+  type ToolHostDispatcher,
+} from "./tool-host-binding.js";
 export { SYSTEM_TOOLS, type SystemTool } from "./system.js";
 export {
   sweepOverflow,

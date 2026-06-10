@@ -17,6 +17,7 @@ const DESTRUCTIVE_PATTERNS = /(?:^|\s|&&|\|\||;|`)(?:rm\s|rmdir\s|cp\s|mv\s|sed\
 registry.register({
   name: "shell",
   toolset: "terminal",
+  runtime: "worker",
   description:
     "Execute a shell command and return its output. Use for running scripts, " +
     "installing packages, checking system state, and any terminal operations. " +

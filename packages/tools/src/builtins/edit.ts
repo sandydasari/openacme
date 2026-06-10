@@ -173,6 +173,7 @@ export function replace(
 registry.register({
   name: "edit",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "Edit a single file by replacing oldString with newString. Faster than apply_patch for small targeted changes. " +
     "If oldString is empty and the file does not exist, the file is created with newString as its content. " +

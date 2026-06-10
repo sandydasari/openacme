@@ -134,6 +134,7 @@ function summarize(staged: StagedChange[], cwd: string) {
 registry.register({
   name: "apply_patch",
   toolset: "filesystem",
+  runtime: "worker",
   description:
     "Apply a multi-file V4A patch (the *** Begin Patch / *** Update File: format used by Codex/Anthropic Cookbook). " +
     "Supports add, update, delete, and move-with-edit in one atomic call: if any hunk fails to apply, no files are written.",

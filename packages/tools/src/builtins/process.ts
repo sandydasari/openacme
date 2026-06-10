@@ -222,6 +222,7 @@ function summary(e: ProcEntry) {
 registry.register({
   name: "process",
   toolset: "terminal",
+  runtime: "worker",
   description:
     "Manage long-running background processes. Actions: " +
     "`start` (spawn a command, returns id), " +
