@@ -143,6 +143,13 @@ export function registerTaskRoutes(app: Hono, manager: AgentManager): void {
         typeof manager.taskStore.update
       >[1]["recurrence"];
     }
+    if (Object.prototype.hasOwnProperty.call(body, "team")) {
+      const v = body["team"];
+      if (v !== null && typeof v !== "string") {
+        return c.json({ error: "invalid team" }, 400);
+      }
+      patch.team = v;
+    }
 
     try {
       const task = await manager.taskStore.update(id, patch, {

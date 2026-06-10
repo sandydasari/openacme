@@ -254,7 +254,10 @@ export function TaskDetailPanel({
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
           By
         </span>
-        <span className="truncate text-ink-soft">{selected.created_by}</span>
+        <span className="truncate text-ink-soft">
+          {selected.created_by}
+          {selected.team && ` · #${selected.team}`}
+        </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
           Created
         </span>

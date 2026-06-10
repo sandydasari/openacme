@@ -91,6 +91,7 @@ const TaskCreateInputSchema = z.object({
     .enum(["open", "in_progress", "blocked", "done", "canceled"])
     .optional(),
   recurrence: RecurrenceSchema.nullable().optional(),
+  team: z.string().min(1).nullable().optional(),
 });
 const TaskUpdateInputSchema = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -104,6 +105,7 @@ const TaskUpdateInputSchema = z.object({
   start_at: NullableIso.optional(),
   due_at: NullableIso.optional(),
   recurrence: RecurrenceSchema.nullable().optional(),
+  team: z.string().min(1).nullable().optional(),
 });
 
 const TMP_PREFIX = ".task_";
@@ -369,6 +371,7 @@ export class TaskStore {
         recurrence,
         runs: 0,
         last_run_at: null,
+        team: input.team ?? null,
         body: input.body ?? "",
       };
 
@@ -526,6 +529,7 @@ export class TaskStore {
         recurrence: effectiveRecurrence,
         runs: existing.runs ?? 0,
         last_run_at: existing.last_run_at ?? null,
+        team: patch.team !== undefined ? patch.team : existing.team,
       };
 
       // Self-reset on successful completion of a recurring task.
@@ -1047,6 +1051,7 @@ function matchesFilter(task: Task, filter?: TaskListFilter): boolean {
     return false;
   if (filter.parent_id !== undefined && task.parent_id !== filter.parent_id)
     return false;
+  if (filter.team !== undefined && task.team !== filter.team) return false;
   if (filter.status !== undefined) {
     const wanted = Array.isArray(filter.status) ? filter.status : [filter.status];
     if (!wanted.includes(task.status)) return false;

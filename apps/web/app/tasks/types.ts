@@ -41,6 +41,7 @@ export interface Task {
   recurrence: Recurrence | null;
   runs: number;
   last_run_at: string | null;
+  team: string | null;
   body?: string;
   /** Populated by GET /api/tasks (list); absent on GET /api/tasks/:id. */
   comment_count?: number;

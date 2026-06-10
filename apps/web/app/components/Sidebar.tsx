@@ -12,6 +12,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  Users,
 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { API_BASE } from "@/app/lib/api";
@@ -36,6 +37,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/teams", label: "Teams", icon: Users },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/skills", label: "Skills", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },

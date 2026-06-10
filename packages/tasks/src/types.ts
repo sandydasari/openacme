@@ -83,6 +83,10 @@ export const TaskFrontmatterSchema = z
     recurrence: RecurrenceSchema.nullable().default(null),
     runs: z.number().int().nonnegative().default(0),
     last_run_at: NullableIso.default(null),
+    // Organizational tag — groups work under a team (UI grouping, team
+    // workspace conventions). No dispatch semantics: assignment and
+    // wake-up are driven by `assignee` + `session_id` only.
+    team: z.string().min(1).nullable().default(null),
   })
   .passthrough();
 
@@ -104,6 +108,7 @@ export interface TaskCreate {
   due_at?: string | null;
   status?: TaskStatus;
   recurrence?: Recurrence | null;
+  team?: string | null;
 }
 
 export interface TaskUpdate {
@@ -116,6 +121,7 @@ export interface TaskUpdate {
   start_at?: string | null;
   due_at?: string | null;
   recurrence?: Recurrence | null;
+  team?: string | null;
 }
 
 export interface TaskListFilter {
@@ -124,4 +130,5 @@ export interface TaskListFilter {
   session_id?: string | null;
   parent_id?: string | null;
   created_by?: string;
+  team?: string;
 }

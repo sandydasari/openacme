@@ -104,6 +104,44 @@ describe("TaskStore CRUD", () => {
   });
 });
 
+describe("TaskStore team tag", () => {
+  it("round-trips team through create / disk / update, null clears", async () => {
+    const t = await store.create({
+      title: "Redesign hero section",
+      assignee: "zoe",
+      created_by: "founder-agent",
+      team: "website",
+    });
+    expect(t.team).toBe("website");
+
+    // Survives a fresh read off disk (frontmatter persisted).
+    const reread = new TaskStore(dir).get(t.id);
+    expect(reread?.team).toBe("website");
+
+    const moved = await store.update(t.id, { team: "growth" });
+    expect(moved.team).toBe("growth");
+
+    const cleared = await store.update(t.id, { team: null });
+    expect(cleared.team).toBeNull();
+
+    // Untouched by unrelated patches.
+    const retitled = await store.update(t.id, { title: "Hero v2" });
+    expect(retitled.team).toBeNull();
+  });
+
+  it("defaults to null and filters by team in list()", async () => {
+    const a = await store.create({
+      title: "A", assignee: "zoe", created_by: "x", team: "website",
+    });
+    const b = await store.create({
+      title: "B", assignee: "zoe", created_by: "x",
+    });
+    expect(b.team).toBeNull();
+    const filtered = store.list({ team: "website" });
+    expect(filtered.map((t) => t.id)).toEqual([a.id]);
+  });
+});
+
 describe("TaskStore dependencies", () => {
   it("stores the caller's status verbatim — deps don't auto-flip", async () => {
     // Pre-refactor the store auto-flipped to `blocked` on unmet deps

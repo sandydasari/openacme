@@ -214,6 +214,7 @@ function BoardCard({
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] tabular-nums text-ink-faint">
           <span>@{task.assignee}</span>
+          {task.team && <span>#{task.team}</span>}
           {task.due_at && (
             <span className={dueUrgencyClass(task.due_at)}>
               due {formatDate(task.due_at)}
