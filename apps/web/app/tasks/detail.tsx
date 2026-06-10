@@ -28,6 +28,7 @@ import {
 import { DateTimePicker } from "@/app/components/ui/date-time-picker";
 import { Markdown } from "@/app/components/Markdown";
 import { cn } from "@/app/lib/utils";
+import { AgentRef } from "@/app/components/ui/agent-ref";
 import {
   STATUS_LABEL,
   STATUS_ORDER,
@@ -62,6 +63,10 @@ export interface TaskDetailPanelProps {
   onDeleteClick: () => void;
   /** When provided, renders a close X in the header (modal use). */
   onClose?: () => void;
+  /** "modal" (default): window chrome — fixed toolbar, own scroll region,
+   *  sunk fixed footer. "pane": page furniture — one scroll flow at the
+   *  shared content measure, header/footer as in-flow ruled blocks. */
+  variant?: "modal" | "pane";
 }
 
 
@@ -76,7 +81,9 @@ export function TaskDetailPanel({
   onSave,
   onDeleteClick,
   onClose,
+  variant = "modal",
 }: TaskDetailPanelProps) {
+  const pane = variant === "pane";
   const titleByDepId = useMemo(
     () => new Map(tasks.map((t) => [t.id, t.title])),
     [tasks]
@@ -99,10 +106,15 @@ export function TaskDetailPanel({
   const shortSession = sessionId ? sessionId.slice(0, 8) : null;
   const assigneeKnown = agents.some((a) => a.id === draft.assignee);
 
-  return (
+  const content = (
     <>
-      {/* Fixed header */}
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-paper-rule px-4 py-2">
+      {/* Header: modal = fixed toolbar row; pane = in-flow title block. */}
+      <div
+        className={cn(
+          "flex items-center justify-between gap-3 border-b border-paper-rule",
+          pane ? "pb-3" : "shrink-0 px-4 py-2"
+        )}
+      >
         <div className="flex min-w-0 items-center gap-3">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
             Task
@@ -148,8 +160,13 @@ export function TaskDetailPanel({
         </div>
       </div>
 
-      {/* Scrollable body */}
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+      {/* Body: modal owns its scroll; pane flows with the page scroll. */}
+      <div
+        className={cn(
+          "space-y-5",
+          pane ? "py-5" : "min-h-0 flex-1 overflow-y-auto px-5 py-4"
+        )}
+      >
         <div className="space-y-1.5">
           <Label htmlFor="title">Title</Label>
           <Input
@@ -161,14 +178,14 @@ export function TaskDetailPanel({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label htmlFor="status">Status</Label>
             <Select
               value={draft.status}
               onValueChange={(v) =>
                 onChange({ ...draft, status: v as TaskStatus })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="status" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -249,14 +266,27 @@ export function TaskDetailPanel({
         />
       </div>
 
-      {/* Fixed footer with audit metadata */}
-      <div className="grid shrink-0 grid-cols-[auto_1fr_auto_1fr] items-baseline gap-x-5 gap-y-1 border-t border-paper-rule bg-paper-sunk px-5 py-3 font-mono text-[12px] tabular-nums">
+      {/* Audit metadata: modal = fixed sunk footer; pane = closing ruled block. */}
+      <div
+        className={cn(
+          "grid grid-cols-[auto_1fr_auto_1fr] items-baseline gap-x-5 gap-y-1 border-t border-paper-rule font-mono text-[12px] tabular-nums",
+          pane ? "pt-3" : "shrink-0 bg-paper-sunk px-5 py-3"
+        )}
+      >
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
           By
         </span>
-        <span className="truncate text-ink-soft">
-          {selected.created_by}
-          {selected.team && ` · #${selected.team}`}
+        <span className="flex min-w-0 items-baseline gap-1.5 truncate text-ink-soft">
+          {agents.some((a) => a.id === selected.created_by) ? (
+            <AgentRef
+              id={selected.created_by}
+              label={selected.created_by}
+              className="truncate"
+            />
+          ) : (
+            <span className="truncate">{selected.created_by}</span>
+          )}
+          {selected.team && <span>· #{selected.team}</span>}
         </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
           Created
@@ -311,6 +341,15 @@ export function TaskDetailPanel({
 
     </>
   );
+
+  if (pane) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
+        <div className="mx-auto w-full max-w-3xl">{content}</div>
+      </div>
+    );
+  }
+  return content;
 }
 
 /**
@@ -480,15 +519,14 @@ function resolveAuthor(
 }
 
 function AuthorChip({ author }: { author: ResolvedAuthor }) {
-  const isAgent = author.kind === "agent";
+  if (author.kind === "agent") {
+    return (
+      <AgentRef id={author.handle} className="font-mono text-[11px] text-ink" />
+    );
+  }
   return (
-    <span
-      className={cn(
-        "font-mono text-[11px]",
-        isAgent ? "text-ink" : "italic text-ink-soft"
-      )}
-    >
-      {isAgent ? `@${author.handle}` : author.handle}
+    <span className="font-mono text-[11px] italic text-ink-soft">
+      {author.handle}
     </span>
   );
 }

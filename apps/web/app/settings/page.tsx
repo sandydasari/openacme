@@ -839,53 +839,55 @@ export default function SettingsPage() {
             <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Settings
             </h1>
-            <span className="hidden h-3 w-px bg-paper-rule sm:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] text-ink-soft sm:inline">
-              Providers · Server · MCP
-            </span>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-3 md:p-6">
-          <div className="mx-auto max-w-3xl">
-            <Tabs defaultValue="api-keys" className="space-y-6">
-              <div className="-mx-3 overflow-x-auto px-3 md:mx-0 md:overflow-visible md:px-0">
-                <TabsList>
-                  <TabsTrigger value="api-keys">
+        <Tabs
+          defaultValue="api-keys"
+          orientation="vertical"
+          className="flex flex-1 flex-col overflow-hidden md:flex-row"
+        >
+          {/* Section rail: vertical list on desktop (the primitive's 2px
+              plot-red left marker = the sidebar active treatment),
+              horizontal scroll row on mobile. The !-overrides beat the
+              primitive's vertical-orientation w-fit/h-fit/flex-col. */}
+              <TabsList className="flex-nowrap overflow-x-auto max-md:!w-full max-md:!flex-row md:!h-full md:!w-56 md:shrink-0 md:items-stretch md:overflow-x-hidden md:overflow-y-auto md:border-b-0 md:border-r md:py-2">
+                  <TabsTrigger value="api-keys" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Key className="size-3.5" />
                     API Keys
                   </TabsTrigger>
-                  <TabsTrigger value="server">
+                  <TabsTrigger value="server" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Server className="size-3.5" />
                     Server
                   </TabsTrigger>
-                  <TabsTrigger value="providers">
+                  <TabsTrigger value="providers" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Cpu className="size-3.5" />
                     Providers
                   </TabsTrigger>
-                  <TabsTrigger value="mcp">
+                  <TabsTrigger value="mcp" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Boxes className="size-3.5" />
                     MCP
                   </TabsTrigger>
-                  <TabsTrigger value="web-search">
+                  <TabsTrigger value="web-search" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Search className="size-3.5" />
                     Web Search
                   </TabsTrigger>
-                  <TabsTrigger value="browser">
+                  <TabsTrigger value="browser" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Globe2 className="size-3.5" />
                     Browser
                   </TabsTrigger>
-                  <TabsTrigger value="notifications">
+                  <TabsTrigger value="notifications" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Bell className="size-3.5" />
                     Notifications
                   </TabsTrigger>
-                  <TabsTrigger value="context">
+                  <TabsTrigger value="context" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <FileText className="size-3.5" />
                     Context
                   </TabsTrigger>
                 </TabsList>
-              </div>
 
+          <div className="flex-1 overflow-y-auto px-3 pb-6 pt-1 md:px-6">
+            <div className="mx-auto max-w-3xl">
               <TabsContent value="api-keys">
                 <Card>
                   <CardHeader>
@@ -924,7 +926,7 @@ export default function SettingsPage() {
                             <Label htmlFor={`key-${provider.id}`}>
                               {provider.name}
                             </Label>
-                            <span className="font-mono text-[10px] text-muted-foreground">
+                            <span className="font-mono text-[10px] text-ink-soft">
                               {provider.envVar}
                             </span>
                             {configuredKeys[provider.id] && (
@@ -1646,7 +1648,7 @@ export default function SettingsPage() {
                                 <Label htmlFor={`web-key-${p.id}`}>
                                   {p.name}
                                 </Label>
-                                <span className="font-mono text-[10px] text-muted-foreground">
+                                <span className="font-mono text-[10px] text-ink-soft">
                                   {p.envVar}
                                 </span>
                                 {isConfigured && (
@@ -1910,7 +1912,7 @@ export default function SettingsPage() {
                                     <Label htmlFor={`browser-key-${p.id}`}>
                                       {p.name} API key
                                     </Label>
-                                    <span className="font-mono text-[10px] text-muted-foreground">
+                                    <span className="font-mono text-[10px] text-ink-soft">
                                       {p.envVar}
                                     </span>
                                     {isConfigured && (
@@ -2032,9 +2034,9 @@ export default function SettingsPage() {
               <TabsContent value="notifications">
                 <NotificationsTab />
               </TabsContent>
-            </Tabs>
+            </div>
           </div>
-        </div>
+        </Tabs>
       </main>
     </div>
   );

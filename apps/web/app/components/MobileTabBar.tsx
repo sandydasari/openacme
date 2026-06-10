@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Bot, BookOpen, ListChecks, Settings } from "lucide-react";
+import { Home, Bot, BookOpen, ListChecks, Settings, Users } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { navigateClient } from "@/app/lib/navigate";
 
@@ -15,6 +15,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/teams", label: "Teams", icon: Users },
   { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/skills", label: "Skills", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings },

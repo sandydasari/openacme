@@ -12,6 +12,7 @@ import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
 import { TabularTick } from "@/app/components/ui/tabular-tick";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
 import { ActiveMarker } from "@/app/components/ui/active-marker";
+import { AgentRef } from "@/app/components/ui/agent-ref";
 import { JargonChip } from "@/app/components/ui/jargon-chip";
 import {
   Dialog,
@@ -247,7 +248,6 @@ function TasksPageInner() {
     return out;
   }, [tasks]);
 
-  const inProgressCount = grouped.get("in_progress")?.length ?? 0;
 
   const dirty = !!(
     draft &&
@@ -266,20 +266,12 @@ function TasksPageInner() {
     <div className="flex h-[100dvh] w-full overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
       <Sidebar />
 
-      <main className="paper-surface flex flex-1 flex-col overflow-hidden bg-paper">
+      <main className="flex flex-1 flex-col overflow-hidden bg-paper">
         <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-paper-rule px-3 md:px-6">
           <div className="flex items-center gap-2 md:gap-3">
             <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Tasks
             </h1>
-            <span className="hidden h-3 w-px bg-paper-rule sm:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] text-ink-soft sm:inline">
-              <TabularTick value={tasks.length} /> filed
-            </span>
-            <span className="hidden h-3 w-px bg-paper-rule md:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] text-ink-soft md:inline">
-              <TabularTick value={inProgressCount} /> in progress
-            </span>
           </div>
           <div className="inline-flex border border-paper-rule">
             <button
@@ -319,19 +311,171 @@ function TasksPageInner() {
         ) : tasks.length === 0 ? (
           <EmptyTasksState />
         ) : viewMode === "board" ? (
-          <>
-            <TasksBoard
-              tasks={tasks}
-              selectedId={selected?.id ?? null}
-              onPick={(id) => router.push(`/tasks?id=${id}`)}
-              onMove={(id, target) => void moveStatus(id, target)}
-            />
-            <Dialog
-              open={!!selected && !!draft}
-              onOpenChange={(open) => {
-                if (!open) router.push("/tasks");
-              }}
-            >
+          <TasksBoard
+            tasks={tasks}
+            selectedId={selected?.id ?? null}
+            onPick={(id) => router.push(`/tasks?id=${id}`)}
+            onMove={(id, target) => void moveStatus(id, target)}
+          />
+        ) : (
+          <div className="flex flex-1 overflow-hidden">
+          <aside
+            className={cn(
+              "flex shrink-0 flex-col overflow-y-auto border-paper-rule md:w-96 md:border-r",
+              selected ? "hidden md:flex" : "flex w-full md:w-96"
+            )}
+          >
+            {STATUS_ORDER.map((status) => {
+              const items = grouped.get(status) ?? [];
+              if (items.length === 0) return null;
+              return (
+                <div key={status}>
+                  <div className="flex items-center justify-between border-b border-paper-rule px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                    <span>{STATUS_LABEL[status]}</span>
+                    <TabularTick value={items.length} />
+                  </div>
+                  <div className="flex flex-col">
+                    {items.map((t) => {
+                      const isActive = selected?.id === t.id;
+                      return (
+                        <div
+                          key={t.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => router.push(`/tasks?id=${t.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              router.push(`/tasks?id=${t.id}`);
+                            }
+                          }}
+                          className={cn(
+                            "group relative flex cursor-pointer flex-col items-start gap-1 border-b border-paper-rule/40 px-4 py-3 text-left transition-colors last:border-b-0",
+                            isActive
+                              ? "bg-paper-sunk text-ink"
+                              : "text-ink-soft hover:bg-paper-sunk hover:text-ink"
+                          )}
+                        >
+                          <ActiveMarker active={isActive} />
+                          <div className="flex w-full items-center gap-2">
+                            <Badge
+                              variant={STATUS_VARIANT[t.status]}
+                              className="shrink-0"
+                            >
+                              {STATUS_LABEL[t.status]}
+                            </Badge>
+                            <span className="truncate text-sm font-medium text-ink">
+                              {t.title}
+                            </span>
+                          </div>
+                          <div className="flex w-full flex-wrap gap-x-3 font-mono text-[11px] tabular-nums text-ink-faint">
+                            <AgentRef id={t.assignee} />
+                            {t.due_at && (
+                              <span className={dueUrgencyClass(t.due_at)}>
+                                due {formatDate(t.due_at)}
+                              </span>
+                            )}
+                            {t.start_at &&
+                              (new Date(t.start_at).getTime() > Date.now() ? (
+                                <span className="text-signal-blue">
+                                  starts {formatRelativeFutureFromIso(t.start_at)}
+                                </span>
+                              ) : (
+                                <span>starts {formatDate(t.start_at)}</span>
+                              ))}
+                            {t.depends_on.length > 0 && (
+                              <span>
+                                {t.depends_on.length} dep
+                                {t.depends_on.length === 1 ? "" : "s"}
+                              </span>
+                            )}
+                            {t.comment_count !== undefined &&
+                              t.comment_count > 0 && (
+                                <span>
+                                  {t.comment_count} comment
+                                  {t.comment_count === 1 ? "" : "s"}
+                                </span>
+                              )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </aside>
+
+          <section
+            className={cn(
+              "flex flex-1 flex-col overflow-hidden",
+              !selected ? "hidden md:flex" : "flex"
+            )}
+          >
+            {selected && draft && (
+              <button
+                type="button"
+                onClick={() => router.push("/tasks")}
+                className="mx-4 mt-3 inline-flex w-fit items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft hover:text-plot-red md:hidden"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Back to tasks
+              </button>
+            )}
+            {!selected || !draft ? (
+              <div className="flex flex-1 items-start justify-center px-6 pt-24">
+                <div className="max-w-sm">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+                    No selection
+                  </div>
+                  <h3 className="mt-2 text-base font-semibold text-ink">
+                    Pick a task
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                    Each task has a title, status, assignee, schedule, and
+                    free-form body. Status changes are gated by dependencies.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <TaskDetailPanel
+                variant="pane"
+                selected={selected}
+                draft={draft}
+                saving={saving}
+                dirty={dirty}
+                agents={agents}
+                tasks={tasks}
+                onChange={setDraft}
+                onSave={() => void save()}
+                onDeleteClick={() => setConfirmDelete(selected.id)}
+              />
+            )}
+          </section>
+          </div>
+        )}
+
+        {/* Board mode opens the task in the modal; list mode shows it in
+            the side pane above. */}
+        <Dialog
+          open={viewMode === "board" && !!selected && !!draft}
+          onOpenChange={(open) => {
+            if (!open) router.push("/tasks");
+          }}
+        >
               <DialogContent
                 showCloseButton={false}
                 // Mobile: full-takeover above the bottom tab bar. The
@@ -340,7 +484,7 @@ function TasksPageInner() {
                 // pins to the top edge and we can subtract the tab-bar
                 // height from the dialog height cleanly. Desktop: revert
                 // to the centered floating dialog at 94vh × 72rem max.
-                className="paper-surface overflow-hidden left-0 top-0 translate-x-0 translate-y-0 h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))] w-screen max-w-none md:left-[50%] md:top-[50%] md:translate-x-[-50%] md:translate-y-[-50%] md:h-[94vh] md:max-h-[94vh] md:w-[min(72rem,96vw)] sm:max-w-none"
+                className="overflow-hidden left-0 top-0 translate-x-0 translate-y-0 h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))] w-screen max-w-none md:left-[50%] md:top-[50%] md:translate-x-[-50%] md:translate-y-[-50%] md:h-[94vh] md:max-h-[94vh] md:w-[min(72rem,96vw)] sm:max-w-none"
               >
                 <VisuallyHidden.Root>
                   <DialogTitle>{selected?.title ?? "Task"}</DialogTitle>
@@ -364,149 +508,7 @@ function TasksPageInner() {
                   />
                 )}
               </DialogContent>
-            </Dialog>
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-            <aside
-              className={cn(
-                "flex shrink-0 flex-col overflow-y-auto border-paper-rule md:w-96 md:border-r",
-                selected ? "hidden md:flex" : "flex border-b md:border-b-0"
-              )}
-            >
-              {STATUS_ORDER.map((status) => {
-                const items = grouped.get(status) ?? [];
-                if (items.length === 0) return null;
-                return (
-                  <div key={status}>
-                    <div className="flex items-center justify-between border-b border-paper-rule px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                      <span>{STATUS_LABEL[status]}</span>
-                      <TabularTick value={items.length} />
-                    </div>
-                    <div className="flex flex-col">
-                      {items.map((t) => {
-                        const isActive = selected?.id === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            onClick={() => router.push(`/tasks?id=${t.id}`)}
-                            className={cn(
-                              "group relative flex flex-col items-start gap-1 border-b border-paper-rule/40 px-4 py-3 text-left transition-colors last:border-b-0",
-                              isActive
-                                ? "bg-paper-sunk text-ink"
-                                : "text-ink-soft hover:bg-paper-sunk hover:text-ink"
-                            )}
-                          >
-                            <ActiveMarker active={isActive} />
-                            <div className="flex w-full items-center gap-2">
-                              <Badge
-                                variant={STATUS_VARIANT[t.status]}
-                                className="shrink-0"
-                              >
-                                {STATUS_LABEL[t.status]}
-                              </Badge>
-                              <span className="truncate text-sm font-medium text-ink">
-                                {t.title}
-                              </span>
-                            </div>
-                            <div className="flex w-full flex-wrap gap-x-3 font-mono text-[11px] tabular-nums text-ink-faint">
-                              <span>@{t.assignee}</span>
-                              {t.due_at && (
-                                <span className={dueUrgencyClass(t.due_at)}>
-                                  due {formatDate(t.due_at)}
-                                </span>
-                              )}
-                              {t.start_at &&
-                                (new Date(t.start_at).getTime() > Date.now() ? (
-                                  <span className="text-signal-blue">
-                                    starts {formatRelativeFutureFromIso(t.start_at)}
-                                  </span>
-                                ) : (
-                                  <span>starts {formatDate(t.start_at)}</span>
-                                ))}
-                              {t.depends_on.length > 0 && (
-                                <span>
-                                  {t.depends_on.length} dep
-                                  {t.depends_on.length === 1 ? "" : "s"}
-                                </span>
-                              )}
-                              {t.comment_count !== undefined &&
-                                t.comment_count > 0 && (
-                                  <span>
-                                    {t.comment_count} comment
-                                    {t.comment_count === 1 ? "" : "s"}
-                                  </span>
-                                )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </aside>
-
-            <section
-              className={cn(
-                "flex flex-1 flex-col overflow-hidden",
-                !selected ? "hidden md:flex" : "flex"
-              )}
-            >
-              {selected && draft && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/tasks?view=list")}
-                  className="mx-3 mt-3 inline-flex w-fit items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft hover:text-plot-red md:hidden"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                  Back to tasks
-                </button>
-              )}
-              {!selected || !draft ? (
-                <div className="flex flex-1 items-start justify-center pt-24 px-6">
-                  <div className="max-w-sm">
-                    <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
-                      No selection
-                    </div>
-                    <h3 className="mt-2 text-base font-semibold text-ink">
-                      Pick a task
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                      Each task has a title, status, assignee, schedule, and
-                      free-form body. Status changes are gated by dependencies.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <TaskDetailPanel
-                  selected={selected}
-                  draft={draft}
-                  saving={saving}
-                  dirty={dirty}
-                  agents={agents}
-                  tasks={tasks}
-                  onChange={setDraft}
-                  onSave={() => void save()}
-                  onDeleteClick={() => setConfirmDelete(selected.id)}
-                />
-              )}
-            </section>
-          </div>
-        )}
+        </Dialog>
 
         <Dialog
           open={!!confirmDelete}

@@ -44,9 +44,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Hex equivalents of --paper light/dark (oklch 98.5%/16%) — browsers
+  // don't take CSS vars in theme-color, so these are precomputed.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f9f7f4" },
-    { media: "(prefers-color-scheme: dark)", color: "#1f1f24" },
+    { media: "(prefers-color-scheme: light)", color: "#fcfaf7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d0d10" },
   ],
 };
 

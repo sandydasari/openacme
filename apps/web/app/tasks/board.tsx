@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -19,6 +19,7 @@ import { Repeat2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { TabularTick } from "@/app/components/ui/tabular-tick";
 import { ActiveMarker } from "@/app/components/ui/active-marker";
+import { AgentRef } from "@/app/components/ui/agent-ref";
 import {
   STATUS_LABEL,
   STATUS_ORDER,
@@ -60,6 +61,9 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
+  // Drag-target affordance only renders mid-drag; at rest an empty
+  // column stays quiet. (Keyboard path: open the card, change Status.)
+  const [dragging, setDragging] = useState(false);
 
   const grouped = useMemo(() => {
     const out = new Map<TaskStatus, Task[]>();
@@ -85,8 +89,19 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
   };
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="flex flex-1 gap-3 overflow-x-auto p-3">
+    <DndContext
+      sensors={sensors}
+      onDragStart={() => setDragging(true)}
+      onDragCancel={() => setDragging(false)}
+      onDragEnd={(e) => {
+        setDragging(false);
+        handleDragEnd(e);
+      }}
+    >
+      {/* Columns stack vertically under md — a fixed 288px column already
+          overflows narrow phones, so the horizontal-scroll board is
+          desktop-only. */}
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:overflow-y-hidden md:overflow-x-auto">
         {STATUS_ORDER.map((status) => (
           <BoardColumn
             key={status}
@@ -94,6 +109,7 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
             tasks={grouped.get(status) ?? []}
             selectedId={selectedId}
             onPick={onPick}
+            dragging={dragging}
           />
         ))}
       </div>
@@ -106,11 +122,13 @@ function BoardColumn({
   tasks,
   selectedId,
   onPick,
+  dragging,
 }: {
   status: TaskStatus;
   tasks: Task[];
   selectedId: string | null;
   onPick: (id: string) => void;
+  dragging: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const ids = useMemo(() => tasks.map((t) => t.id), [tasks]);
@@ -119,7 +137,7 @@ function BoardColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col border border-paper-rule bg-paper-sunk transition-colors",
+        "flex w-full shrink-0 flex-col border border-paper-rule bg-paper-sunk transition-colors md:w-72",
         isOver && "border-plot-red bg-paper"
       )}
     >
@@ -144,7 +162,9 @@ function BoardColumn({
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {tasks.length === 0 ? (
             <div className="flex flex-1 items-center justify-center px-2 py-6">
-              <span className="label-faceplate text-ink-faint">accepts drops</span>
+              {dragging && (
+                <span className="label-faceplate text-ink-faint">accepts drops</span>
+              )}
             </div>
           ) : (
             tasks.map((t) => (
@@ -193,14 +213,21 @@ function BoardCard({
       : "text-ink-soft"
     : "text-ink";
 
+  // div+role (not <button>) so the @assignee link can nest validly;
+  // useSortable's attributes already carry role="button" + tabIndex.
   return (
-    <button
+    <div
       ref={setNodeRef}
       style={style}
-      type="button"
       onClick={() => onPick(task.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick(task.id);
+        }
+      }}
       className={cn(
-        "relative border border-paper-rule bg-paper px-3.5 py-2 text-left transition-colors",
+        "relative cursor-pointer border border-paper-rule bg-paper px-3.5 py-2 text-left transition-colors",
         selected ? "bg-paper-sunk text-ink" : "hover:bg-paper-sunk",
         isDragging && "opacity-50"
       )}
@@ -213,7 +240,7 @@ function BoardCard({
           {task.title}
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] tabular-nums text-ink-faint">
-          <span>@{task.assignee}</span>
+          <AgentRef id={task.assignee} />
           {task.team && <span>#{task.team}</span>}
           {task.due_at && (
             <span className={dueUrgencyClass(task.due_at)}>
@@ -249,6 +276,6 @@ function BoardCard({
           )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }

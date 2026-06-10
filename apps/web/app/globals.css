@@ -303,14 +303,26 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: -1;
+    /* Above the element's own background fill. At z -1 the grain sat
+       BEHIND opaque bg-paper and never rendered anywhere. In-flow content
+       reads through it; 5% multiply is film grain, not dirt. */
+    z-index: 0;
     background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    opacity: 0.022;
+    opacity: 0.05;
     mix-blend-mode: multiply;
   }
+  /* Body-level grain is one fixed overlay: scrolling can't carry it away,
+     opaque section backgrounds can't bury it, no repaint-per-scroll. */
+  body.paper-surface::before {
+    position: fixed;
+    z-index: 80;
+  }
   .dark .paper-surface::before {
-    opacity: 0.05;
+    opacity: 0.09;
     mix-blend-mode: screen;
+    /* The noise texture is black; black + screen blend is a no-op. Invert
+       to white noise so dark surfaces actually pick up tooth. */
+    filter: invert(1);
   }
 
   /* Paper ruling — opt-in horizontal hairlines every 24px. */

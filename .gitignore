@@ -47,3 +47,6 @@ yarn-error.log*
 
 # Personal notes (not for distribution)
 personal/
+
+# Private working notes (never committed)
+private/

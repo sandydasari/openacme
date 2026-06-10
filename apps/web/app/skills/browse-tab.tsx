@@ -186,7 +186,7 @@ export function BrowseTab({
   }
 
   return (
-    <div className="max-w-4xl space-y-4 px-6 py-4">
+    <div className="mx-auto max-w-3xl space-y-4 px-3 py-4 md:px-6">
       <form onSubmit={submit} className="flex gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />

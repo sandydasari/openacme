@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -76,10 +77,12 @@ const components: Components = {
   ),
 };
 
-export function Markdown({ children }: { children: string }) {
+// Memoized: parsing is O(message length) and runs per render — without
+// this, every streamed token re-parses every message in the thread.
+export const Markdown = memo(function Markdown({ children }: { children: string }) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
       {children}
     </ReactMarkdown>
   );
-}
+});

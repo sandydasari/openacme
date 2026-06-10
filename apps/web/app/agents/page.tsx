@@ -52,7 +52,6 @@ import {
   SelectValue,
 } from "@/app/components/ui/select";
 import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
-import { TabularTick } from "@/app/components/ui/tabular-tick";
 import { ActiveMarker } from "@/app/components/ui/active-marker";
 import { cn } from "@/app/lib/utils";
 import { Markdown } from "@/app/components/Markdown";
@@ -765,10 +764,6 @@ function AgentsPageInner() {
             <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Agents
             </h1>
-            <span className="hidden h-3 w-px bg-paper-rule sm:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] text-ink-soft sm:inline">
-              <TabularTick value={agents.length} /> configured
-            </span>
           </div>
           <Button size="sm" onClick={startCreate}>
             <Plus className="size-4" />
@@ -788,9 +783,6 @@ function AgentsPageInner() {
                 : "block border-b md:border-b-0"
             )}
           >
-            <div className="border-b border-paper-rule px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-              Roster
-            </div>
             {agents.length === 0 && (
               <p className="px-4 py-4 font-mono text-[12px] text-ink-faint">
                 No agents configured.
@@ -876,7 +868,7 @@ function AgentsPageInner() {
             ) : showForm ? (
               <form
                 onSubmit={isCreating ? handleCreate : handleUpdate}
-                className="mx-auto max-w-2xl space-y-4"
+                className="mx-auto max-w-3xl space-y-4"
               >
                 {urlImportTemplate && importTemplate && importPreview && (
                   <ImportPreviewBlock
@@ -958,7 +950,7 @@ function AgentsPageInner() {
                                   <div className="flex flex-col items-start">
                                     <span>{m.label}</span>
                                     {m.hint && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-[10px] text-ink-soft">
                                         {m.hint}
                                       </span>
                                     )}
@@ -966,7 +958,7 @@ function AgentsPageInner() {
                                 </SelectItem>
                               ))}
                               <SelectItem value={CUSTOM_MODEL}>
-                                <span className="text-muted-foreground">
+                                <span className="text-ink-soft">
                                   Custom model id…
                                 </span>
                               </SelectItem>
@@ -1731,7 +1723,7 @@ function ImportPreviewBlock({
 function EmptyWorkforceState({ onCreate }: { onCreate: () => void }) {
   const rowDelay = (i: number) => 80 + i * 120;
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <SectionEyebrow meta="0 agents">The workforce is empty</SectionEyebrow>
 
       <div className="mt-6 border border-dashed border-paper-rule paper-surface opacity-80">
@@ -1845,7 +1837,7 @@ function EmptyWorkforceState({ onCreate }: { onCreate: () => void }) {
 
 function NoAgentPicked() {
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <SectionEyebrow>Select an agent</SectionEyebrow>
       <p className="mt-3 text-[13px] leading-relaxed text-ink-soft">
         Pick a row from the roster to view its model, persona, tools, and
@@ -1878,10 +1870,11 @@ function AgentDetail({
     .map((name) => allSkills.find((s) => s.name === name) ?? { name, description: "" })
     .filter(Boolean);
 
+  // Detail is ruled sections on the pane, not a floating card — one shared
+  // measure with the skills + tasks detail panes.
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+    <div className="mx-auto max-w-3xl">
+      <div className="flex flex-row items-start justify-between gap-4 border-b border-paper-rule pb-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle className="text-xl">{agent.name}</CardTitle>
@@ -1917,8 +1910,8 @@ function AgentDetail({
               </Button>
             </div>
           )}
-        </CardHeader>
-        <CardContent className="space-y-5">
+      </div>
+      <div className="divide-y divide-paper-rule [&>*]:py-5">
           {agent.role && (
             <div>
               <Label className="mb-1.5 block">
@@ -2033,8 +2026,7 @@ function AgentDetail({
           </div>
 
           <AgentResourcesPanel agentId={agent.id} readOnly={agent.managed} />
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

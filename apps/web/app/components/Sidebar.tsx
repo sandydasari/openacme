@@ -170,6 +170,7 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
                 onClick={
                   interceptHome

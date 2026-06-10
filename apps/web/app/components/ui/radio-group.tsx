@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { CircleIcon } from "lucide-react"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 
 import { cn } from "@/app/lib/utils"
@@ -26,11 +25,13 @@ function RadioGroupItem({
   return (
     <RadioGroupPrimitive.Item
       data-slot="radio-group-item"
+      // Square, flat, hairline — radios follow the same 0px-radius
+      // discipline as every other control in the system.
       className={cn(
-        "aspect-square size-4 shrink-0 rounded-full border border-paper-rule bg-paper text-plot-red shadow-xs outline-none transition-colors",
+        "aspect-square size-4 shrink-0 border border-paper-rule bg-paper text-plot-red outline-none transition-colors",
         "hover:border-ink-faint",
-        "focus-visible:border-plot-red focus-visible:ring-2 focus-visible:ring-plot-red/30",
-        "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
+        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-plot-red",
+        "aria-invalid:border-destructive",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "data-[state=checked]:border-plot-red",
         className
@@ -41,7 +42,7 @@ function RadioGroupItem({
         data-slot="radio-group-indicator"
         className="relative flex items-center justify-center"
       >
-        <CircleIcon className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 fill-plot-red text-plot-red" />
+        <span className="absolute top-1/2 left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 bg-plot-red" />
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>
   )

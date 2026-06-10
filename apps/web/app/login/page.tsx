@@ -118,7 +118,7 @@ export default function LoginPage() {
 
   if (autoTrying) {
     return (
-      <main className="paper-surface relative flex min-h-screen items-center justify-center bg-paper px-4">
+      <main className="relative flex min-h-screen items-center justify-center bg-paper px-4">
         <div className="flex flex-col items-center gap-3">
           <Logotype className="h-7 w-auto text-ink" />
           <LoadingHairline aria-label="Resuming session" />
@@ -131,7 +131,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="paper-surface relative flex min-h-screen items-center justify-center bg-paper px-4">
+    <main className="relative flex min-h-screen items-center justify-center bg-paper px-4">
       <div className="section-enter w-full max-w-sm border border-paper-rule bg-paper">
         <ScribedRule className="bg-ink" />
 

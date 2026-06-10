@@ -2,6 +2,7 @@
 
 import {
   Suspense,
+  memo,
   useState,
   useRef,
   useEffect,
@@ -28,6 +29,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
+import { AgentRef } from "@/app/components/ui/agent-ref";
 import { ScribedRule } from "@/app/components/ui/scribed-rule";
 import { JargonChip } from "@/app/components/ui/jargon-chip";
 import { ChatSetupPanel } from "./components/ChatSetupPanel";
@@ -250,7 +252,12 @@ function ChatPageInner() {
               delete next[data.id];
               return next;
             }
-            return { ...prev, [data.id]: { kind: data.kind, message: data.message } };
+            const next = { ...prev, [data.id]: { kind: data.kind, message: data.message } };
+            // Bound the board — same-id replaces, but a server that mints
+            // fresh ids per status would otherwise grow this without limit.
+            const keys = Object.keys(next);
+            for (let i = 0; i < keys.length - 8; i++) delete next[keys[i]!];
+            return next;
           });
         }
       },
@@ -846,7 +853,7 @@ function ChatPageInner() {
   // a credential, so showing it would lie about what's available.
   if (nothingConfigured) {
     return (
-      <main className="paper-surface relative min-h-screen overflow-y-auto bg-paper">
+      <main className="relative min-h-screen overflow-y-auto bg-paper">
         <ChatSetupPanel
           providers={modelCatalog.providers}
           onSetup={async () => {
@@ -914,7 +921,7 @@ function ChatPageInner() {
                 )}
                 aria-hidden
               />
-              <span className="hidden font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft sm:inline">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft">
                 {statusLabel(submitting, isLiveRunning, !!activeAgent)}
               </span>
             </div>
@@ -925,7 +932,12 @@ function ChatPageInner() {
             </span>
             {activeAgent && (
               <span className="hidden font-mono text-[11px] text-ink-faint md:inline">
-                · {activeAgent.name}
+                ·{" "}
+                <AgentRef
+                  id={activeAgent.id}
+                  label={activeAgent.name}
+                  className="text-ink-soft"
+                />
               </span>
             )}
           </div>
@@ -1000,6 +1012,8 @@ function ChatPageInner() {
           <div
             ref={messagesContainerRef}
             onScroll={handleScroll}
+            role="log"
+            aria-label="Conversation"
             className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
           >
             <div className="mx-auto max-w-3xl px-3 py-4 md:px-6 md:py-6">
@@ -1016,7 +1030,7 @@ function ChatPageInner() {
                 />
               ))}
               {error && (
-                <div className="mt-4 border border-destructive bg-paper-sunk px-3 py-2 font-mono text-[12px] text-destructive section-enter">
+                <div role="alert" className="mt-4 border border-destructive bg-paper-sunk px-3 py-2 font-mono text-[12px] text-destructive section-enter">
                   <span className="mr-2 text-[10px] uppercase tracking-[0.08em]">Error</span>
                   {error.message}
                 </div>
@@ -1024,6 +1038,7 @@ function ChatPageInner() {
               {Object.entries(statusBoard).map(([id, s]) => (
                 <div
                   key={id}
+                  role={s.kind === "error" ? "alert" : "status"}
                   className={cn(
                     "mt-3 flex items-center gap-3 px-3 py-1.5 font-mono text-[12px] section-enter",
                     s.kind === "error" && "bg-paper-sunk text-destructive",
@@ -1049,7 +1064,7 @@ function ChatPageInner() {
               type="button"
               onClick={scrollToBottom}
               aria-label="Scroll to latest"
-              className="absolute bottom-3 right-3 z-10 flex size-9 items-center justify-center border border-paper-rule bg-paper text-ink-soft shadow-md transition-colors hover:border-plot-red hover:text-plot-red md:bottom-4 md:right-4"
+              className="absolute bottom-3 right-3 z-10 flex size-9 items-center justify-center border border-paper-rule bg-paper text-ink-soft transition-colors hover:border-plot-red hover:text-plot-red md:bottom-4 md:right-4"
             >
               <ArrowDown className="size-4" aria-hidden />
             </button>
@@ -1246,11 +1261,17 @@ function isToolPart(p: Part): boolean {
 
 function MessageHeader({
   role,
+  agentId,
+  agentName,
   model,
   streaming,
   createdAt,
 }: {
   role: "user" | "assistant";
+  /** When set, assistant rows show the agent's name (linked) instead of
+   *  the generic "assistant" label. */
+  agentId?: string;
+  agentName?: string;
   model?: string;
   streaming?: boolean;
   createdAt?: number;
@@ -1274,9 +1295,13 @@ function MessageHeader({
         )}
         aria-hidden
       />
-      <span className={role === "assistant" ? "text-ink" : "text-ink-soft"}>
-        {role}
-      </span>
+      {role === "assistant" && agentId ? (
+        <AgentRef id={agentId} label={agentName ?? agentId} className="text-ink" />
+      ) : (
+        <span className={role === "assistant" ? "text-ink" : "text-ink-soft"}>
+          {role}
+        </span>
+      )}
       {model && role === "assistant" && (
         <>
           <span className="text-ink-faint">·</span>
@@ -1306,7 +1331,10 @@ function MessageHeader({
   );
 }
 
-function MessageBubble({
+// Memoized: `upsertById` in useLiveSession preserves identity for
+// untouched messages, so streaming chunks only re-render the one
+// message they touch instead of the whole thread.
+const MessageBubble = memo(function MessageBubble({
   message,
   agent,
   isStreaming,
@@ -1439,6 +1467,8 @@ function MessageBubble({
     <section className="section-enter border-t border-paper-rule py-5 first:border-t-0 first:pt-0">
       <MessageHeader
         role="assistant"
+        agentId={agent?.id}
+        agentName={agent?.name}
         model={modelLabel}
         streaming={isStreaming}
         createdAt={(message as { createdAt?: number }).createdAt}
@@ -1485,7 +1515,7 @@ function MessageBubble({
             return (
               <div
                 key={i}
-                className="border border-destructive bg-paper-sunk p-3 rounded-sm"
+                className="border border-destructive bg-paper-sunk p-3"
               >
                 <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.08em] text-destructive">
                   <span>Provider error</span>
@@ -1506,7 +1536,7 @@ function MessageBubble({
       </div>
     </section>
   );
-}
+});
 
 function ModelQuickSwitch({
   agent,
@@ -1585,7 +1615,7 @@ function ModelQuickSwitch({
                 <div className="flex flex-col items-start">
                   <span>{o.label}</span>
                   {o.hint && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[10px] text-ink-soft">
                       {o.hint}
                     </span>
                   )}

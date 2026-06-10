@@ -55,7 +55,7 @@ export function AttachmentChip({
   return (
     <span
       className={cn(
-        "inline-flex max-w-[260px] items-center gap-1 border border-paper-rule bg-paper-sunk px-2 py-1",
+        "inline-flex max-w-[80vw] items-center gap-1 border border-paper-rule bg-paper-sunk px-2 py-1 sm:max-w-[260px]",
         status === "error" && "border-destructive text-destructive"
       )}
       title={error ?? `${name} (${mediaType})`}

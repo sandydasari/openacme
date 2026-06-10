@@ -219,15 +219,11 @@ function SkillsPageInner() {
       <Sidebar />
 
       <main className="flex flex-1 flex-col overflow-hidden bg-paper">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-paper-rule px-3 md:px-6">
+        <header className="flex h-12 shrink-0 items-center justify-between gap-2 px-3 md:px-6">
           <div className="flex items-center gap-2 md:gap-3">
             <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Skills
             </h1>
-            <span className="hidden h-3 w-px bg-paper-rule sm:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] tabular-nums text-ink-soft sm:inline">
-              {skills.length} loaded
-            </span>
           </div>
           {activeTab === "skills" && (
             <div className="flex items-center gap-2">
@@ -244,22 +240,23 @@ function SkillsPageInner() {
           onValueChange={(v) => setActiveTab(v as "skills" | "browse" | "sources")}
           className="flex flex-1 flex-col overflow-hidden"
         >
-          <div className="px-6 py-2">
-            <TabsList>
-              <TabsTrigger value="skills">
-                <BookOpen className="size-3.5" />
-                Installed
-              </TabsTrigger>
-              <TabsTrigger value="browse">
-                <Compass className="size-3.5" />
-                Browse
-              </TabsTrigger>
-              <TabsTrigger value="sources">
-                <Pipette className="size-3.5" />
-                Sources
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          {/* Full-bleed bar: the border-b runs edge-to-edge so it meets the
+              header rule above and the index rail's border-r below. Triggers
+              start at the page gutter. */}
+          <TabsList className="h-10 shrink-0 pl-3 md:pl-6">
+            <TabsTrigger value="skills">
+              <BookOpen className="size-3.5" />
+              Installed
+            </TabsTrigger>
+            <TabsTrigger value="browse">
+              <Compass className="size-3.5" />
+              Browse
+            </TabsTrigger>
+            <TabsTrigger value="sources">
+              <Pipette className="size-3.5" />
+              Sources
+            </TabsTrigger>
+          </TabsList>
 
           <TabsContent value="skills" className="flex flex-1 flex-col overflow-hidden m-0 pt-0 md:flex-row">
           {/* On mobile we stack: index, then detail. To avoid showing two
@@ -274,9 +271,6 @@ function SkillsPageInner() {
                 : "flex border-b md:border-b-0"
             )}
           >
-            <div className="border-b border-paper-rule px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-              Index
-            </div>
             <div className="border-b border-paper-rule p-3">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
@@ -447,9 +441,10 @@ function SkillsPageInner() {
                 </CardContent>
               </Card>
             ) : selectedSkill ? (
-              <div className="mx-auto max-w-3xl space-y-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-start justify-between gap-4">
+              // Ruled sections on the pane, not a floating card — same
+              // measure + treatment as the agents + tasks detail panes.
+              <div className="mx-auto max-w-3xl">
+                  <div className="flex flex-row items-start justify-between gap-4 border-b border-paper-rule pb-4">
                     <div>
                       <CardTitle className="text-xl">{selectedSkill.name}</CardTitle>
                       <CardDescription className="mt-1.5">
@@ -464,8 +459,8 @@ function SkillsPageInner() {
                       <Trash2 className="size-4" />
                       Delete
                     </Button>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+                  </div>
+                  <div className="divide-y divide-paper-rule [&>*]:py-4">
                     {selectedSkill.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {selectedSkill.tags.map((tag) => (
@@ -524,8 +519,7 @@ function SkillsPageInner() {
                         {selectedSkill.body || "(No instructions)"}
                       </pre>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
               </div>
             ) : skills.length === 0 ? (
               <EmptySkillsState onCreate={() => router.push("/skills?create=1")} />
@@ -580,7 +574,7 @@ function EmptySkillsState({ onCreate }: { onCreate: () => void }) {
     return () => clearTimeout(t);
   }, []);
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <SectionEyebrow meta="0 skills">No skills installed</SectionEyebrow>
 
       <div className="mt-6 border border-paper-rule paper-surface">
@@ -647,7 +641,7 @@ function NoSkillPicked() {
   // mini-reference doubles as documentation: a reader who lands here
   // without selecting anything learns the SKILL.md contract.
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <SectionEyebrow>Select a skill</SectionEyebrow>
       <p className="mt-3 max-w-prose text-[13px] leading-relaxed text-ink-soft">
         Pick a row from the index to view its body and edit frontmatter.

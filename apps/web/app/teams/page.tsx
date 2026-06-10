@@ -213,10 +213,6 @@ function TeamsPageInner() {
             <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Teams
             </h1>
-            <span className="hidden h-3 w-px bg-paper-rule sm:inline" aria-hidden />
-            <span className="hidden font-mono text-[12px] text-ink-soft sm:inline">
-              {teams.length} configured
-            </span>
           </div>
           <Button size="sm" onClick={startCreate}>
             <Plus className="size-4" />
