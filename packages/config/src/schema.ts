@@ -278,8 +278,48 @@ export const AgentDefinitionSchema = z.object({
   // Same idea as `<agentDir>/browser-profiles/` for the local provider —
   // each agent gets its own remote profile on cloud providers.
   browser: AgentBrowserOverridesSchema.optional(),
+  // Extra filesystem grants beyond the compiled default policy (own
+  // workspace + team workspaces rw, open-office reads). Human-edited in
+  // AGENT.md only — grants come from definitions, never from agents.
+  // `rw` adds a writable root (e.g. a project repo the agent works on);
+  // `ro` re-allows reads under an otherwise denied subtree.
+  paths: z
+    .array(
+      z.object({
+        path: z.string().min(1),
+        access: z.enum(["ro", "rw"]),
+      })
+    )
+    .default([]),
 });
 export type AgentDefinition = z.infer<typeof AgentDefinitionSchema>;
+
+/**
+ * Team definition — a roster, a charter, and a shared workspace.
+ * Lives at `<dataDir>/teams/<id>/TEAM.md` (frontmatter + markdown body)
+ * with a sibling `workspace/` directory shared by all members.
+ *
+ * TEAM.md is human-owned: it's written via HTTP/web/disk only — there is
+ * deliberately no agent tool that edits it, because the charter body is
+ * injected into every member's system prompt (an agent-writable charter
+ * would be a cross-agent prompt-injection channel).
+ */
+export const TeamDefinitionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  // Agent ids. Validated for shape, not existence — a team may reference
+  // an agent created later; consumers filter against live agents.
+  members: z.array(z.string()).default([]),
+  // Archived teams drop out of member prompts and lose write access;
+  // the workspace stays readable so old path references don't rot.
+  // Optional + truthy semantics (same idiom as AgentDefinition.managed)
+  // so hand-authored TEAM.md files don't grow noisy `archived: false`.
+  archived: z.boolean().optional(),
+  // Markdown body of TEAM.md — the team's shared context, injected into
+  // member prompts between AGENTS.md (org) and persona (individual).
+  charter: z.string().default(""),
+});
+export type TeamDefinition = z.infer<typeof TeamDefinitionSchema>;
 
 /**
  * Server configuration.

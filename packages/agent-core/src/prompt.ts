@@ -130,6 +130,12 @@ const TASKS_GUIDANCE =
   "Cross-agent: passing a different `assignee` files work for that agent. They'll " +
   "pick it up autonomously in a fresh session — you don't message them directly. " +
   "Comments on a shared task are the coordination channel.\n" +
+  "Teams: tag tasks with `team: \"<team-id>\"` when the work belongs to one of " +
+  "your teams; deliverables for team-tagged work go in that team's shared " +
+  "workspace. The tag is organizational only — assignment and wake-up still run " +
+  "on `assignee`. To split team work across members, decompose it: `task_create` " +
+  "per piece with `depends_on` wiring the order (if your team's charter names a " +
+  "coordinator or manager, route new team work to them as a task).\n" +
   "Recurring tasks: pass `recurrence` (cron or interval). When you mark a recurring " +
   "task `done`, the store self-resets it to `open` with the next fire time — the " +
   "returned status is `open`, not `done`, and `runs` increments. This is intentional. " +
@@ -199,6 +205,62 @@ const SLEEP_GUIDANCE =
 // just the index.
 const MAX_RESOURCE_LINES = 50;
 
+// Total budget for team charters across all of an agent's teams. Keeps
+// an agent on many teams from paying unbounded prompt tokens; pushes
+// charters toward being charters, not dumping grounds.
+export const TEAM_CHARTER_CHAR_LIMIT = 4000;
+
+/** One prompt-visible team membership. */
+export interface PromptTeam {
+  id: string;
+  name: string;
+  members: ReadonlyArray<string>;
+  charter: string;
+  workspaceDir: string;
+}
+
+// Charters consume a shared budget in team order; anything past the
+// budget is cut with a per-team marker plus one trailing warning.
+function buildTeamsSection(teams: ReadonlyArray<PromptTeam>): string {
+  const parts: string[] = [
+    "You are a member of the following teams. Each team has a shared " +
+      "workspace directory all members can read and write — co-owned " +
+      "work belongs there, not in your personal workspace. The charter " +
+      "is the team's shared context.",
+  ];
+  let budget = TEAM_CHARTER_CHAR_LIMIT;
+  let truncated = false;
+  for (const team of teams) {
+    const lines = [
+      `### ${team.name} (\`${team.id}\`)`,
+      `Members: ${team.members.join(", ")}`,
+      `Shared workspace: \`${team.workspaceDir}\``,
+    ];
+    const charter = team.charter.trim();
+    if (charter.length > 0) {
+      if (charter.length <= budget) {
+        lines.push("", charter);
+        budget -= charter.length;
+      } else if (budget > 0) {
+        const cutAt = charter.lastIndexOf("\n", budget);
+        lines.push("", charter.slice(0, cutAt > 0 ? cutAt : budget), "(charter truncated)");
+        budget = 0;
+        truncated = true;
+      } else {
+        lines.push("", "(charter omitted)");
+        truncated = true;
+      }
+    }
+    parts.push(lines.join("\n"));
+  }
+  if (truncated) {
+    parts.push(
+      `> WARNING: combined team charters exceed ${TEAM_CHARTER_CHAR_LIMIT} chars; some were cut. Read the full charter at <teamDir>/TEAM.md.`
+    );
+  }
+  return parts.join("\n\n");
+}
+
 export function buildSystemPrompt(options: {
   persona: string;
   toolNames: string[];
@@ -208,10 +270,20 @@ export function buildSystemPrompt(options: {
   platformHints?: string;
   /** Verbatim AGENTS.md contents. Empty/undefined ⇒ section omitted. */
   agentsMd?: string;
+  /** Teams this agent belongs to (non-archived). When non-empty, a
+   *  `## Teams` section injects each team's roster, shared-workspace
+   *  path, and charter — the context layer between org (AGENTS.md)
+   *  and individual (persona). */
+  teams?: ReadonlyArray<PromptTeam>;
   /** Agent's workspace dir. When set, a short "## Workspace" section is
    *  injected so the agent knows where its default cwd is and that shell
    *  state persists across calls. */
   workspaceDir?: string;
+  /** Pre-rendered `## Access` section body (from `describePolicy` in
+   *  @openacme/config) — what the agent may read/write and why the rest
+   *  is off-limits. Passed pre-rendered (like `agentsMd`) so agent-core
+   *  stays decoupled from policy compilation. */
+  accessSection?: string;
   /** Files under `<agentDir>/resources/`. When non-empty, a `## Resources`
    *  section lists relPath + size + absolute path so the agent can
    *  `read_file` directly. */
@@ -233,6 +305,12 @@ export function buildSystemPrompt(options: {
     );
   }
 
+  // Teams — org → team → individual context hierarchy. Sits after the
+  // org-wide AGENTS.md and before the agent's own workspace section.
+  if (options.teams && options.teams.length > 0) {
+    parts.push(`\n## Teams\n${buildTeamsSection(options.teams)}`);
+  }
+
   // Workspace section — tells the agent its default cwd + that shell
   // state persists across calls within this session.
   if (options.workspaceDir && options.workspaceDir.length > 0) {
@@ -241,9 +319,16 @@ export function buildSystemPrompt(options: {
         `Shell commands, file ops, and the Python REPL default to this location. ` +
         `Your shell maintains state across calls in this session — \`cd\`, ` +
         `exported environment variables, and shell functions all persist. ` +
-        `Absolute paths are still allowed; the workspace is just the default, ` +
-        `not a sandbox.`
+        `Absolute paths are allowed; what you can actually read and write ` +
+        `is listed under Access below.`
     );
+  }
+
+  // Access — rendered from the compiled per-agent path policy. The
+  // enforcement is OS-level (the tool host runs sandboxed); this section
+  // carries the *meaning* so a bare EPERM doesn't read as a bug.
+  if (options.accessSection && options.accessSection.length > 0) {
+    parts.push(`\n## Access\n${options.accessSection}`);
   }
 
   // Resources — user-supplied files under `<agentDir>/resources/`. The

@@ -1275,7 +1275,9 @@ export class Agent {
       tasksContext,
       memorySnapshot,
       agentsMd: this.config.agentsMd,
+      teams: this.config.teams,
       workspaceDir: this.config.workspaceDir,
+      accessSection: this.config.accessSection,
       resources: this.config.resources,
     });
     this.cachedSystemPrompts.set(sessionId, prompt);

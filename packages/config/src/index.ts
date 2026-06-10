@@ -9,6 +9,7 @@ export {
   MCPServerConfigSchema,
   MCPTransportSchema,
   AgentDefinitionSchema,
+  TeamDefinitionSchema,
   ServerConfigSchema,
   AgentBehaviorSchema,
   SkillsConfigSchema,
@@ -22,6 +23,7 @@ export {
   type MCPServerConfig,
   type MCPTransport,
   type AgentDefinition,
+  type TeamDefinition,
   type ServerConfig,
   type AgentBehavior,
   type SkillsConfig,
@@ -41,6 +43,16 @@ export {
 export { DEFAULT_MODEL_BY_PROVIDER } from "./defaults.js";
 
 export { createAgentStore, type AgentStore } from "./agent-store.js";
+
+export { createTeamStore, type TeamStore } from "./team-store.js";
+
+export {
+  compilePolicy,
+  toSandboxConfig,
+  describePolicy,
+  type PathPolicy,
+  type SandboxFsConfig,
+} from "./path-policy.js";
 
 export {
   listAgentResources,

@@ -313,12 +313,93 @@ describe("Workspace section (per-agent default cwd)", () => {
     expect(empty).not.toContain("## Workspace");
   });
 
-  it("calls out that the workspace is a default, not a sandbox", () => {
+  it("points at the Access section for what's actually read/writable", () => {
     const prompt = buildSystemPrompt({
       persona: PERSONA,
       toolNames: ["shell"],
       workspaceDir: "/tmp/ws",
     });
-    expect(prompt).toMatch(/not a sandbox/i);
+    expect(prompt).toMatch(/listed under Access/i);
+  });
+
+  it("renders the ## Access section from a pre-rendered accessSection", () => {
+    const prompt = buildSystemPrompt({
+      persona: PERSONA,
+      toolNames: ["shell"],
+      workspaceDir: "/tmp/ws",
+      accessSection: "Read-write:\n- `/tmp/ws` — your workspace",
+    });
+    expect(prompt).toContain("## Access");
+    expect(prompt).toContain("- `/tmp/ws` — your workspace");
+    // Section ordering: Workspace before Access.
+    expect(prompt.indexOf("## Workspace")).toBeLessThan(
+      prompt.indexOf("## Access")
+    );
+  });
+});
+
+describe("teams section assembly", () => {
+  const team = (over: Partial<import("../src/prompt.js").PromptTeam> = {}) => ({
+    id: "website",
+    name: "Website Redesign",
+    members: ["zoe", "max"],
+    charter: "We ship the landing page. Zoe is the manager.",
+    workspaceDir: "/data/teams/website/workspace",
+    ...over,
+  });
+
+  it("omits the ## Teams section when teams is empty/undefined", () => {
+    expect(
+      buildSystemPrompt({ persona: PERSONA, toolNames: TOOLS })
+    ).not.toContain("## Teams");
+    expect(
+      buildSystemPrompt({ persona: PERSONA, toolNames: TOOLS, teams: [] })
+    ).not.toContain("## Teams");
+  });
+
+  it("renders roster, workspace path, and charter per team", () => {
+    const prompt = buildSystemPrompt({
+      persona: PERSONA,
+      toolNames: TOOLS,
+      teams: [team()],
+    });
+    expect(prompt).toContain("## Teams");
+    expect(prompt).toContain("### Website Redesign (`website`)");
+    expect(prompt).toContain("Members: zoe, max");
+    expect(prompt).toContain("Shared workspace: `/data/teams/website/workspace`");
+    expect(prompt).toContain("Zoe is the manager.");
+  });
+
+  it("places ## Teams between AGENTS.md context and ## Workspace", () => {
+    const prompt = buildSystemPrompt({
+      persona: PERSONA,
+      toolNames: TOOLS,
+      agentsMd: "Org-wide background.",
+      teams: [team()],
+      workspaceDir: "/data/agents/zoe/workspace",
+    });
+    const org = prompt.indexOf("Org-wide background.");
+    const teams = prompt.indexOf("## Teams");
+    const ws = prompt.indexOf("## Workspace");
+    expect(org).toBeGreaterThan(-1);
+    expect(teams).toBeGreaterThan(org);
+    expect(ws).toBeGreaterThan(teams);
+  });
+
+  it("caps combined charters at TEAM_CHARTER_CHAR_LIMIT with a warning", () => {
+    const big = "line of charter text\n".repeat(300); // ~6300 chars
+    const prompt = buildSystemPrompt({
+      persona: PERSONA,
+      toolNames: TOOLS,
+      teams: [
+        team({ id: "a", name: "A", charter: big }),
+        team({ id: "b", name: "B", charter: "short b charter" }),
+      ],
+    });
+    expect(prompt).toContain("(charter truncated)");
+    expect(prompt).toContain("> WARNING: combined team charters exceed");
+    // Second team's charter is past the budget — omitted, not silently dropped.
+    expect(prompt).toContain("(charter omitted)");
+    expect(prompt).not.toContain("short b charter");
   });
 });

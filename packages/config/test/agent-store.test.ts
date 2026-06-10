@@ -31,6 +31,7 @@ function makeAgent(
     mcpDisabled: [],
     skills: [],
     probeIntervalMs: 30 * 60 * 1000,
+    paths: [],
   };
 }
 

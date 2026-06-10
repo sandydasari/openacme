@@ -126,6 +126,13 @@ export interface AgentConfig {
     size: number;
     absPath: string;
   }>;
+  /** Non-archived teams this agent belongs to, resolved by AgentManager
+   *  from `<dataDir>/teams/`. Drives the prompt's `## Teams` section
+   *  (roster + shared-workspace path + charter). */
+  teams?: ReadonlyArray<import("./prompt.js").PromptTeam>;
+  /** Pre-rendered `## Access` section body (from `describePolicy`).
+   *  Mirrors the OS-level sandbox policy the tool host enforces. */
+  accessSection?: string;
 }
 
 export interface CompressionConfig {
