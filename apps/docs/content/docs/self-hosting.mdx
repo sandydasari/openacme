@@ -1,0 +1,61 @@
+---
+title: Self-hosting
+description: Run OpenAcme on a server or VM — it's a normal background service
+---
+
+OpenAcme is a single Node process. It runs anywhere Node runs — your laptop, a
+cloud VM, or a home server — and keeps everything on disk, so agents have the
+whole machine to work with and nothing is lost between restarts.
+
+## Install
+
+Node 18+ is the only requirement.
+
+```sh
+npm install -g @openacme/cli
+```
+
+## Run it as a service
+
+```sh
+openacme start
+```
+
+On first run this installs a background service — **systemd** on Linux,
+**launchd** on macOS — so OpenAcme keeps running after you log out and restarts
+on reboot. Manage it with:
+
+```sh
+openacme status      # up? pid, bind, uptime
+openacme logs -f     # follow the log
+openacme restart
+openacme stop
+```
+
+## Headless setup (no desktop)
+
+A server has no browser to click through, so connect a model one of these ways:
+
+- **Wizard** — `openacme setup` prompts for a provider and key in the terminal.
+- **API key** — set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`,
+  `OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) before starting.
+- **Subscription sign-in** — `openacme login --device` prints a code to enter on
+  another device, so OAuth works without a local browser.
+
+## Where your data lives
+
+Everything is under `~/.openacme/` — config, agents, tasks, memory,
+conversations, and skills. To back up or move to another machine, copy that one
+directory.
+
+## Sizing
+
+A small box is plenty — 2 GB of RAM handles a working roster. Any always-on
+Linux host works, from a cheap cloud VM to a home server or a Raspberry Pi.
+
+## Reaching it from elsewhere
+
+By default OpenAcme listens on `127.0.0.1` only. To use it from your phone or
+share it with a teammate, see [Remote access](/docs/remote-access) — a tunnel
+gets you a public HTTPS URL with no reverse proxy, certificates, or DNS to set
+up.

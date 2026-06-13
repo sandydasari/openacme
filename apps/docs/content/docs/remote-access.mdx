@@ -1,0 +1,78 @@
+---
+title: Remote access
+description: Reach your instance from other devices with a tunnel — no reverse proxy needed
+---
+
+By default OpenAcme listens on `127.0.0.1` only — reachable from the machine it
+runs on, nothing else. To use it from your phone or share it with a teammate,
+you **don't** need a reverse proxy, TLS certificates, DNS records, or open
+ports. A tunnel handles all of that: your machine makes an outbound connection
+and hands back a public HTTPS URL.
+
+## Set an access secret
+
+Once OpenAcme is reachable beyond loopback it requires a secret, so a public URL
+is never wide open. Create one:
+
+```sh
+openacme secret rotate
+```
+
+It prints the secret and restarts the daemon. You enter it once per device — any
+of the tunnels below then drops you at this screen:
+
+<DocShot
+  name="login"
+  alt="The OpenAcme login screen prompting for the access secret"
+  caption="What anyone opening your tunnel URL sees first — the access-secret prompt."
+/>
+
+## Cloudflare Tunnel
+
+Install `cloudflared` ([download](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)):
+
+```sh
+brew install cloudflared   # macOS;  apt/yum/binary on Linux
+```
+
+Point it at the running daemon:
+
+```sh
+cloudflared tunnel --url http://localhost:3456
+```
+
+It prints a `https://<random>.trycloudflare.com` URL — open it on any device and
+enter your secret. That URL is ephemeral. For a permanent URL on your own
+domain, create a *named* tunnel and route DNS to `http://localhost:3456`
+([guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)).
+
+## ngrok
+
+After a free signup and `ngrok config add-authtoken <token>`:
+
+```sh
+ngrok http 3456
+```
+
+It prints a public `https://<id>.ngrok-free.app` URL. Open it and enter your
+secret. Free URLs are ephemeral and show a one-time interstitial page; a paid
+plan gives a fixed subdomain.
+
+## Tailscale (private, no public URL)
+
+If you only need your *own* devices — not public sharing — Tailscale is the
+simplest path and exposes nothing publicly. Install it on the OpenAcme machine
+and your phone/laptop, then reach the instance at `http://<machine-name>:3456`
+over your private tailnet. Use `tailscale funnel` if you later want a public URL.
+
+## Any other tunnel works
+
+The pattern is always the same — point the tunnel at `http://localhost:3456` and
+the access secret protects whatever public URL it hands back. localtunnel,
+`bore`, an SSH reverse tunnel, or your own reverse proxy all work the same way.
+
+## Why no reverse proxy?
+
+The tunnel forwards straight to `:3456` and terminates HTTPS at its edge — so
+you skip nginx/Caddy, certificate renewal, DNS setup, and firewall/port
+forwarding entirely. The access secret is what keeps the public URL protected.

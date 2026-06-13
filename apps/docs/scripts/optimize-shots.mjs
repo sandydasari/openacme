@@ -2,6 +2,7 @@
    Usage: node scripts/optimize-shots.mjs */
 import sharp from "sharp";
 import { mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 const SRC = "/tmp/shots";
@@ -16,11 +17,13 @@ const SITE = [
   ["taskdetail1-light.png", "light/brief"],
   ["taskdetail-light.png", "light/result"],
   ["chat-cole-light.png", "light/chat"],
+  ["login-light.png", "light/login"],
   ["board-dark.png", "dark/board"],
   ["home-dark.png", "dark/home"],
   ["taskdetail1-dark.png", "dark/brief"],
   ["taskdetail4-dark.png", "dark/result"],
   ["chat-cole-dark.png", "dark/chat"],
+  ["login-dark.png", "dark/login"],
 ];
 
 // README: 1440w pngs, same filenames the README already references
@@ -35,6 +38,10 @@ await mkdir(path.join(SCREENS, "light"), { recursive: true });
 await mkdir(path.join(SCREENS, "dark"), { recursive: true });
 
 for (const [src, out] of SITE) {
+  if (!existsSync(path.join(SRC, src))) {
+    console.log("skip (no source):", src);
+    continue;
+  }
   const input = sharp(path.join(SRC, src));
   await input
     .clone()
@@ -48,6 +55,10 @@ for (const [src, out] of SITE) {
 }
 
 for (const [src, out] of README) {
+  if (!existsSync(path.join(SRC, src))) {
+    console.log("skip (no source):", src);
+    continue;
+  }
   await sharp(path.join(SRC, src))
     .resize({ width: 1440 })
     .png({ compressionLevel: 9, palette: true })
