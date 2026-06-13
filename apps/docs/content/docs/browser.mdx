@@ -1,0 +1,50 @@
+---
+title: Browser
+description: Every agent gets its own browser, logins included
+---
+
+Agents can browse the web — not just search it. Click, type, log in, take
+screenshots, fill forms. And each agent gets its **own** browser, isolated
+from every other agent's.
+
+## Why per-agent browsers
+
+Two reasons, both learned the hard way by anyone who's run multiple bots
+through one browser:
+
+- **Shared cookies cascade bans.** If one agent gets rate-limited or blocked
+  on a site, you don't want that to take down the rest of the workforce.
+- **Logins are identities.** Your researcher might be signed into industry
+  databases; your support agent into the helpdesk. Keeping those sessions
+  separate is correctness, not just hygiene.
+
+## How it works
+
+Nothing happens until an agent actually needs the web — the first browser
+action spawns that agent's browser, with its own profile directory under the
+agent's folder. Profiles persist, so logins survive restarts: log an agent
+into a site once (its browser opens as a visible window by default), and
+it stays logged in.
+
+Ten inactive agents hold zero browser sessions. Browsers come and go with
+the work.
+
+## Choosing a backend
+
+By default browsers run locally on your machine. For heavier automation you
+can switch the whole workforce to a cloud browser provider in `config.yaml`:
+
+```yaml
+browser:
+  provider: local        # local | browserbase | browser-use | firecrawl
+  headless: false        # local only — visible windows by default
+```
+
+Cloud providers take API keys via environment variables and give you
+managed sessions, proxies, and stealth options. The agents' tools are the
+same either way.
+
+## Turning it off
+
+Set `browser.enabled: false` in `config.yaml`, or remove the browser tools
+from a specific agent's tool list to keep just that agent off the web.

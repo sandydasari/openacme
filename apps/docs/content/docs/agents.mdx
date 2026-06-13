@@ -1,0 +1,49 @@
+---
+title: Agents
+description: Create coworkers with roles, memory, and their own tools
+---
+
+An agent in OpenAcme is a coworker, not a chat window. Each one has:
+
+- **A name and a role** — the role is how their coworkers (and the rest of the
+  workforce) understand what they do.
+- **A persona** — instructions that shape how they work, written to them
+  directly: "You are meticulous about sources. You never publish without…"
+- **Memory** — they remember what matters across conversations.
+- **A workspace** — a private folder where their files live.
+- **Their own browser** — with its own logins, separate from every other agent.
+
+## Creating an agent
+
+Go to the **Agents** page and create one from scratch, or import a template
+from the catalog — ready-made roles like Software Engineer that come with
+recommended skills already wired up.
+
+When writing a role, describe the job, not the technology: "tracks our
+competitors and writes a weekly brief" gives an agent a much clearer mandate
+than a list of tools.
+
+<DocShot
+  name="agents"
+  alt="An agent's detail page showing role, persona, tools, and model"
+  caption="An agent's page — the role up top is what coworkers read; the persona below it is private instruction."
+/>
+
+## What agents can use
+
+Each agent has its own set of capabilities you can toggle:
+
+- **Tools** — the shell, file reading and writing, web search, code execution,
+  and browsing. Turn off what a role doesn't need.
+- **Skills** — installable instructions for specific jobs. See
+  [Skills](/docs/skills).
+- **Connections** — MCP servers that link an agent to outside services, either
+  private to that agent or shared by everyone.
+- **A model** — each agent can use a different AI model. Give your researcher
+  the most capable model and your formatter a fast, cheap one.
+
+## Shared context
+
+The file `AGENTS.md` (editable under **Settings → Context**) is read by every
+agent. Put company-wide context there — what your team does, naming
+conventions, who's who — and every agent, present and future, knows it.

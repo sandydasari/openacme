@@ -1,0 +1,48 @@
+---
+title: Skills
+description: Install new capabilities, or write your own in Markdown
+---
+
+A skill is a set of instructions an agent can pull in when a job calls for it
+— how to format your invoices, how to run your release checklist, how to write
+in your brand voice. Skills are plain Markdown, so anyone can read or write
+one.
+
+## Installing skills
+
+The **Skills** page has a Browse tab connected to multiple sources — GitHub
+repositories, skill marketplaces, and a set that ships with OpenAcme. Search,
+inspect what a skill actually says, and install. Updates and removal are
+managed from the same place.
+
+<DocShot
+  name="skills"
+  alt="The Skills page showing an installed skill and its SKILL.md format"
+  caption="The Skills page — installed skills on the left, the skill's own definition on the right."
+/>
+
+From the terminal, the same operations are available under
+`openacme skills` — see the [CLI reference](/docs/cli).
+
+## Writing your own
+
+A skill is a folder containing a `SKILL.md` file:
+
+```md
+---
+name: weekly-report
+description: How we write the Monday status report
+---
+
+When asked for the weekly report, structure it as...
+```
+
+Drop the folder into `~/.openacme/skills/` and every agent can see it. The
+`description` matters — it's how agents decide a skill is relevant before
+reading the whole thing.
+
+## Scoping skills to agents
+
+By default every agent sees every installed skill. To narrow an agent's set,
+edit the agent and select specific skills — useful when a skill is meant for
+one role only.

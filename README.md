@@ -10,7 +10,7 @@
   <img src="docs/images/logo-text.svg" alt="OpenAcme" width="240">
 </picture>
 
-### An AI workforce. You're the founder.
+### An AI workforce. You're in charge.
 
 Not a single assistant. Not a fixed team of four. A *workforce* — named agents with roles, models, tools, and memory — that scales the way you want it to and self-organizes through delegation. Hand the top of the org chart a goal; it breaks the work down and assigns it. You steer.
 

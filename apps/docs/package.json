@@ -4,14 +4,18 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "postinstall": "fumadocs-mdx",
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
-    "check-types": "next typegen && tsc --noEmit"
+    "check-types": "fumadocs-mdx && next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@repo/ui": "workspace:*",
+    "fumadocs-core": "16.10.2",
+    "fumadocs-mdx": "15.0.12",
+    "fumadocs-ui": "16.10.2",
     "next": "16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -19,10 +23,16 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.1",
+    "@types/mdx": "^2.0.14",
     "@types/node": "^22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "eslint": "^9.39.1",
-    "typescript": "5.9.2"
+    "postcss": "^8.5.15",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4",
+    "typescript": "5.9.2",
+    "zod": "^4.4.3"
   }
 }

@@ -1,0 +1,60 @@
+---
+title: Connections (MCP)
+description: Plug agents into outside tools and services
+---
+
+Agents connect to outside services — databases, ticketing systems, internal
+APIs, SaaS tools — through the [Model Context Protocol](https://modelcontextprotocol.io),
+the open standard for giving AI tools access to other software. If a service
+has an MCP server, your agents can use it.
+
+## Adding a connection
+
+Connections are configured in `~/.openacme/mcp.json` (web UI management
+lives under **Settings**). Two kinds of servers:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_..." }
+    },
+    "internal-api": {
+      "url": "https://mcp.example.com/sse",
+      "headers": { "Authorization": "Bearer ..." }
+    }
+  }
+}
+```
+
+- **Command servers** run locally as a subprocess.
+- **URL servers** connect to a remote endpoint over HTTP/SSE.
+
+Once connected, every tool the server offers shows up in your agents'
+toolboxes automatically.
+
+## Workforce-wide vs. private
+
+Servers in `mcp.json` are available to the whole workforce. An agent can
+also have **private** connections — defined on the agent itself — for
+services only that role should touch. Your support agent's helpdesk
+connection doesn't need to be visible to your researcher.
+
+An agent can likewise opt out of global connections, so access is shaped
+per role in both directions.
+
+## Credentials
+
+Pass tokens explicitly via the server's `env` or `headers` — OpenAcme
+deliberately does **not** forward your shell's environment variables to MCP
+servers, so credentials never leak into a connection by accident.
+
+## Checking on connections
+
+```sh
+openacme mcp list      # what's configured
+openacme mcp status    # what's connected right now
+openacme mcp test      # try connecting and report errors
+```

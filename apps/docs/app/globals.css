@@ -1,50 +1,476 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/*
+ * Operator's Console — ported from apps/web/app/globals.css (see DESIGN.md).
+ * Surfaces: warm paper / cool graphite. Single accent: plot-red, ≤10% rule.
+ * Sharp 0px corners everywhere. No shadows. Hairline 1px rules only.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: oklch(99.4% 0.0015 75);
+  --paper-sunk: oklch(95.5% 0.003 75);
+  --paper-rule: oklch(87% 0.003 75);
+
+  --ink: oklch(22% 0.008 280);
+  --ink-soft: oklch(42% 0.006 280);
+  --ink-faint: oklch(48% 0.006 280);
+
+  --plot-red: oklch(58% 0.18 28);
+  --plot-red-deep: oklch(48% 0.18 28);
+
+  --signal-amber: oklch(78% 0.14 75);
+  --signal-blue: oklch(60% 0.15 250);
+  --signal-green: oklch(60% 0.13 150);
+
+  --code-surface: oklch(94% 0.005 240);
+  --code-surface-rule: oklch(86% 0.005 240);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+.dark {
+  --paper: oklch(16% 0.006 280);
+  --paper-sunk: oklch(20% 0.006 280);
+  --paper-rule: oklch(28% 0.006 280);
+
+  --ink: oklch(94% 0.004 75);
+  --ink-soft: oklch(75% 0.005 75);
+  --ink-faint: oklch(58% 0.005 280);
+
+  /* Accent intentionally near-identical across modes — plot-red is plot-red. */
+  --plot-red: oklch(62% 0.19 28);
+  --plot-red-deep: oklch(54% 0.19 28);
+
+  --signal-amber: oklch(80% 0.17 75);
+  --signal-blue: oklch(72% 0.17 250);
+  --signal-green: oklch(72% 0.16 150);
+
+  --code-surface: oklch(22% 0.008 240);
+  --code-surface-rule: oklch(30% 0.008 240);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* System tokens — bg-paper, text-ink-soft, border-paper-rule, bg-plot-red… */
+  --color-paper: var(--paper);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-paper-rule: var(--paper-rule);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-plot-red: var(--plot-red);
+  --color-plot-red-deep: var(--plot-red-deep);
+  --color-signal-amber: var(--signal-amber);
+  --color-signal-blue: var(--signal-blue);
+  --color-signal-green: var(--signal-green);
+  --color-code-surface: var(--code-surface);
+  --color-code-surface-rule: var(--code-surface-rule);
+
+  /* Fumadocs UI palette mapped onto the console tokens. */
+  --color-fd-background: var(--paper);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--paper-sunk);
+  --color-fd-muted-foreground: var(--ink-soft);
+  --color-fd-popover: var(--paper);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--paper-sunk);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--paper-rule);
+  --color-fd-primary: var(--plot-red);
+  --color-fd-primary-foreground: oklch(98% 0.005 75);
+  --color-fd-secondary: var(--paper-sunk);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: var(--paper-sunk);
+  --color-fd-accent-foreground: var(--ink);
+  --color-fd-ring: var(--plot-red);
+
+  /* Single radius scale — every step is 0. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  /* Motion vocabulary — three-step duration scale, one curve family. */
+  --duration-instant: 80ms;
+  --duration-state: 180ms;
+  --duration-section: 320ms;
+  --duration-pulse: 1200ms;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* DESIGN.md: 0px corners with no exceptions; fumadocs-ui ships literal radii,
+   so the kill must out-rank its utilities. Intentional: squares embeds too. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+@layer base {
+  body {
+    font-feature-settings: "ss01", "cv01", "cv11", "tnum", "calt";
+    font-variant-numeric: tabular-nums;
+  }
+  code,
+  kbd,
+  samp,
+  pre,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  ::selection {
+    background-color: color-mix(in oklch, var(--plot-red) 22%, transparent);
+    color: var(--ink);
   }
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
+@layer components {
+  /* Faceplate label: UPPERCASE Geist Mono, tracked. */
+  .label-faceplate {
+    @apply font-mono uppercase text-[11px] leading-none tracking-[0.08em] text-ink-soft;
+  }
+
+  /* Always-visible mono metadata row (timestamps, IDs, models). */
+  .meta-row {
+    @apply font-mono text-[12px] leading-tight text-ink-soft tabular-nums;
+  }
+
+  /* Status indicator dot. Pair with a label — no color-only state. */
+  .status-dot {
+    @apply inline-block size-1.5 shrink-0;
+  }
+
+  .pulse-live {
+    animation: pulse-live var(--duration-pulse) var(--ease-out-quart) infinite;
+  }
+
+  /* Paper grain — fractal-noise overlay rendered via ::before. */
+  .paper-surface {
+    position: relative;
+    isolation: isolate;
+  }
+  .paper-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: multiply;
+  }
+  /* Body-level grain is one fixed overlay — scroll can't carry it away. */
+  body.paper-surface::before {
+    position: fixed;
+    z-index: 80;
+  }
+  .dark .paper-surface::before {
+    opacity: 0.09;
+    mix-blend-mode: screen;
+    filter: invert(1);
+  }
+
+  .scribe-in {
+    transform-origin: left center;
+    animation: scribe-in var(--duration-section) var(--ease-out-quart) both;
+  }
+
+  /* Loading hairline — needs a `relative` parent. */
+  .loading-hairline {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 1px;
+    width: 25%;
+    background-color: var(--plot-red);
+    animation: loading-hairline var(--duration-pulse) var(--ease-out-quart) infinite;
+  }
+
+  /* Focus scribes outward instead of popping. */
+  .focus-scribe:focus-visible {
+    outline: 2px solid var(--plot-red);
+    animation: focus-scribe var(--duration-state) var(--ease-out-quart) both;
+  }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
-* {
-  box-sizing: border-box;
+@keyframes scribe-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes loading-hairline {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes focus-scribe {
+  from {
+    outline-offset: -2px;
+  }
+  to {
+    outline-offset: 2px;
+  }
+}
+
+/* Scroll reveal — flipped by the <Reveal> wrapper via data attribute. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--duration-section) var(--ease-out-quart),
+    transform var(--duration-section) var(--ease-out-quart);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+[data-reveal="in"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Capability marquee — duplicated tracks translate one full width. */
+.marquee-track {
+  animation: marquee 36s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-live,
+  .scribe-in,
+  .loading-hairline,
+  .marquee-track,
+  .focus-scribe:focus-visible {
+    animation: none;
+  }
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Fumadocs chrome → Operator's Console                                */
+/* ------------------------------------------------------------------ */
+
+/* Code: machine-truth surface, slightly cooler than paper-sunk. The shiki
+   FIGURE is the surface — the inner pre stays transparent so the frame,
+   toolbar, and body read as one block. */
+figure.shiki {
+  background-color: var(--code-surface) !important;
+  border: 1px solid var(--code-surface-rule) !important;
+  box-shadow: none !important;
+}
+figure.shiki pre {
+  background-color: transparent !important;
+  border: 0;
+}
+#nd-page pre:not(figure.shiki pre) {
+  background-color: var(--code-surface) !important;
+  border: 1px solid var(--code-surface-rule);
+}
+.prose :where(code):not(:where(pre code)):not(:where([class~="not-prose"] *)),
+#nd-page :not(pre) > code {
+  background-color: var(--code-surface);
+  border: 1px solid var(--code-surface-rule);
+  padding: 0 4px;
+}
+
+/* Sidebar: a sunk rail (like the app), faceplate section labels, calm
+   ink-soft items, and a 2px plot-red marker on the active page — no pills. */
+#nd-sidebar {
+  background-color: var(--paper-sunk);
+  font-size: 13px;
+}
+#nd-sidebar p {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+#nd-sidebar a {
+  color: var(--ink-soft);
+  padding-top: 7px;
+  padding-bottom: 7px;
+  padding-inline-start: 10px;
+}
+#nd-sidebar a:hover {
+  color: var(--ink);
+  background-color: transparent;
+}
+#nd-sidebar a[data-active="true"] {
+  background-color: transparent;
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 0 var(--plot-red);
+}
+/* The nav-links block fumadocs puts above the tree ("Docs") — quiet it. */
+#nd-sidebar a[data-active] svg {
+  color: var(--ink-faint);
+}
+
+/* Search trigger: hairline, paper, mono hint. */
+#nd-nav [class*="bg-fd-secondary"] {
+  background-color: var(--paper);
+  border-color: var(--paper-rule);
+}
+
+/* Sidebar footer: the toggle stands alone — no empty pill bar around it. */
+#nd-sidebar div:has(> [data-theme-toggle]) {
+  border: 0;
+  background-color: transparent;
   padding: 0;
-  margin: 0;
+}
+#nd-sidebar [data-theme-toggle] {
+  margin-inline-start: 0;
+  border: 1px solid var(--paper-rule);
+  padding: 4px;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* TOC: faceplate heading, quiet links, ink on active. */
+#toc-title {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
 }
-
-.imgDark {
+#toc-title svg {
   display: none;
 }
+#nd-toc a,
+#nd-page [data-toc] a {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+#nd-toc a:hover {
+  color: var(--ink);
+}
+#nd-toc a[data-active="true"] {
+  color: var(--ink);
+  font-weight: 500;
+}
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+/* Title block: display-scale h1, roomier description, hairline rule under. */
+#nd-page h1 {
+  font-size: 2.25rem;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+#nd-page h1 + p.text-lg {
+  font-size: 1.0625rem;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--paper-rule);
+  padding-bottom: 2rem;
+  margin-bottom: 0.5rem;
+}
 
-  .imgLight {
-    display: none;
-  }
-  .imgDark {
-    display: unset;
-  }
+/* Prose rhythm: confident heading scale, square markers, ruled tables. */
+#nd-page .prose h2 {
+  font-size: 1.4375rem;
+  letter-spacing: -0.01em;
+  margin-top: 2.75rem;
+}
+#nd-page .prose h3 {
+  font-size: 1.125rem;
+  margin-top: 2rem;
+}
+#nd-page .prose p,
+#nd-page .prose li {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+#nd-page .prose ul {
+  list-style-type: square;
+}
+#nd-page .prose li::marker {
+  color: var(--ink-faint);
+}
+#nd-page .prose table {
+  font-size: 0.875rem;
+}
+#nd-page .prose th {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-weight: 500;
+  text-align: left;
+}
+#nd-page .prose th,
+#nd-page .prose td {
+  border: 1px solid var(--paper-rule);
+  padding: 0.5rem 0.75rem;
+}
+
+/* Flat chrome: dialogs/popovers sit on hairlines, not shadows. */
+[role="dialog"],
+[data-radix-popper-content-wrapper] > * {
+  box-shadow: none !important;
+  border: 1px solid var(--paper-rule);
+}
+[data-radix-popper-content-wrapper] {
+  filter: none !important;
+}
+
+/* Search dialog: flat ink overlay, no blur. */
+[data-slot="dialog-overlay"],
+.fixed.inset-0[class*="backdrop"] {
+  backdrop-filter: none !important;
+}
+
+/* Prose: ink links underlined; plot-red is the hover state, not the rest. */
+#nd-page .prose a:not([data-card]) {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--paper-rule);
+  transition: color var(--duration-state) var(--ease-out-quart);
+}
+#nd-page .prose a:not([data-card]):hover {
+  color: var(--plot-red);
+  text-decoration-color: var(--plot-red);
 }

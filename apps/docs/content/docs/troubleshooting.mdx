@@ -1,0 +1,68 @@
+---
+title: Troubleshooting
+description: When something doesn't work
+---
+
+## The daemon won't start
+
+Check what it says first:
+
+```sh
+openacme status
+openacme logs
+```
+
+The common causes:
+
+- **Port already in use.** Something else is on `3210`. Change `server.port`
+  in `~/.openacme/config.yaml` and `openacme restart`.
+- **Stale process.** `openacme stop` then `openacme start`. If a process
+  survived, `openacme status` shows its pid.
+
+## Agents won't respond / auth errors
+
+Your provider credentials expired or were never set:
+
+```sh
+openacme login --provider anthropic   # or openai
+```
+
+API-key users: confirm the key is in `config.yaml` or exported in the
+environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …). Subscription sign-ins
+refresh automatically; if refresh fails permanently you'll be prompted to log
+in again.
+
+## A task is stuck
+
+- `blocked` never clears itself — an agent (or you) set it, and an agent (or
+  you) must set it back. Open the task and read the comments; the blocker is
+  usually stated there.
+- A task that errored gets parked with a retry delay and a comment from the
+  scheduler. It re-runs on its own; cancel it if it shouldn't.
+- Check the task's **events** log (on the task page) to see exactly what
+  happened and when.
+
+## Where everything lives
+
+When in doubt, look at the data directly — it's files:
+
+| What | Where |
+| --- | --- |
+| Logs | `openacme logs -f` |
+| Config | `~/.openacme/config.yaml` |
+| Agents | `~/.openacme/agents/<id>/AGENT.md` |
+| Tasks | `~/.openacme/tasks/*.md` |
+| Conversations | `~/.openacme/state.db` |
+
+## Verbose logging
+
+```sh
+OPENACME_DEBUG=1 openacme restart
+```
+
+drops the logger to debug level. Attach the output when reporting an issue.
+
+## Starting fresh
+
+Stop the daemon, move `~/.openacme` aside (don't delete it — your data is
+in there), and run `openacme setup` again.

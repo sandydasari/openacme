@@ -28,10 +28,11 @@
  */
 
 :root {
-  /* Surfaces */
-  --paper: oklch(98.5% 0.004 75);
-  --paper-sunk: oklch(94.5% 0.004 75);
-  --paper-rule: oklch(86% 0.004 75);
+  /* Surfaces — paper sits at near-white (99.4%) with trace warmth: reads as
+   * white on screen without going Material-flat pure #fff. */
+  --paper: oklch(99.4% 0.0015 75);
+  --paper-sunk: oklch(95.5% 0.003 75);
+  --paper-rule: oklch(87% 0.003 75);
 
   /* Ink (text on paper) */
   --ink: oklch(22% 0.008 280);

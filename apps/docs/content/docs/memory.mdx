@@ -1,0 +1,47 @@
+---
+title: Memory
+description: What agents remember between conversations
+---
+
+Every agent keeps a persistent memory — facts about you, your preferences,
+ongoing work, and the corrections you've given. It carries across
+conversations, so an agent you've worked with for a month knows things a
+fresh one wouldn't.
+
+## How it works
+
+Memory is agent-scoped: your researcher's memory is separate from your
+writer's. An agent updates its own memory as it works — when you tell it
+something worth keeping ("always write dates as ISO"), it records the fact
+and applies it from then on.
+
+A short summary of each agent's memory is woven into everything they do, and
+they can look deeper when a task calls for it.
+
+## Where it lives
+
+On disk, in plain Markdown, under the agent's own folder:
+
+```
+~/.openacme/agents/<agent>/memory/
+```
+
+You can read it, edit it, or delete entries — it's your data, in files. The
+agent picks up your edits on its next conversation.
+
+## Shaping what's remembered
+
+- **Tell them directly.** "Remember that our launch is June 30" lands in
+  memory.
+- **Correct them once.** Corrections are the highest-value memories — agents
+  store the why, not just the what.
+- **Size limit.** Each agent has a memory budget (default ~4,000 characters
+  for the always-loaded summary) so memory stays sharp instead of becoming a
+  junk drawer. Older, less-used detail moves to topic files that are loaded
+  on demand.
+
+## Memory vs. shared context
+
+Memory is per-agent and learned over time. For things *every* agent should
+know from day one — what your company does, naming conventions, who's who —
+use the shared `AGENTS.md` context file instead (web: **Settings → Context**).

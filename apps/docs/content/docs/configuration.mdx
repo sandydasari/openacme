@@ -1,0 +1,56 @@
+---
+title: Configuration
+description: The config file, data directory, and environment variables
+---
+
+Most settings are editable in the web UI under **Settings**. This page covers
+what's on disk for when you want to look under the hood.
+
+## The data directory
+
+Everything lives under `~/.openacme/`:
+
+| Path | What it is |
+| --- | --- |
+| `config.yaml` | Global settings (model, server, browser) |
+| `agents/<id>/` | One folder per agent: definition, workspace, memory, resources |
+| `tasks/` | One file per task |
+| `skills/` | Installed and locally-authored skills |
+| `AGENTS.md` | Shared context injected into every agent |
+| `state.db` | Conversations and history |
+| `auth.json` | Provider credentials (file permissions restrict it to you) |
+
+## config.yaml
+
+The main keys:
+
+```yaml
+model:
+  provider: anthropic        # anthropic | openai | google | openrouter | ollama | custom
+  model: claude-sonnet-4-20250514
+
+server:
+  port: 3210
+  host: 127.0.0.1
+
+browser:
+  provider: local            # which browser backend agents use
+  headless: false
+```
+
+Any agent can override the global `model` with its own — set it on the agent's
+page in the web UI.
+
+## Agent definitions
+
+Each agent is a file at `~/.openacme/agents/<id>/AGENT.md`: settings in the
+frontmatter (name, role, model, tools, skills), persona in the body. The web
+UI edits this file for you, but it's yours to edit directly if you prefer.
+
+## Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `OPENACME_DATA_DIR` | Use a different data directory |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY` | API keys, if not using a subscription sign-in |
+| `OPENACME_DEBUG` | Verbose logging |

@@ -1,0 +1,64 @@
+---
+title: CLI reference
+description: Every openacme command
+---
+
+The web UI and the CLI are two doors to the same workforce. Everything below
+is available after `npm install -g @openacme/cli`.
+
+## Daemon
+
+```sh
+openacme               # start in the background and open the web UI
+openacme start         # same, without assuming a fresh setup
+openacme stop
+openacme restart
+openacme status        # uptime, address, recent log lines
+openacme logs -f       # follow the log
+```
+
+`openacme start --expose` binds to your network instead of localhost only and
+generates an access secret (see `openacme secret`).
+
+## Chat in the terminal
+
+```sh
+openacme chat
+```
+
+A full terminal chat with your agents — slash commands like `/agent` and
+`/model` switch coworker and model mid-conversation. Attach files by dragging
+them in or typing `@path/to/file`.
+
+## Accounts
+
+```sh
+openacme login --provider anthropic   # Claude subscription sign-in
+openacme login --provider openai      # ChatGPT subscription sign-in
+openacme login --device               # for machines without a browser
+openacme logout
+```
+
+## Skills
+
+```sh
+openacme skills list
+openacme skills search <query>
+openacme skills install <source>
+openacme skills inspect <name>
+openacme skills update
+openacme skills uninstall <name>
+```
+
+## Other groups
+
+```sh
+openacme setup                 # re-run the setup wizard
+openacme agents catalog        # list importable agent templates
+openacme agents import <id>    # import one
+openacme mcp list              # manage MCP server connections
+openacme memory show <agent>   # inspect an agent's memory
+openacme secret show|rotate    # access secret for network installs
+```
+
+Run any group without arguments for its full help text.

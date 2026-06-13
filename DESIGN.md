@@ -2,9 +2,9 @@
 name: OpenAcme
 description: The operator's console for an organization whose workforce is agents.
 colors:
-  paper: "oklch(98% 0.005 75)"
-  paper-sunk: "oklch(96% 0.005 75)"
-  paper-rule: "oklch(88% 0.005 75)"
+  paper: "oklch(99.4% 0.0015 75)"
+  paper-sunk: "oklch(95.5% 0.003 75)"
+  paper-rule: "oklch(87% 0.003 75)"
   ink: "oklch(22% 0.008 280)"
   ink-soft: "oklch(45% 0.005 280)"
   ink-faint: "oklch(62% 0.005 280)"
@@ -153,7 +153,7 @@ The palette is two surface families (warmed paper for light, cool graphite for d
 - **Plot Red Deep** (`oklch(48% 0.18 28)`): hover/active depression of Plot Red. Same hue, lower lightness. Used on accent buttons only.
 
 ### Neutral (Light Mode — "Paper")
-- **Paper** (`oklch(98% 0.005 75)`): page background. Warmed slightly toward yellow; not pure white. Reads as bone or unbleached cotton.
+- **Paper** (`oklch(99.4% 0.0015 75)`): page background. Near-white with trace warmth — reads as white on screen, but still not pure `#fff`, so it never goes Material-flat.
 - **Paper Sunk** (`oklch(96% 0.005 75)`): inset surfaces — sidebar, command palette, code blocks, chips. One tonal step below page.
 - **Paper Rule** (`oklch(88% 0.005 75)`): hairline borders and dividers. Single 1px stroke; never doubled, never thickened.
 - **Ink** (`oklch(22% 0.008 280)`): primary text. Near-black with a minimal cool tint so it doesn't fight the warm paper.

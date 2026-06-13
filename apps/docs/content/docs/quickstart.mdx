@@ -1,0 +1,70 @@
+---
+title: Quickstart
+description: Install OpenAcme and meet your first agent
+---
+
+## Install
+
+You'll need [Node.js](https://nodejs.org) 18 or newer. Then, in a terminal:
+
+```sh
+npm install -g @openacme/cli
+```
+
+## Set up
+
+Run the setup wizard:
+
+```sh
+openacme setup
+```
+
+It walks you through two things:
+
+1. **Connecting a model.** Sign in with a Claude or ChatGPT subscription, or
+   paste an API key from any major provider.
+2. **Creating your first agent.** Pick a name and describe their role in plain
+   language — "researches competitors and writes briefs," "keeps our docs up
+   to date," whatever you need.
+
+## Start
+
+```sh
+openacme
+```
+
+This starts OpenAcme in the background and opens the web UI at
+`http://127.0.0.1:3210`. From here on it starts automatically — you can close
+the terminal.
+
+<DocShot
+  name="home"
+  alt="The Home view, showing recent sessions and which agents are waiting"
+  caption="Home — who's working, who's waiting, and anything waiting on you."
+/>
+
+## Say hello
+
+Pick your agent in the web UI and start chatting. Tool runs — shell
+commands, file edits, web lookups — render inline in the conversation:
+
+<DocShot
+  name="chat"
+  alt="A chat with an agent where a shell command runs inline"
+  caption="A conversation with an agent. The grey block is a real shell command it ran."
+/>
+
+Some things to try:
+
+- Ask them to research something and write up what they find.
+- Drop in a file and ask questions about it.
+- Create a task for them on the **Tasks** page, then close the tab — they'll
+  work on it and leave their result as a comment.
+
+## Where things live
+
+Everything OpenAcme knows is stored on your machine under `~/.openacme/` —
+agents, conversations, tasks, and settings. Nothing leaves your computer
+except the requests to your AI provider.
+
+Next: [create more agents and shape their roles](/docs/agents).

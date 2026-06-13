@@ -1,0 +1,15 @@
+# Cloudflare Pages caching
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/screens/*
+  Cache-Control: public, max-age=604800
+
+/media/*
+  Cache-Control: public, max-age=604800
+
+/og/*
+  Cache-Control: public, max-age=86400
+
+/api/search
+  Cache-Control: public, max-age=3600

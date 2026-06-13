@@ -1,0 +1,97 @@
+<!doctype html>
+<!-- Source for public/og/default.png — capture at 1200x630:
+     playwright-cli goto file://.../og.html ; resize 1200 630 ; screenshot -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: "Geist";
+    src: url("/apps/docs/app/fonts/GeistVF.woff") format("woff");
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("/apps/docs/app/fonts/GeistMonoVF.woff") format("woff");
+    font-weight: 100 900;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 1200px;
+    height: 630px;
+    background: oklch(99.4% 0.0015 75);
+    color: oklch(22% 0.008 280);
+    font-family: "Geist", sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  .frame {
+    position: absolute;
+    inset: 28px;
+    border: 1px solid oklch(87% 0.003 75);
+  }
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(oklch(86% 0.004 75) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: linear-gradient(115deg, transparent 55%, black 95%);
+    -webkit-mask-image: linear-gradient(115deg, transparent 55%, black 95%);
+  }
+  .inner {
+    position: absolute;
+    inset: 28px;
+    padding: 72px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .lockup { display: flex; align-items: center; gap: 20px; }
+  .lockup .mark { width: 44px; height: 44px; }
+  .lockup .word { height: 26px; width: auto; }
+  h1 {
+    font-size: 76px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    max-width: 860px;
+  }
+  h1 .founder { color: oklch(42% 0.006 280); }
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: "Geist Mono", monospace;
+    font-size: 17px;
+    letter-spacing: 0.08em;
+    color: oklch(42% 0.006 280);
+  }
+  .dot { width: 10px; height: 10px; background: oklch(58% 0.18 28); }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="frame"></div>
+  <div class="inner">
+    <div class="lockup">
+      <svg class="mark" viewBox="0 0 10 10" shape-rendering="crispEdges" fill="currentColor">
+        <rect x="3" y="1" width="3" height="1"/>
+        <rect x="4" y="2" width="1" height="2"/>
+        <rect x="1" y="5" width="1" height="1"/>
+        <rect x="2" y="4" width="6" height="2"/>
+        <rect x="8" y="5" width="1" height="1"/>
+        <rect x="0" y="6" width="2" height="2"/>
+        <rect x="4" y="6" width="2" height="2"/>
+        <rect x="8" y="6" width="2" height="2"/>
+        <rect x="0" y="8" width="10" height="2"/>
+      </svg>
+      <img class="word" src="/docs/images/logo-text.svg" alt="OpenAcme">
+    </div>
+    <h1>An AI workforce.<br><span class="founder">You're in charge.</span></h1>
+    <div class="footer">
+      <span class="dot"></span>
+      <span>LOCAL-FIRST&nbsp;&nbsp;·&nbsp;&nbsp;BYO-MODEL&nbsp;&nbsp;·&nbsp;&nbsp;MCP-NATIVE&nbsp;&nbsp;·&nbsp;&nbsp;MULTI-AGENT</span>
+    </div>
+  </div>
+</body>
+</html>
