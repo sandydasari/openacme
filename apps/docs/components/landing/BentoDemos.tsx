@@ -1,24 +1,91 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "./hooks";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import { useInView, usePrefersReducedMotion } from "./hooks";
 import { TONE_BG, TONE_TEXT, type Tone } from "./Section";
 
-/* Small looping demos for the capability bento. Each renders a meaningful
-   static frame under prefers-reduced-motion. */
+/* Capability bento. To keep the grid calm, only ONE cell animates at a
+   time: a spotlight rotates through the cells on a slow cadence, and
+   hovering a cell pins the spotlight to it. Non-active cells render a
+   clean, finished frame — the same one used under reduced motion. */
 
-function useTicker(intervalMs: number, enabled = true) {
+const SPOTLIGHT_MS = 3400;
+
+const SpotlightContext = createContext<{
+  active: number;
+  setHover: (i: number | null) => void;
+  hoverCapable: boolean;
+}>({ active: -1, setHover: () => {}, hoverCapable: true });
+
+/* True only for the demo inside the currently-spotlit cell. */
+const CellActiveContext = createContext(false);
+
+export function BentoGrid({
+  count,
+  children,
+  className = "",
+}: {
+  count: number;
+  children: ReactNode;
+  className?: string;
+}) {
   const reduced = usePrefersReducedMotion();
+  const [ref, inView] = useInView<HTMLDivElement>(0.3);
+  const [spot, setSpot] = useState(0);
+  const [hover, setHover] = useState<number | null>(null);
+  // No-hover devices (touch) can't pin a spotlight, so the rotating
+  // spotlight is pointless there — cells self-activate when scrolled into
+  // view instead (see BentoCell). Only run the rotation on hover devices.
+  const [hoverCapable, setHoverCapable] = useState(true);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    setHoverCapable(mq.matches);
+    const on = (e: MediaQueryListEvent) => setHoverCapable(e.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+
+  useEffect(() => {
+    if (reduced || !inView || hover !== null || !hoverCapable) return;
+    const t = setInterval(() => setSpot((s) => (s + 1) % count), SPOTLIGHT_MS);
+    return () => clearInterval(t);
+  }, [reduced, inView, hover, count, hoverCapable]);
+
+  const active = hover ?? spot;
+
+  return (
+    <SpotlightContext.Provider value={{ active, setHover, hoverCapable }}>
+      <div ref={ref} className={className}>
+        {children}
+      </div>
+    </SpotlightContext.Provider>
+  );
+}
+
+/* Demos tick only while their cell is the active one, and restart from a
+   clean frame each time the spotlight lands. */
+function useTicker(intervalMs: number) {
+  const reduced = usePrefersReducedMotion();
+  const active = useContext(CellActiveContext);
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (reduced || !enabled) return;
+    if (reduced || !active) return;
+    setTick(0);
     const t = setInterval(() => setTick((n) => n + 1), intervalMs);
     return () => clearInterval(t);
-  }, [reduced, enabled, intervalMs]);
-  return { tick, reduced };
+  }, [reduced, active, intervalMs]);
+  return { tick, idle: reduced || !active };
 }
 
 export function BentoCell({
+  order,
   index,
   label,
   title,
@@ -27,6 +94,7 @@ export function BentoCell({
   tone = "red",
   className = "",
 }: {
+  order: number;
   index: string;
   label: string;
   title: string;
@@ -35,13 +103,22 @@ export function BentoCell({
   tone?: Tone;
   className?: string;
 }) {
+  const { active, setHover, hoverCapable } = useContext(SpotlightContext);
+  const [ref, inView] = useInView<HTMLDivElement>(0.55);
+  // Hover devices: the spotlight (or a pinning hover) drives it.
+  // Touch devices: the cell wakes while it's the one on screen.
+  const isActive = hoverCapable ? order === active : inView;
+
   return (
     <div
-      className={`relative flex flex-col gap-4 border-b border-paper-rule p-6 sm:border-r ${className}`}
+      ref={ref}
+      onMouseEnter={() => setHover(order)}
+      onMouseLeave={() => setHover(null)}
+      className={`group/cell relative flex flex-col gap-4 border-b border-paper-rule p-6 transition-colors duration-300 sm:border-r ${isActive ? "bg-paper-sunk/40" : ""} ${className}`}
     >
       <span
         aria-hidden
-        className={`absolute top-0 left-0 h-[2px] w-9 ${TONE_BG[tone]}`}
+        className={`absolute top-0 left-0 h-[2px] transition-all duration-500 ease-out-quart ${TONE_BG[tone]} ${isActive ? "w-full opacity-100" : "w-9 opacity-70"}`}
       />
       <div>
         <p className="font-mono text-[10.5px] tracking-[0.16em] uppercase">
@@ -55,7 +132,11 @@ export function BentoCell({
           {body}
         </p>
       </div>
-      <div className="mt-auto">{children}</div>
+      <div className="mt-auto">
+        <CellActiveContext.Provider value={isActive}>
+          {children}
+        </CellActiveContext.Provider>
+      </div>
     </div>
   );
 }
@@ -74,13 +155,11 @@ const MEMORY_NEW = [
 ];
 
 export function MemoryDemo() {
-  const { tick, reduced } = useTicker(110);
-  const which = Math.floor(tick / 60) % MEMORY_NEW.length;
-  const line = MEMORY_NEW[which]!;
-  const phase = tick % 60;
-  const chars = Math.min(phase * 2, line.length);
-  const shown = reduced ? MEMORY_NEW[0]! : line.slice(0, chars);
-  const typingDone = reduced || chars >= line.length;
+  const { tick, idle } = useTicker(90);
+  const line = MEMORY_NEW[0]!;
+  const chars = Math.min(tick * 3, line.length);
+  const shown = idle ? line : line.slice(0, chars);
+  const typingDone = idle || chars >= line.length;
 
   return (
     <div className="border border-paper-rule bg-code-surface font-mono text-[12px] leading-[1.9]">
@@ -116,14 +195,11 @@ export function MemoryDemo() {
 const SKILLS = ["competitor-brief", "release-notes", "invoice-formatter"];
 
 export function SkillsDemo() {
-  const { tick, reduced } = useTicker(110);
-  const which = Math.floor(tick / 50) % SKILLS.length;
-  const name = SKILLS[which]!;
-  const cmd = `openacme skills install ${name}`;
-  const phase = tick % 50;
-  const chars = Math.min(phase * 2, cmd.length);
-  const typed = reduced ? `openacme skills install ${SKILLS[0]}` : cmd.slice(0, chars);
-  const installed = reduced || chars >= cmd.length;
+  const { tick, idle } = useTicker(80);
+  const cmd = `openacme skills install ${SKILLS[1]}`;
+  const chars = Math.min(tick * 3, cmd.length);
+  const typed = idle ? cmd : cmd.slice(0, chars);
+  const installed = idle || chars >= cmd.length;
 
   return (
     <div className="border border-paper-rule bg-code-surface px-4 py-3 font-mono text-[12px] leading-[1.9]">
@@ -153,8 +229,8 @@ const MODELS = [
 ] as const;
 
 export function ModelCycler() {
-  const { tick, reduced } = useTicker(2200);
-  const i = reduced ? 0 : tick % MODELS.length;
+  const { tick, idle } = useTicker(1100);
+  const i = idle ? 0 : tick % MODELS.length;
   const [model, provider] = MODELS[i]!;
 
   return (
@@ -173,8 +249,8 @@ export function ModelCycler() {
 /* ---- Teams: manager routes the work ---- */
 
 export function TeamRouteDemo() {
-  const { tick, reduced } = useTicker(2400);
-  const target = reduced ? 0 : tick % 2;
+  const { tick, idle } = useTicker(1700);
+  const target = idle ? 0 : tick % 2;
 
   return (
     <svg
@@ -186,7 +262,7 @@ export function TeamRouteDemo() {
       <path d="M110 32 L55 78" stroke="currentColor" strokeWidth="1" />
       <path d="M110 32 L165 78" stroke="currentColor" strokeWidth="1" />
       {/* routed task */}
-      {!reduced && (
+      {!idle && (
         <circle key={tick} r="2.5" fill="var(--signal-blue)">
           <animateMotion
             dur="1.1s"
@@ -240,8 +316,8 @@ function Node({
 /* ---- A browser per agent ---- */
 
 export function BrowserPairDemo() {
-  const { tick, reduced } = useTicker(2400);
-  const active = reduced ? 0 : tick % 2;
+  const { tick, idle } = useTicker(1700);
+  const active = idle ? 0 : tick % 2;
 
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -273,10 +349,11 @@ export function BrowserPairDemo() {
 /* ---- Schedules: recurring work re-opens itself ---- */
 
 export function ScheduleDemo() {
-  const { tick, reduced } = useTicker(80);
-  const phase = reduced ? 59 : tick % 80;
-  const pct = Math.min(phase / 60, 1) * 100;
-  const fired = phase >= 60;
+  const { tick, idle } = useTicker(55);
+  // At rest: waiting for the next fire (empty bar, task queued).
+  const phase = idle ? 0 : tick % 80;
+  const pct = Math.min(phase / 50, 1) * 100;
+  const fired = !idle && phase >= 50;
 
   return (
     <div className="border border-paper-rule bg-code-surface px-4 py-3 font-mono text-[12px]">
@@ -313,8 +390,8 @@ const MCP_TOOLS = [
 ];
 
 export function McpDemo() {
-  const { tick, reduced } = useTicker(1600);
-  const offset = reduced ? 0 : tick % MCP_TOOLS.length;
+  const { tick, idle } = useTicker(1100);
+  const offset = idle ? 0 : tick % MCP_TOOLS.length;
 
   return (
     <div className="border border-paper-rule bg-code-surface px-4 py-3 font-mono text-[11.5px] leading-[2]">

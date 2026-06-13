@@ -335,6 +335,25 @@ html {
 /* Fumadocs chrome → Operator's Console                                */
 /* ------------------------------------------------------------------ */
 
+/* Home nav follows the page frame: constrain its inner container to the
+   same max-w-6xl (72rem) the landing uses and run the vertical hairlines
+   up through it, so the two rails are continuous from the top of the
+   page. (72rem centered in the viewport lands on the same x as the
+   page's border-x.) */
+body:has(main.overflow-x-clip) #nd-nav > div > * {
+  max-width: 72rem !important;
+  border-inline: 1px solid var(--paper-rule);
+  padding-inline: 0;
+}
+body:has(main.overflow-x-clip) #nd-nav nav {
+  padding-inline: 1.5rem;
+}
+@media (min-width: 640px) {
+  body:has(main.overflow-x-clip) #nd-nav nav {
+    padding-inline: 2.5rem;
+  }
+}
+
 /* Code: machine-truth surface, slightly cooler than paper-sunk. The shiki
    FIGURE is the surface — the inner pre stays transparent so the frame,
    toolbar, and body read as one block. */

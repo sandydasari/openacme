@@ -3,6 +3,7 @@ import { Logomark, Wordmark } from "@/components/logo";
 import { AmbientVideo } from "@/components/landing/AmbientVideo";
 import {
   BentoCell,
+  BentoGrid,
   BrowserPairDemo,
   McpDemo,
   MemoryDemo,
@@ -69,7 +70,7 @@ const TERMINAL_LINES: TermLine[] = [
 ];
 
 const CLI_GROUPS = [
-  ["setup", "first agent in two minutes"],
+  ["setup", "connect a provider and sign in"],
   ["chat", "terminal chat, no server needed"],
   ["skills", "install, write, audit"],
   ["mcp", "wire up any MCP server"],
@@ -237,8 +238,12 @@ export default function HomePage() {
           flush
         >
           <Reveal>
-            <div className="-mx-6 grid border-t border-paper-rule sm:-mx-10 sm:grid-cols-2 lg:grid-cols-12">
+            <BentoGrid
+              count={7}
+              className="-mx-6 grid border-t border-paper-rule sm:-mx-10 sm:grid-cols-2 lg:grid-cols-12"
+            >
               <BentoCell
+                order={0}
                 index="03.1"
                 tone="violet"
                 label="Memory"
@@ -249,6 +254,7 @@ export default function HomePage() {
                 <MemoryDemo />
               </BentoCell>
               <BentoCell
+                order={1}
                 index="03.2"
                 tone="green"
                 label="Skills"
@@ -259,6 +265,7 @@ export default function HomePage() {
                 <SkillsDemo />
               </BentoCell>
               <BentoCell
+                order={2}
                 index="03.3"
                 tone="red"
                 label="Models"
@@ -269,6 +276,7 @@ export default function HomePage() {
                 <ModelCycler />
               </BentoCell>
               <BentoCell
+                order={3}
                 index="03.4"
                 tone="blue"
                 label="Teams"
@@ -279,6 +287,7 @@ export default function HomePage() {
                 <TeamRouteDemo />
               </BentoCell>
               <BentoCell
+                order={4}
                 index="03.5"
                 tone="amber"
                 label="Browser"
@@ -289,6 +298,7 @@ export default function HomePage() {
                 <BrowserPairDemo />
               </BentoCell>
               <BentoCell
+                order={5}
                 index="03.6"
                 tone="green"
                 label="Schedule"
@@ -299,6 +309,7 @@ export default function HomePage() {
                 <ScheduleDemo />
               </BentoCell>
               <BentoCell
+                order={6}
                 index="03.7"
                 tone="violet"
                 label="MCP"
@@ -308,7 +319,7 @@ export default function HomePage() {
               >
                 <McpDemo />
               </BentoCell>
-            </div>
+            </BentoGrid>
           </Reveal>
         </Section>
 
