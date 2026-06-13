@@ -93,15 +93,13 @@ const DEPLOY = [
 ];
 
 const SPECS: [string, string][] = [
-  ["Interfaces", "Web console, CLI, headless daemon"],
-  ["Models", "Anthropic, OpenAI, Google, OpenRouter, Ollama, custom endpoints"],
-  ["Auth", "Claude or ChatGPT subscription sign-in, or API keys"],
-  ["Agents", "Unlimited — per-agent model, tools, skills, memory, browser"],
-  ["Tasks", "Shared board, scheduler, recurrence, dependencies, teams"],
-  ["Tools", "Shell, files, web search, code execution, browser, MCP"],
-  ["Skills", "Markdown — install from GitHub, marketplaces, or write your own"],
+  ["Runtime", "Node 18+ · macOS or Linux"],
+  ["Interfaces", "Web console · CLI · headless daemon"],
+  ["Models", "Anthropic · OpenAI · Google · OpenRouter · Ollama · custom"],
+  ["Auth", "Claude / ChatGPT subscription, or API keys"],
   ["Storage", "Plain files + SQLite under ~/.openacme"],
-  ["Network", "Loopback by default; --expose to share with your team"],
+  ["Network", "Loopback by default · --expose to share"],
+  ["Telemetry", "None"],
   ["License", "MIT, open source"],
   ["Price", "Free — you pay only your model provider"],
 ];
