@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useInView, usePrefersReducedMotion } from "./hooks";
 
 export type TermLine =
-  | { kind: "cmd"; text: string }
+  | { kind: "cmd"; text: string; prompt?: string }
   | { kind: "out"; text: string; tone?: "dim" | "ok" | "red" };
 
 const TYPE_MS = 28;
@@ -12,7 +12,7 @@ const OUT_MS = 90;
 const PAUSE_AFTER_CMD = 350;
 
 export function Terminal({
-  title = "zsh — ~/acme",
+  title = "zsh — ~",
   lines,
 }: {
   title?: string;
@@ -84,7 +84,7 @@ export function Terminal({
               : line.text;
             return (
               <div key={i} className="text-ink">
-                <span className="text-ink-faint">$ </span>
+                <span className="text-ink-faint">{line.prompt ?? "$"} </span>
                 {text}
                 {isCurrent && !done && (
                   <span className="ml-px inline-block h-[1.05em] w-[7px] translate-y-[0.15em] bg-plot-red pulse-live" />

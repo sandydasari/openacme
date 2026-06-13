@@ -20,9 +20,10 @@
   --plot-red: oklch(58% 0.18 28);
   --plot-red-deep: oklch(48% 0.18 28);
 
-  --signal-amber: oklch(78% 0.14 75);
+  --signal-amber: oklch(72% 0.15 70);
   --signal-blue: oklch(60% 0.15 250);
   --signal-green: oklch(60% 0.13 150);
+  --signal-violet: oklch(55% 0.16 300);
 
   --code-surface: oklch(94% 0.005 240);
   --code-surface-rule: oklch(86% 0.005 240);
@@ -44,6 +45,7 @@
   --signal-amber: oklch(80% 0.17 75);
   --signal-blue: oklch(72% 0.17 250);
   --signal-green: oklch(72% 0.16 150);
+  --signal-violet: oklch(72% 0.16 300);
 
   --code-surface: oklch(22% 0.008 240);
   --code-surface-rule: oklch(30% 0.008 240);
@@ -63,6 +65,7 @@
   --color-plot-red: var(--plot-red);
   --color-plot-red-deep: var(--plot-red-deep);
   --color-signal-amber: var(--signal-amber);
+  --color-signal-violet: var(--signal-violet);
   --color-signal-blue: var(--signal-blue);
   --color-signal-green: var(--signal-green);
   --color-code-surface: var(--code-surface);
@@ -273,11 +276,51 @@
   }
 }
 
+/* Index marquee anchors jump smoothly to their sections. */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Hero headline — words rise out of clipped slots, staggered per word. */
+.rise-word {
+  animation: rise-word 620ms var(--ease-out-quart) both;
+}
+@keyframes rise-word {
+  from {
+    transform: translateY(110%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* New line landing in a live feed — one quick settle, no bounce. */
+.monitor-line-in {
+  animation: monitor-line-in var(--duration-state) var(--ease-out-quart) both;
+}
+@keyframes monitor-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pulse-live,
   .scribe-in,
   .loading-hairline,
   .marquee-track,
+  .monitor-line-in,
+  .rise-word,
   .focus-scribe:focus-visible {
     animation: none;
   }

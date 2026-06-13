@@ -162,7 +162,7 @@ secret
 
 program
   .command("setup")
-  .description("Interactive setup wizard — configure API keys and create first agent")
+  .description("Interactive setup wizard — configure your provider, auth, and default model")
   .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
   .action(setupCommand);
 

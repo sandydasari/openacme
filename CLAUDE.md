@@ -165,7 +165,7 @@ Add the enum value to `ProviderSchema` (`config/src/schema.ts`), add a factory i
 
 Subcommands (`apps/cli/src/commands/`):
 
-- `setup` — Clack-based wizard; writes `~/.openacme/config.yaml` and the first agent.
+- `setup` — Clack-based wizard; provider + auth + default model into `~/.openacme/config.yaml`. Never creates agents — the daemon materializes the Acme platform agent on first boot, everything else is hired via the web UI.
 - `start` (default) — installs the launchd/systemd unit on first run, boots the Hono daemon, opens the web UI. `--expose` flips bind to 0.0.0.0 + generates an access secret. `--no-service` spawns detached with a PID file instead.
 - `stop` / `restart` / `status` / `logs [-f]` — daemon lifecycle + introspection.
 - `chat` — terminal chat. **In-process**: instantiates `AgentManager` directly, calls `agent.runStream()`, and consumes `result.fullStream` — no HTTP, no SSE wire format.

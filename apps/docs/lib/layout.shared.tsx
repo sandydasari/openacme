@@ -6,6 +6,7 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: <LogoLockup />,
     },
+    githubUrl: "https://github.com/sandydasari/openacme",
     links: [
       {
         text: "Docs",
