@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { Kanban, Rows3 } from "lucide-react";
+import { Kanban, Rows3, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
 import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
 import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
 import { TabularTick } from "@/app/components/ui/tabular-tick";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
@@ -19,14 +20,8 @@ import {
   DialogTitle,
 } from "@/app/components/ui/dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/app/components/ui/select";
 import { cn } from "@/app/lib/utils";
+import { FilterCombobox } from "../tasks/filter-combobox";
 import { TasksBoard } from "../tasks/board";
 import { TaskDetailPanel, type AgentOption } from "../tasks/detail";
 import { TaskListRow } from "../tasks/row";
@@ -64,6 +59,8 @@ function TasksPage() {
   // Pending navigation parked behind the discard-unsaved-changes dialog.
   const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "board";
     const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -295,10 +292,47 @@ function TasksPage() {
     return [...set].sort();
   }, [tasks]);
 
+  const agentName = useMemo(
+    () => new Map(agents.map((a) => [a.id, a.name])),
+    [agents]
+  );
+
+  // Only assignees that actually own a task — the picker tracks the
+  // board, not the full roster, so dead options never accumulate.
+  const assignees = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) if (t.assignee) set.add(t.assignee);
+    return [...set].sort((a, b) =>
+      (agentName.get(a) ?? a).localeCompare(agentName.get(b) ?? b)
+    );
+  }, [tasks, agentName]);
+
+  const filtersActive =
+    teamFilter !== "all" ||
+    assigneeFilter !== "all" ||
+    query.trim() !== "";
+
+  const clearFilters = () => {
+    setTeamFilter("all");
+    setAssigneeFilter("all");
+    setQuery("");
+  };
+
   const visibleTasks = useMemo(() => {
-    if (teamFilter === "all") return tasks;
-    return tasks.filter((t) => t.team === teamFilter);
-  }, [tasks, teamFilter]);
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      if (teamFilter !== "all" && t.team !== teamFilter) return false;
+      if (assigneeFilter !== "all" && t.assignee !== assigneeFilter)
+        return false;
+      if (q) {
+        const hay = `${t.title} #${t.id} ${t.assignee} ${t.team ?? ""} ${
+          t.body ?? ""
+        }`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tasks, teamFilter, assigneeFilter, query]);
 
   const grouped = useMemo(() => {
     const out = new Map<TaskStatus, Task[]>();
@@ -359,32 +393,81 @@ function TasksPage() {
       <Sidebar />
 
       <main className="flex flex-1 flex-col overflow-hidden bg-paper">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-paper-rule px-3 md:px-6">
-          <div className="flex items-center gap-2 md:gap-3">
-            <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
-              Tasks
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-          {teams.length > 0 && (
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger
-                size="sm"
-                className="font-mono text-[11px] uppercase tracking-[0.08em]"
-              >
-                <SelectValue placeholder="Team" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All teams</SelectItem>
-                {teams.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-paper-rule px-3 py-2 md:px-6">
+          <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+            Tasks
+          </h1>
+
+          {!loading && tasks.length > 0 ? (
+            <>
+              <div className="relative min-w-[9rem] flex-1 md:max-w-xs">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-faint" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search title, body, #id"
+                  className="h-7 pl-8 pr-7 text-[13px]"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear search"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {assignees.length > 1 && (
+                <FilterCombobox
+                  value={assigneeFilter}
+                  onChange={setAssigneeFilter}
+                  allLabel="All assignees"
+                  searchPlaceholder="Filter agents"
+                  options={assignees.map((a) => ({
+                    value: a,
+                    label: agentName.get(a) ?? a,
+                  }))}
+                />
+              )}
+
+              {teams.length > 0 && (
+                <FilterCombobox
+                  value={teamFilter}
+                  onChange={setTeamFilter}
+                  allLabel="All teams"
+                  searchPlaceholder="Filter teams"
+                  options={teams.map((t) => ({ value: t, label: t }))}
+                />
+              )}
+
+              {/* Eats the slack so the count + view toggle pin right while
+                  the search caps at max-w-xs. */}
+              <div className="flex-1" />
+
+              {filtersActive && (
+                <span className="flex items-center gap-2 font-mono text-[11px] tabular-nums text-ink-faint">
+                  <span>
+                    {visibleTasks.length} / {tasks.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-1 uppercase tracking-[0.08em] text-ink-soft transition-colors hover:text-plot-red"
+                  >
+                    <X className="size-3" />
+                    Clear
+                  </button>
+                </span>
+              )}
+            </>
+          ) : (
+            <div className="flex-1" />
           )}
-          <div className="inline-flex border border-paper-rule">
+
+          <div className="ml-auto inline-flex shrink-0 border border-paper-rule">
             <button
               onClick={() => setViewMode("board")}
               className={cn(
@@ -410,7 +493,6 @@ function TasksPage() {
               List
             </button>
           </div>
-          </div>
         </header>
 
         {loading ? (
@@ -422,6 +504,15 @@ function TasksPage() {
           </div>
         ) : tasks.length === 0 ? (
           <EmptyTasksState />
+        ) : visibleTasks.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+              No tasks match
+            </span>
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-1 overflow-hidden">
             {viewMode === "board" ? (

@@ -1,18 +1,15 @@
 import { useMemo, useState } from "react";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { Repeat2 } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { TabularTick } from "@/app/components/ui/tabular-tick";
@@ -57,11 +54,13 @@ export interface TasksBoardProps {
 
 export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProps) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    // 6px slop separates a click-to-open from a drag; the old 4px fired
+    // drags on near-stationary clicks, which read as the card "sticking".
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
-  // Drag-target affordance only renders mid-drag; at rest an empty
-  // column stays quiet. (Keyboard path: open the card, change Status.)
-  const [dragging, setDragging] = useState(false);
+  // The id of the card currently being dragged — drives the floating
+  // overlay and the source-card placeholder. Null at rest.
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     const out = new Map<TaskStatus, Task[]>();
@@ -75,7 +74,16 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
     return out;
   }, [tasks]);
 
+  const activeTask = activeId
+    ? (tasks.find((t) => t.id === activeId) ?? null)
+    : null;
+
+  const handleDragStart = (e: DragStartEvent) => {
+    setActiveId(e.active.id as string);
+  };
+
   const handleDragEnd = (e: DragEndEvent) => {
+    setActiveId(null);
     const id = e.active.id as string;
     const target = e.over?.id as string | undefined;
     if (!target) return;
@@ -89,12 +97,9 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
   return (
     <DndContext
       sensors={sensors}
-      onDragStart={() => setDragging(true)}
-      onDragCancel={() => setDragging(false)}
-      onDragEnd={(e) => {
-        setDragging(false);
-        handleDragEnd(e);
-      }}
+      onDragStart={handleDragStart}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={handleDragEnd}
     >
       {/* Columns stack vertically under md; md–xl keeps fixed-width columns
           with horizontal scroll (five even columns would be ~130px at md);
@@ -107,10 +112,20 @@ export function TasksBoard({ tasks, selectedId, onPick, onMove }: TasksBoardProp
             tasks={grouped.get(status) ?? []}
             selectedId={selectedId}
             onPick={onPick}
-            dragging={dragging}
+            dragging={activeId !== null}
           />
         ))}
       </div>
+      {/* The dragged card rides a portal overlay that tracks the cursor 1:1
+          — the source stays put as a dimmed placeholder. No sibling reflow,
+          no transform lag on the real card. */}
+      <DragOverlay dropAnimation={null}>
+        {activeTask ? (
+          <div className="rotate-1 cursor-grabbing shadow-[0_8px_24px_-6px_rgba(0,0,0,0.35)]">
+            <CardInner task={activeTask} selected={false} />
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -129,7 +144,6 @@ function BoardColumn({
   dragging: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
-  const ids = useMemo(() => tasks.map((t) => t.id), [tasks]);
   const tint = statusTint(status);
   return (
     <div
@@ -157,24 +171,22 @@ function BoardColumn({
         />
       </div>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          {tasks.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center px-2 py-6">
-              {dragging && (
-                <span className="label-faceplate text-ink-faint">accepts drops</span>
-              )}
-            </div>
-          ) : (
-            tasks.map((t) => (
-              <BoardCard
-                key={t.id}
-                task={t}
-                selected={selectedId === t.id}
-                onPick={onPick}
-              />
-            ))
-          )}
-        </SortableContext>
+        {tasks.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center px-2 py-6">
+            {dragging && (
+              <span className="label-faceplate text-ink-faint">accepts drops</span>
+            )}
+          </div>
+        ) : (
+          tasks.map((t) => (
+            <BoardCard
+              key={t.id}
+              task={t}
+              selected={selectedId === t.id}
+              onPick={onPick}
+            />
+          ))
+        )}
       </div>
     </div>
   );
@@ -189,34 +201,15 @@ function BoardCard({
   selected: boolean;
   onPick: (id: string) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.id,
+  });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  // Terminal statuses recede so the eye lands on actionable columns first.
-  const terminal = task.status === "done" || task.status === "canceled";
-  const titleClass = terminal
-    ? task.status === "canceled"
-      ? "text-ink-faint"
-      : "text-ink-soft"
-    : "text-ink";
-
-  // div+role (not <button>) so the @assignee link can nest validly;
-  // useSortable's attributes already carry role="button" + tabIndex.
+  // No transform on the source — the DragOverlay owns the motion. The
+  // source just recedes to a placeholder so the column slot stays put.
   return (
     <div
       ref={setNodeRef}
-      style={style}
       onClick={() => onPick(task.id)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -225,12 +218,34 @@ function BoardCard({
         }
       }}
       className={cn(
-        "relative cursor-pointer border border-paper-rule bg-paper px-3.5 py-2 text-left transition-colors",
-        selected ? "bg-paper-sunk text-ink" : "hover:bg-paper-sunk",
-        isDragging && "opacity-50"
+        "touch-none",
+        isDragging && "opacity-40"
       )}
       {...attributes}
       {...listeners}
+    >
+      <CardInner task={task} selected={selected} />
+    </div>
+  );
+}
+
+// Presentational card body — shared by the in-column card and the drag
+// overlay so the floating clone is pixel-identical to its source.
+function CardInner({ task, selected }: { task: Task; selected: boolean }) {
+  // Terminal statuses recede so the eye lands on actionable columns first.
+  const terminal = task.status === "done" || task.status === "canceled";
+  const titleClass = terminal
+    ? task.status === "canceled"
+      ? "text-ink-faint"
+      : "text-ink-soft"
+    : "text-ink";
+
+  return (
+    <div
+      className={cn(
+        "relative cursor-pointer border border-paper-rule bg-paper px-3.5 py-2 text-left transition-colors",
+        selected ? "bg-paper-sunk text-ink" : "hover:bg-paper-sunk"
+      )}
     >
       <ActiveMarker active={selected} />
       <div className="space-y-1">
