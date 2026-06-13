@@ -48,7 +48,8 @@ domain, create a *named* tunnel and route DNS to `http://localhost:3456`
 
 ## ngrok
 
-After a free signup and `ngrok config add-authtoken <token>`:
+Install [ngrok](https://ngrok.com/download), then after a free signup and
+`ngrok config add-authtoken <token>`:
 
 ```sh
 ngrok http 3456
@@ -60,16 +61,20 @@ plan gives a fixed subdomain.
 
 ## Tailscale (private, no public URL)
 
-If you only need your *own* devices — not public sharing — Tailscale is the
-simplest path and exposes nothing publicly. Install it on the OpenAcme machine
-and your phone/laptop, then reach the instance at `http://<machine-name>:3456`
-over your private tailnet. Use `tailscale funnel` if you later want a public URL.
+If you only need your *own* devices — not public sharing — [Tailscale](https://tailscale.com/download)
+is the simplest path and exposes nothing publicly. Install it on the OpenAcme
+machine and your phone/laptop, then reach the instance at
+`http://<machine-name>:3456` over your private tailnet. Use
+[`tailscale funnel`](https://tailscale.com/kb/1223/funnel) if you later want a
+public URL.
 
 ## Any other tunnel works
 
 The pattern is always the same — point the tunnel at `http://localhost:3456` and
-the access secret protects whatever public URL it hands back. localtunnel,
-`bore`, an SSH reverse tunnel, or your own reverse proxy all work the same way.
+the access secret protects whatever public URL it hands back.
+[localtunnel](https://github.com/localtunnel/localtunnel),
+[`bore`](https://github.com/ekzhang/bore), an SSH reverse tunnel, or your own
+reverse proxy all work the same way.
 
 ## Why no reverse proxy?
 

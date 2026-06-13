@@ -50,12 +50,17 @@ directory.
 
 ## Sizing
 
-A small box is plenty — 2 GB of RAM handles a working roster. Any always-on
-Linux host works, from a cheap cloud VM to a home server or a Raspberry Pi.
+A small box is plenty to start — around 3 GB of RAM is comfortable, including
+headroom for agents driving the browser. Size up for more demanding work or a
+large number of agents. Any always-on Linux host works, from a cheap cloud VM to
+a home server.
 
 ## Reaching it from elsewhere
 
-By default OpenAcme listens on `127.0.0.1` only. To use it from your phone or
-share it with a teammate, see [Remote access](/docs/remote-access) — a tunnel
-gets you a public HTTPS URL with no reverse proxy, certificates, or DNS to set
-up.
+By default OpenAcme listens on `127.0.0.1` only. The easiest way to reach it from
+your phone or share it with a teammate is a tunnel — see
+[Remote access](/docs/remote-access), with no reverse proxy, certificates, or DNS
+to set up. If you already run a reverse proxy (nginx, Caddy) with a domain and
+TLS, you can instead point it at `http://localhost:3456`. Either way, set an
+access secret first (`openacme secret rotate`) — the server is then reachable
+beyond loopback and requires it.
