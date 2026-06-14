@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in OpenAcme isn't working as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in as much as you can — it makes a fix much faster.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I run `openacme ...`, I expected X but got Y.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps so we can see it too.
+      placeholder: |
+        1. `openacme setup` with provider ...
+        2. Send message "..."
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Output of `openacme logs` (or the TUI log). Redact any tokens — never paste auth.json contents.
+      render: shell
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Model provider
+      options:
+        - anthropic
+        - openai
+        - google
+        - openrouter
+        - ollama
+        - custom / OpenAI-compatible
+        - not applicable
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OpenAcme version
+      description: Output of `openacme --version` (or the commit SHA if running from source).
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - other
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node -v`.
