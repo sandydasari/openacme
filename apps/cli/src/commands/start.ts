@@ -20,6 +20,7 @@ import {
   writeAtomic0600,
   clearPid,
 } from "../lifecycle/index.js";
+import { offerSandboxDeps } from "../lifecycle/sandbox-deps.js";
 
 interface StartOpts {
   dataDir?: string;
@@ -102,18 +103,25 @@ export async function startCommand(opts: StartOpts): Promise<void> {
   const lp = logPath(dataDir);
   if (!fs.existsSync(lp)) writeAtomic0600(lp, "");
 
+  // Sandbox deps (bubblewrap/socat/ripgrep): without them tools run unconfined.
+  // Offer to install before the daemon boots so it comes up sandboxed; a fresh
+  // install means the running daemon (if any) must restart to pick them up.
+  const installedDeps = await offerSandboxDeps({
+    interactive: process.stdin.isTTY === true && process.stdout.isTTY === true,
+  });
+
   const lifecycle = getPlatformLifecycle({ dataDir, forceNoService: opts.noService });
 
   const initialStatus = await lifecycle.status();
   if (initialStatus.running) {
-    if (!opts.expose && !opts.local) {
+    if (!opts.expose && !opts.local && !installedDeps) {
       // Idempotent: already running, nothing to do.
       console.log(`✓ openacme is already running${initialStatus.pid ? ` (pid ${initialStatus.pid})` : ""} at ${url}`);
       if (process.stdout.isTTY && !opts.noBrowser) openBrowser(url);
       return;
     }
-    // --expose / --local with a running daemon: restart to pick up the bind.
-    console.log("⠋ restarting daemon to apply new bind...");
+    // A running daemon needs a restart to pick up the new bind / fresh deps.
+    console.log("⠋ restarting daemon to apply changes...");
     await lifecycle.stopService();
     clearPid(dataDir);
     await new Promise((r) => setTimeout(r, 300));

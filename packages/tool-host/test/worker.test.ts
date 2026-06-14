@@ -109,9 +109,17 @@ describe("tool-host worker round-trips (real child process)", () => {
   it("respawns after stopWorker; in-flight state resets", async () => {
     await manager.dispatch("shell", { command: "export MARKER=1" }, ctx);
     await manager.stopWorker("zoe");
-    const res = JSON.parse(
-      await manager.dispatch("shell", { command: "echo val=$MARKER" }, ctx)
-    );
+    // A dispatch immediately after a respawn can transiently return the
+    // worker's "exited — retry the call" error (the documented contract), so
+    // retry until the fresh worker answers. The MARKER assertion still proves
+    // the state actually reset — a real leak would survive the retries.
+    let res: { success?: boolean; output?: string } = {};
+    for (let i = 0; i < 5; i++) {
+      res = JSON.parse(
+        await manager.dispatch("shell", { command: "echo val=$MARKER" }, ctx)
+      );
+      if (res.success) break;
+    }
     expect(res.success).toBe(true);
     expect(res.output).toBe("val=");
   });

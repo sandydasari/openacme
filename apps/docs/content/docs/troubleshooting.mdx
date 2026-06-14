@@ -54,6 +54,34 @@ When in doubt, look at the data directly — it's files:
 | Tasks | `~/.openacme/tasks/*.md` |
 | Conversations | `~/.openacme/state.db` |
 
+## Tools run unconfined ("SANDBOX UNAVAILABLE")
+
+On Linux the sandbox needs a few system packages. `openacme start` offers to
+install them; or do it yourself:
+
+```sh
+sudo apt install -y bubblewrap socat ripgrep   # Debian/Ubuntu
+openacme restart
+```
+
+Without them the daemon still runs, but agent tools execute unconfined. macOS
+sandboxes natively — no extra packages.
+
+## Notifications don't arrive
+
+Web push needs a few things lined up:
+
+- **Secure context** — push works on `localhost`, but a remote instance needs
+  HTTPS. Over plain `http://<ip>` the browser disables push entirely; reach it
+  through a tunnel (see [Remote access](/docs/remote-access)).
+- **OS permission** — on macOS, System Settings → Notifications → your browser
+  must be allowed, with Focus / Do Not Disturb off.
+- **Per-site permission** — the browser's site settings must allow
+  notifications for the OpenAcme URL.
+
+Notifications fire when an agent calls `ping_user`; enabling them under
+Settings → Notifications only subscribes the device.
+
 ## Verbose logging
 
 ```sh
