@@ -15,10 +15,13 @@ openacme stop
 openacme restart
 openacme status        # uptime, address, recent log lines
 openacme logs -f       # follow the log
+openacme expose        # share it: bind the network + require a login (--off to reverse)
 ```
 
-`openacme start --expose` binds to your network instead of localhost only.
-Sign-in is always required — see the `Members` group below.
+Locally there's no login — your machine is trusted. To share the instance,
+`openacme expose` requires a login and opens the port so a tunnel or reverse
+proxy can forward to it; `openacme expose --off` returns to local-only, no-login
+access. The `Members` group below (claim, invite, …) applies once exposed.
 
 ## Chat in the terminal
 

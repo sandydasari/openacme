@@ -57,11 +57,14 @@ a home server.
 
 ## Reaching it from elsewhere
 
-By default OpenAcme listens on `127.0.0.1` only. The easiest way to reach it from
-your phone or share it with a teammate is a tunnel — see
+By default OpenAcme listens on `127.0.0.1` only — no login, since the local
+machine is trusted. To share it, run `openacme expose`: that requires a
+login for everyone and opens the port so a tunnel or proxy can forward to it. On
+first run, `openacme claim` prints the setup link to create your account, then
+`openacme invite` adds anyone else (`openacme expose --off` turns sharing back
+off).
+
+The easiest way to actually reach it is a tunnel — see
 [Remote access](/docs/remote-access), with no reverse proxy, certificates, or DNS
 to set up. If you already run a reverse proxy (nginx, Caddy) with a domain and
-TLS, you can instead point it at `http://localhost:3456`. Either way, sign-in is
-always required: on first run open the setup link from the daemon log (or
-`openacme claim`) to create your account, then `openacme invite` to add anyone
-else.
+TLS, point it at `http://localhost:3456` instead.
