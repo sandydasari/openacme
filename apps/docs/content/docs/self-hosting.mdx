@@ -15,6 +15,19 @@ Node 18+ is the only requirement.
 npm install -g @openacme/cli
 ```
 
+On Linux, install a few system packages so agent tools run **sandboxed** rather
+than unconfined — OpenAcme isolates each agent's tools with
+[bubblewrap](https://github.com/containers/bubblewrap), and uses ripgrep for
+fast search:
+
+```sh
+sudo apt install -y bubblewrap socat ripgrep   # Debian/Ubuntu
+```
+
+`openacme start` checks for these and offers to install them for you. Without
+them the daemon still runs, but tools execute unconfined (you'll see a
+`SANDBOX UNAVAILABLE` warning). macOS sandboxes natively — no extra packages.
+
 ## Run it as a service
 
 ```sh
