@@ -335,6 +335,11 @@ export type TeamDefinition = z.infer<typeof TeamDefinitionSchema>;
 export const ServerConfigSchema = z.object({
   port: z.number().default(3456),
   host: z.string().default("127.0.0.1"),
+  // Force the email/password flow even on a loopback bind. Default false:
+  // local installs are zero-credential (the daemon auto-establishes a session
+  // for loopback requests). A non-loopback bind always requires auth
+  // regardless of this flag.
+  requireAuth: z.boolean().default(false),
 });
 export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 
