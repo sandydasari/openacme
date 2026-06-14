@@ -1,6 +1,6 @@
 {
   "name": "@openacme/config",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Config loader and schema for OpenAcme.",
   "license": "MIT",
   "author": "sandydasari",

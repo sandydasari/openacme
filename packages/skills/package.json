@@ -1,6 +1,6 @@
 {
   "name": "@openacme/skills",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Skill loader for OpenAcme — discovers and loads skill bundles from disk.",
   "license": "MIT",
   "author": "sandydasari",

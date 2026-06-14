@@ -1,5 +1,31 @@
 # @openacme/cli
 
+## 0.10.0
+
+### Minor Changes
+
+- [#37](https://github.com/sandydasari/openacme/pull/37) [`d2d2df7`](https://github.com/sandydasari/openacme/commit/d2d2df71f6678c913cfa5ffa641c9b1c465cad2a) Thanks [@ukanwat](https://github.com/ukanwat)! - Local-trusted auth: zero-credential local installs, full admin for shared ones.
+  - **Local installs are frictionless again.** On a loopback bind (the default) the daemon auto-establishes a real session for loopback requests, so opening `http://127.0.0.1:3456` lands straight in the app — no claim page, no login form. Auth stays on under the hood (a real `local@localhost` operator + session). The per-request `Host` header is the gate: a non-loopback `Host` (DNS-rebind, or a tunnel/proxy) is never auto-trusted.
+  - **Sharing requires a login.** `openacme expose` rewrites config to bind the network + require an account, then restarts — one command covers tunnels, reverse proxies, and direct IP. `openacme expose --off` reverses it. Exposing rotates the local operator out so its loopback cookie can't be replayed remotely. (`server.requireAuth` forces a login on a loopback bind for the rare tunnel-without-an-open-port case.)
+  - **Web member admin (Settings → Members).** For shared installs: signed-in-as + sign out, the member roster + revoke, and one-click invite-link generation — previously CLI-only. Deployment-mode aware: local installs see an "invite your team" explainer with a docs link instead.
+  - **Reachable claim/invite links.** `openacme claim` / `invite` and the boot log no longer print `localhost` when shared — they use a detected address (or a clear placeholder) and hint to substitute your domain/public IP.
+  - A branded 404 page, and a docs link in the sidebar.
+
+### Patch Changes
+
+- Updated dependencies [[`d2d2df7`](https://github.com/sandydasari/openacme/commit/d2d2df71f6678c913cfa5ffa641c9b1c465cad2a)]:
+  - @openacme/server@0.10.0
+  - @openacme/agent-core@0.10.0
+  - @openacme/auth@0.10.0
+  - @openacme/config@0.10.0
+  - @openacme/db@0.10.0
+  - @openacme/llm-provider@0.10.0
+  - @openacme/mcp-client@0.10.0
+  - @openacme/memory@0.10.0
+  - @openacme/skills@0.10.0
+  - @openacme/tasks@0.10.0
+  - @openacme/tools@0.10.0
+
 ## 0.9.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@openacme/cli",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "CLI for the OpenAcme AI agent platform — install globally to get the `openacme` command.",
   "license": "MIT",
   "author": "sandydasari",
