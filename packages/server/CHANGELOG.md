@@ -1,5 +1,24 @@
 # @openacme/server
 
+## 0.11.0
+
+### Patch Changes
+
+- Updated dependencies [[`716ee56`](https://github.com/sandydasari/openacme/commit/716ee56ef4eb652a5c1c6eb1a6665ef867616e2a)]:
+  - @openacme/tool-host@0.7.5
+  - @openacme/agent-catalog@0.11.0
+  - @openacme/agent-core@0.11.0
+  - @openacme/auth@0.11.0
+  - @openacme/browser@0.11.0
+  - @openacme/config@0.11.0
+  - @openacme/db@0.11.0
+  - @openacme/llm-provider@0.11.0
+  - @openacme/mcp-client@0.11.0
+  - @openacme/memory@0.11.0
+  - @openacme/skills@0.11.0
+  - @openacme/tasks@0.11.0
+  - @openacme/tools@0.11.0
+
 ## 0.10.0
 
 ### Minor Changes

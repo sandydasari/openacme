@@ -1,6 +1,6 @@
 {
   "name": "@openacme/tool-host",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Per-agent sandboxed tool execution for OpenAcme — raw tools (filesystem, shell, exec) run in an OS-confined worker process; the daemon stays clean of policy logic.",
   "license": "MIT",
   "author": "sandydasari",

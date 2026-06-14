@@ -1,6 +1,6 @@
 {
   "name": "@openacme/memory",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Per-agent persistent memory for OpenAcme — bounded MEMORY.md store with atomic writes and threat scanning.",
   "license": "MIT",
   "author": "sandydasari",

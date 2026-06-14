@@ -1,6 +1,6 @@
 {
   "name": "@openacme/tasks",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "File-backed task store for OpenAcme — markdown + YAML frontmatter, atomic writes, dependency enforcement, per-session queues.",
   "license": "MIT",
   "author": "sandydasari",

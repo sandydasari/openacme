@@ -1,5 +1,26 @@
 # @openacme/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- [#39](https://github.com/sandydasari/openacme/pull/39) [`aea29bc`](https://github.com/sandydasari/openacme/commit/aea29bc8667e00c8faba49da93cbfb543c441eb0) Thanks [@ukanwat](https://github.com/ukanwat)! - `openacme start` now detects missing sandbox dependencies (bubblewrap, socat, ripgrep) and offers to install them with your package manager (apt/dnf/pacman/zypper/apk, or brew on macOS) — so a fresh Linux box runs agent tools sandboxed instead of unconfined, without hunting for the right command. Non-interactive shells just print the exact command. Self-hosting + troubleshooting docs document the prerequisites.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @openacme/server@0.11.0
+  - @openacme/agent-core@0.11.0
+  - @openacme/auth@0.11.0
+  - @openacme/config@0.11.0
+  - @openacme/db@0.11.0
+  - @openacme/llm-provider@0.11.0
+  - @openacme/mcp-client@0.11.0
+  - @openacme/memory@0.11.0
+  - @openacme/skills@0.11.0
+  - @openacme/tasks@0.11.0
+  - @openacme/tools@0.11.0
+
 ## 0.10.0
 
 ### Minor Changes
