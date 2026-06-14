@@ -1,10 +1,17 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { AuthStore, MemberPublic } from "@openacme/db";
+import type { DeploymentMode } from "@openacme/config";
+import { isLoopbackHostHeader } from "@openacme/config";
+import { buildSessionCookie, isSecure } from "./cookie.js";
 
 const SESSION_COOKIE = "openacme_session";
 
 export interface AuthOptions {
   store: AuthStore;
+  /** Boot-time mode derived from the bind host. In `local_trusted` a loopback
+   *  request gets a transparently-minted session; in `authenticated` every
+   *  request needs a real login. */
+  deploymentMode: DeploymentMode;
 }
 
 function parseCookie(header: string | undefined, name: string): string | null {
@@ -35,22 +42,26 @@ export function resolveMember(c: Context, store: AuthStore): MemberPublic | null
 }
 
 /**
- * Auth middleware. There is no loopback bypass — every request (local or
- * remote) needs a valid session, the price of per-member identity. Two
- * gates skip it:
+ * Auth middleware. Auth is always on — there is no no-session bypass branch.
+ * For a `local_trusted` boot (loopback bind) a loopback request transparently
+ * gets a real auto-session, so a local user never sees a login form while the
+ * rest of the stack still resolves a normal member. An `authenticated` boot
+ * (non-loopback bind) requires a real login for every request.
  *
- *  - `/login`, `/setup`, `/api/auth/*` — the login + enrollment surface,
- *    reachable without a session by definition.
- *  - static assets + PWA discovery files — referenced by the login page
- *    itself, so they must render pre-auth.
- *
- * While zero members exist (fresh install / post-upgrade) the whole app is
- * in claim mode: HTML routes redirect to /setup, /api/* returns a
- * `needs_setup` 401. Once a member exists, normal login is required.
+ * The decision order, after the always-public surface:
+ *  (B) an existing valid session wins — keeps operator logins working on
+ *      loopback and never clobbers a real login with the auto-session;
+ *  (C) `local_trusted` boot AND a loopback `Host` → mint + set the
+ *      auto-session. Both conditions required: a non-loopback bind is never
+ *      `local_trusted`, and a spoofed `Host` against a wide bind can't reach
+ *      here (DNS-rebind defense);
+ *  (D) otherwise the existing claim/login path: zero members → claim mode
+ *      (HTML → /setup, /api/* → `needs_setup` 401); else login required.
  */
 export function authMiddleware(opts: AuthOptions): MiddlewareHandler {
   return async (c: Context, next) => {
     const path = c.req.path;
+    // (A) Always-public surface.
     // Health is unauthenticated — `pollHealth` (CLI) and external monitors
     // must reach it without a session, including in claim mode.
     if (path === "/api/health") return next();
@@ -85,16 +96,26 @@ export function authMiddleware(opts: AuthOptions): MiddlewareHandler {
       return next();
     }
 
-    // Fresh install: no members yet → claim mode.
+    // (B) An existing valid session always wins.
+    if (resolveMember(c, opts.store)) return next();
+
+    // (C) Local-trusted auto-session: loopback Host on a local_trusted boot.
+    if (
+      opts.deploymentMode === "local_trusted" &&
+      isLoopbackHostHeader(c.req.header("host"))
+    ) {
+      const token = opts.store.ensureLocalSession();
+      c.header("Set-Cookie", buildSessionCookie(token, isSecure(c)));
+      return next();
+    }
+
+    // (D) Claim mode (no members yet) or login required.
     if (opts.store.countMembers() === 0) {
       if (path.startsWith("/api/")) {
         return c.json({ error: "needs_setup" }, 401);
       }
       return c.redirect("/setup");
     }
-
-    if (resolveMember(c, opts.store)) return next();
-
     if (path.startsWith("/api/")) {
       return c.json({ error: "Unauthorized" }, 401);
     }

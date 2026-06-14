@@ -31,7 +31,20 @@ export function e2eToken(): string {
 }
 
 export async function startE2EServer(
-  opts: { dispatcher?: boolean; tickMs?: number } = {}
+  opts: {
+    dispatcher?: boolean;
+    tickMs?: number;
+    /** Bind host that sets the deployment mode (loopback ⇒ local_trusted,
+     *  non-loopback ⇒ authenticated). Default "127.0.0.1". The socket always
+     *  binds loopback; this only drives `resolveDeploymentMode`. */
+    serverHost?: string;
+    /** Force the email/password flow even on a loopback bind. */
+    requireAuth?: boolean;
+    /** Seed an operator + session (sets the harness bearer). Default true so
+     *  existing suites are unchanged. Pass false to test the gate from a
+     *  clean, member-less install. */
+    seedMember?: boolean;
+  } = {}
 ): Promise<E2EServer> {
   const dataDir = mkdtempSync(path.join(tmpdir(), "openacme-e2e-"));
   process.env["OPENACME_DATA_DIR"] = dataDir;
@@ -41,6 +54,10 @@ export async function startE2EServer(
   const config = ConfigSchema.parse({
     dataDir,
     model: { provider: "custom", model: "stub-1", baseUrl: "http://127.0.0.1:9/v1", apiKey: "stub" },
+    server: {
+      host: opts.serverHost ?? "127.0.0.1",
+      ...(opts.requireAuth ? { requireAuth: true } : {}),
+    },
   });
   const { app, manager } = await createApp(config, {
     resolveModel: () => createStubModel(),
@@ -56,11 +73,15 @@ export async function startE2EServer(
     }
   );
 
-  const member = manager.authStore.createMember({
-    email: "e2e@example.com",
-    password: "e2e-password-123",
-  });
-  e2eAuthToken = manager.authStore.createSession(member.id).token;
+  if (opts.seedMember === false) {
+    e2eAuthToken = "";
+  } else {
+    const member = manager.authStore.createMember({
+      email: "e2e@example.com",
+      password: "e2e-password-123",
+    });
+    e2eAuthToken = manager.authStore.createSession(member.id).token;
+  }
 
   if (opts.dispatcher) await manager.dispatcher.start();
 
