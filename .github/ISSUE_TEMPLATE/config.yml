@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/sandydasari/openacme/discussions
+    about: Ask a question, share what you built, or discuss an idea before filing an issue.
+  - name: Security vulnerability
+    url: https://github.com/sandydasari/openacme/security/advisories/new
+    about: Report a security issue privately. Please do not open a public issue.
