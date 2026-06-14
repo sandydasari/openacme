@@ -1,4 +1,9 @@
-import { loadConfig, resolveDataDir, type Config } from "@openacme/config";
+import {
+  loadConfig,
+  resolveDataDir,
+  reachableBaseUrl,
+  type Config,
+} from "@openacme/config";
 import { createDatabase, createAuthStore, type AuthStore } from "@openacme/db";
 
 interface MembersOpts {
@@ -15,13 +20,14 @@ function open(opts: MembersOpts): {
   return { store: createAuthStore(db), config, db };
 }
 
-function baseUrl(config: Config): string {
-  const host = config.server.host;
-  const display =
-    host === "0.0.0.0" || host === "::" || host === "127.0.0.1" || host === "localhost"
-      ? "localhost"
-      : host;
-  return `http://${display}:${config.server.port}`;
+/** Print the substitution hint when the daemon is exposed — the printed host
+ *  is a best guess; a domain/proxy user reaches it by a different name. */
+function exposedHint(): void {
+  console.log(
+    "  Open it from your own machine. If you reach this server by a domain"
+  );
+  console.log("  or public IP, use that in place of the host above.");
+  console.log("");
 }
 
 export async function membersListCommand(opts: MembersOpts): Promise<void> {
@@ -64,10 +70,12 @@ export async function inviteCommand(opts: MembersOpts): Promise<void> {
   const { store, config, db } = open(opts);
   try {
     const { token } = store.createEnrollToken();
+    const { url, exposed } = reachableBaseUrl(config.server);
     console.log("Share this one-time invite link (valid 7 days):");
     console.log("");
-    console.log(`    ${baseUrl(config)}/enroll?token=${token}`);
+    console.log(`    ${url}/enroll?token=${token}`);
     console.log("");
+    if (exposed) exposedHint();
   } finally {
     db.close();
   }
@@ -81,10 +89,12 @@ export async function claimCommand(opts: MembersOpts): Promise<void> {
       return;
     }
     const { token } = store.createEnrollToken();
+    const { url, exposed } = reachableBaseUrl(config.server);
     console.log("Open this link to create the operator account:");
     console.log("");
-    console.log(`    ${baseUrl(config)}/setup?token=${token}`);
+    console.log(`    ${url}/setup?token=${token}`);
     console.log("");
+    if (exposed) exposedHint();
   } finally {
     db.close();
   }

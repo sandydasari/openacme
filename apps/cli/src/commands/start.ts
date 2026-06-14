@@ -5,6 +5,9 @@ import {
   resolveDataDir,
   readRawConfig,
   writeRawConfig,
+  isLoopbackBindHost,
+  resolveDeploymentMode,
+  reachableBaseUrl,
 } from "@openacme/config";
 import { createDatabase, createAuthStore } from "@openacme/db";
 import {
@@ -23,10 +26,7 @@ interface StartOpts {
   noBrowser?: boolean;
   noService?: boolean;
   expose?: boolean;
-}
-
-function isLoopback(host: string): boolean {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+  local?: boolean;
 }
 
 function openBrowser(url: string): void {
@@ -42,27 +42,46 @@ function openBrowser(url: string): void {
 }
 
 function userFacingUrl(host: string, port: number): string {
-  const display = isLoopback(host) ? "localhost" : host === "0.0.0.0" || host === "::" ? "localhost" : host;
+  const display = isLoopbackBindHost(host) ? "localhost" : host === "0.0.0.0" || host === "::" ? "localhost" : host;
   return `http://${display}:${port}`;
 }
 
 export async function startCommand(opts: StartOpts): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
 
-  // --expose: flip server.host to 0.0.0.0 before loading config so the
-  // rest of the function sees the updated value.
-  if (opts.expose) {
+  if (opts.expose && opts.local) {
+    console.error("✗ --expose and --local are mutually exclusive");
+    process.exit(1);
+  }
+
+  // --expose binds 0.0.0.0 and requires login — one flag covers every remote
+  // path (a tunnel/reverse proxy forwards to localhost, which 0.0.0.0 also
+  // serves, plus direct network/IP access). A non-loopback bind auto-flips to
+  // authenticated mode, so login is required and nothing is auto-sessioned.
+  // --local returns to zero-credential loopback. Raw read/write preserves the
+  // user's other keys.
+  if (opts.expose || opts.local) {
     const raw = readRawConfig(dataDir);
     const server = (raw.server && typeof raw.server === "object")
       ? { ...(raw.server as Record<string, unknown>) }
       : {};
-    if (server.host !== "0.0.0.0") {
-      server.host = "0.0.0.0";
+    const targetHost = opts.expose ? "0.0.0.0" : "127.0.0.1";
+    const changed: string[] = [];
+    if (server.host !== targetHost) {
+      server.host = targetHost;
+      changed.push(`server.host = ${targetHost}`);
+    }
+    // Going local clears an explicit requireAuth override so it's truly no-login.
+    if (opts.local && server.requireAuth) {
+      delete server.requireAuth;
+      changed.push("server.requireAuth = false");
+    }
+    if (changed.length > 0) {
       raw.server = server;
       writeRawConfig(dataDir, raw);
-      console.log("✓ updated config.server.host = 0.0.0.0");
+      for (const c of changed) console.log(`✓ updated config.${c}`);
     } else {
-      console.log("✓ config.server.host already 0.0.0.0");
+      console.log(opts.expose ? "✓ already exposed (0.0.0.0)" : "✓ already local");
     }
   }
 
@@ -87,13 +106,13 @@ export async function startCommand(opts: StartOpts): Promise<void> {
 
   const initialStatus = await lifecycle.status();
   if (initialStatus.running) {
-    if (!opts.expose) {
+    if (!opts.expose && !opts.local) {
       // Idempotent: already running, nothing to do.
       console.log(`✓ openacme is already running${initialStatus.pid ? ` (pid ${initialStatus.pid})` : ""} at ${url}`);
       if (process.stdout.isTTY && !opts.noBrowser) openBrowser(url);
       return;
     }
-    // --expose with a running daemon: restart so it picks up the new bind.
+    // --expose / --local with a running daemon: restart to pick up the bind.
     console.log("⠋ restarting daemon to apply new bind...");
     await lifecycle.stopService();
     clearPid(dataDir);
@@ -131,32 +150,44 @@ export async function startCommand(opts: StartOpts): Promise<void> {
   const pidLine = finalStatus.pid ? ` (pid ${finalStatus.pid})` : "";
   console.log(`✓ daemon listening on ${url}${pidLine}`);
 
-  // First run: there's no operator account yet. Surface the setup link and
-  // open the browser straight to it (token prefilled) so creating the
-  // account needs no extra CLI step beyond `start`. `openacme claim` reprints
-  // this link; it's only needed on headless boxes where no browser opens.
+  // In authenticated mode (exposed, or requireAuth) there's an operator
+  // account to claim. Surface the setup link and open the browser straight to
+  // it (token prefilled) so it needs no extra CLI step. Local-trusted installs
+  // auto-session the user — nothing to claim, so this is skipped entirely.
   let openUrl = url;
-  try {
-    const db = createDatabase(config);
-    const store = createAuthStore(db);
-    if (store.countMembers() === 0) {
-      const { token } = store.createEnrollToken();
-      openUrl = `${url}/setup?token=${token}`;
+  if (resolveDeploymentMode(config.server) === "authenticated") {
+    try {
+      const db = createDatabase(config);
+      const store = createAuthStore(db);
+      if (store.countMembers() === 0) {
+        const { token } = store.createEnrollToken();
+        const { url: claimUrl, exposed } = reachableBaseUrl(config.server);
+        openUrl = `${claimUrl}/setup?token=${token}`;
+        console.log("");
+        console.log(
+          opts.expose
+            ? "  Exposing this instance — open to create your operator account:"
+            : "  First run — open this to create your account:"
+        );
+        console.log("");
+        console.log(`      ${openUrl}`);
+        console.log("");
+        if (exposed) {
+          console.log(
+            "  Open it from your own machine — use your domain/public IP if you"
+          );
+          console.log("  reach this server by another name.");
+          console.log("");
+        }
+        console.log("  Add someone later:  openacme invite");
+      } else {
+        console.log("");
+        console.log("  Add someone:  openacme invite   (one-time link, hand off out-of-band)");
+      }
+      db.close();
+    } catch {
       console.log("");
-      console.log("  First run — open this to create your account:");
-      console.log("");
-      console.log(`      ${openUrl}`);
-      console.log("");
-      console.log("  Add someone later:  openacme invite");
-    } else if (opts.expose) {
-      console.log("");
-      console.log("  Add someone:  openacme invite   (one-time link, hand off out-of-band)");
-    }
-    db.close();
-  } catch {
-    if (opts.expose) {
-      console.log("");
-      console.log("  First run:  openacme claim   (prints the setup link)");
+      console.log("  Create your account:  openacme claim   (prints the setup link)");
     }
   }
 
