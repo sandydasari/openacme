@@ -11,7 +11,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
+  LifeBuoy,
 } from "lucide-react";
+import { DOCS_URL } from "@/app/lib/links";
 import { cn } from "@/app/lib/utils";
 import { API_BASE } from "@/app/lib/api";
 import { Logotype } from "@/app/components/Logotype";
@@ -213,6 +215,19 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
               collapsed ? "md:flex-col" : ""
             )}
           >
+            <a
+              href={DOCS_URL}
+              target="_blank"
+              rel="noreferrer"
+              title="Documentation"
+              aria-label="Documentation"
+              className={cn(
+                "flex items-center justify-center text-ink-soft transition-colors hover:text-ink focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-plot-red",
+                collapsed ? "px-1 md:size-6 md:px-0" : "px-1"
+              )}
+            >
+              <LifeBuoy className="size-3.5 shrink-0" aria-hidden />
+            </a>
             <button
               type="button"
               onClick={() =>

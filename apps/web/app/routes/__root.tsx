@@ -32,19 +32,31 @@ function AuthGate({ children }: { children: ReactNode }) {
     let cancelled = false;
     fetch(`${API_BASE}/api/auth/status`, { credentials: "include" })
       .then((r) => r.json())
-      .then((d: { member?: unknown; needsSetup?: boolean }) => {
-        if (cancelled) return;
-        if (d?.member) {
-          setPhase("ready");
-          return;
+      .then(
+        (d: {
+          member?: unknown;
+          needsSetup?: boolean;
+          authRequired?: boolean;
+        }) => {
+          if (cancelled) return;
+          if (d?.member) {
+            setPhase("ready");
+            return;
+          }
+          // Local-trusted: no login required — just mount. Any gated request
+          // auto-sessions on a loopback Host, so the app works without a form.
+          if (d?.authRequired === false) {
+            setPhase("ready");
+            return;
+          }
+          if (d?.needsSetup) {
+            window.location.href = "/setup";
+            return;
+          }
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?next=${next}`;
         }
-        if (d?.needsSetup) {
-          window.location.href = "/setup";
-          return;
-        }
-        const next = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login?next=${next}`;
-      })
+      )
       .catch(() => {
         // Network blip — let the app mount; AuthFetch handles a real 401.
         if (!cancelled) setPhase("ready");
