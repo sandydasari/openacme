@@ -47,6 +47,8 @@ import {
   loadGlobalMcpServers,
   saveGlobalMcpServers,
   lookupModelMetadata,
+  resolveDeploymentMode,
+  reachableBaseUrl,
   type Config,
   type AgentDefinition,
   type MCPServerConfig,
@@ -124,30 +126,47 @@ export async function createApp(
   // remaining path. Cleared on completion or DELETE active-turn.
   const activeTurns = new Map<string, AbortController>();
 
-  // Middleware
+  // Middleware. CORS stays permissive (tunnels / reverse proxies depend on
+  // it) but credentials-less: the default wildcard ACAO can't carry cookies,
+  // so a cross-origin page can't read authenticated responses. The session
+  // cookie's SameSite=Lax + HttpOnly is the real CSRF/exfil backstop.
   app.use("/*", cors());
 
   // Auth: per-member email+password with stateful sessions (see
-  // @openacme/db AuthStore). There is no loopback bypass — every request
-  // needs a valid session. Login + enrollment routes mount BEFORE the gate
-  // (they must be reachable without a session); member management mounts
-  // after it.
-  registerAuthRoutes(app, { store: manager.authStore });
+  // @openacme/db AuthStore). The mode is derived from the bind host —
+  // `local_trusted` (loopback) transparently auto-sessions loopback requests
+  // so a local user never logs in; `authenticated` (non-loopback, or
+  // requireAuth) needs a real login. Login + enrollment routes mount BEFORE
+  // the gate (reachable without a session); member management mounts after.
+  const deploymentMode = resolveDeploymentMode(config.server);
+
+  // Boot reconciliation: when not local_trusted, a stale loopback operator
+  // from a previous local boot must not be a valid remote login. Its sessions
+  // cascade-delete; if that empties the roster, the claim flow takes over.
+  if (deploymentMode === "authenticated") {
+    manager.authStore.deleteLocalOperator();
+  }
+
+  registerAuthRoutes(app, { store: manager.authStore, deploymentMode });
   registerSetupRoutes(app, { dataDir: config.dataDir, manager });
-  app.use("/*", authMiddleware({ store: manager.authStore }));
+  app.use("/*", authMiddleware({ store: manager.authStore, deploymentMode }));
   registerMemberRoutes(app, { store: manager.authStore });
 
-  // Fresh install / post-upgrade: no members yet → mint a one-time claim
-  // token and print the setup link to the log. Reading the log is the
-  // proof-of-deployer that gates first-run (closes the public-URL claim
-  // window). A new token each boot while still memberless.
-  if (manager.authStore.countMembers() === 0) {
+  // Fresh install / post-upgrade on an exposed install: no members yet →
+  // mint a one-time claim token and print the setup link to the log. Reading
+  // the log is the proof-of-deployer that gates first-run (closes the
+  // public-URL claim window). Skipped in local_trusted — a local user is
+  // auto-sessioned and never claims.
+  if (
+    deploymentMode === "authenticated" &&
+    manager.authStore.countMembers() === 0
+  ) {
     const { token } = manager.authStore.createEnrollToken();
-    const { host, port } = config.server;
+    const { url } = reachableBaseUrl(config.server);
     log.warn(
       { setupPath: `/setup?token=${token}` },
-      `No operator account yet. Claim this instance at ` +
-        `http://${host}:${port}/setup?token=${token}`
+      `No operator account yet. Claim this instance at ${url}/setup?token=${token}` +
+        ` (use your domain/public IP if you reach this server by another name)`
     );
   }
 

@@ -28,6 +28,11 @@ const SCRYPT_KEYLEN = 64;
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days — matches the cookie
 const ENROLL_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+/** The synthetic operator behind loopback auto-sessions in local_trusted mode.
+ *  A real member row with an unusable random password — the form can never log
+ *  into it, only the loopback auto-session mints its cookie. */
+export const LOCAL_OPERATOR_EMAIL = "local@localhost";
+
 function publicShape(row: MemberRow): MemberPublic {
   return { id: row.id, email: row.email, createdAt: row.createdAt };
 }
@@ -211,6 +216,42 @@ export function createAuthStore(db: WasmDatabase) {
         )
         .run();
       return res.changes > 0;
+    },
+
+    // ── Local-trusted auto-session ──
+
+    /**
+     * Idempotently ensure the loopback operator exists and mint a session for
+     * it. Called only when the boot mode is local_trusted AND the request Host
+     * is loopback. The middleware short-circuits on an existing cookie, so this
+     * runs once per browser jar, not per request. Race-tolerant: two first-boot
+     * requests collide on the unique(email) constraint; the loser re-reads.
+     */
+    ensureLocalSession(): string {
+      let member = this.getMemberByEmail(LOCAL_OPERATOR_EMAIL);
+      if (!member) {
+        try {
+          this.createMember({
+            email: LOCAL_OPERATOR_EMAIL,
+            password: randomBytes(32).toString("hex"),
+          });
+        } catch {
+          // Lost the unique(email) race — the row now exists.
+        }
+        member = this.getMemberByEmail(LOCAL_OPERATOR_EMAIL);
+      }
+      return this.createSession(member!.id).token;
+    },
+
+    /** Drop the loopback operator (sessions cascade). Run on the authenticated
+     *  boot so a loopback-minted cookie can't be replayed remotely. */
+    deleteLocalOperator(): void {
+      const m = this.getMemberByEmail(LOCAL_OPERATOR_EMAIL);
+      if (m) this.deleteMember(m.id);
+    },
+
+    isLocalOperatorEmail(email: string): boolean {
+      return normalizeEmail(email) === LOCAL_OPERATOR_EMAIL;
     },
   };
 }

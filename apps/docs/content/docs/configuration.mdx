@@ -31,12 +31,19 @@ model:
 
 server:
   port: 3456
-  host: 127.0.0.1
+  host: 127.0.0.1            # 0.0.0.0 to share on the network — `openacme expose`
+  # requireAuth: true        # require a login on a loopback bind (rarely needed)
 
 browser:
   provider: local            # which browser backend agents use
   headless: false
 ```
+
+A loopback `host` (the default) is local-trusted — no login. Any other bind
+requires a login, which is what `openacme expose` sets up (and
+`openacme expose --off` reverses). `requireAuth` forces a login even on a
+loopback bind — for the rare tunnel where you'd rather not open the network
+port.
 
 Any agent can override the global `model` with its own — set it on the agent's
 page in the web UI.

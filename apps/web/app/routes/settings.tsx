@@ -17,10 +17,12 @@ import {
   Search,
   Globe2,
   Bell,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Sidebar } from "../components/Sidebar";
 import { NotificationsTab } from "../components/NotificationsTab";
+import { MembersTab } from "../components/MembersTab";
 import { API_BASE } from "../lib/api";
 import type { ModelDefaultsView, ModelDefaultsUpdate } from "../lib/types";
 import {
@@ -157,6 +159,7 @@ function statePillClass(state: McpServerStatus["state"]): string {
 const SETTINGS_TABS = [
   "api-keys",
   "server",
+  "members",
   "providers",
   "mcp",
   "web-search",
@@ -886,6 +889,10 @@ function SettingsPage() {
                   <TabsTrigger value="server" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Server className="size-3.5" />
                     Server
+                  </TabsTrigger>
+                  <TabsTrigger value="members" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
+                    <Users className="size-3.5" />
+                    Members
                   </TabsTrigger>
                   <TabsTrigger value="providers" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Cpu className="size-3.5" />
@@ -2060,6 +2067,10 @@ function SettingsPage() {
 
               <TabsContent value="notifications">
                 <NotificationsTab />
+              </TabsContent>
+
+              <TabsContent value="members">
+                <MembersTab />
               </TabsContent>
             </div>
           </div>

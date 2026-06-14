@@ -21,14 +21,26 @@ function SetupPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/auth/status`, { credentials: "include" })
       .then((r) => r.json())
-      .then((d: { needsSetup?: boolean; member?: unknown }) => {
-        if (d?.needsSetup) {
-          setPhase("claim");
-          return;
+      .then(
+        (d: {
+          needsSetup?: boolean;
+          member?: unknown;
+          authRequired?: boolean;
+        }) => {
+          if (d?.needsSetup) {
+            setPhase("claim");
+            return;
+          }
+          // Local-trusted: nothing to claim — bounce home; the gate
+          // auto-sessions the user.
+          if (d?.authRequired === false) {
+            window.location.href = "/";
+            return;
+          }
+          // Already claimed — signed-in users go home, everyone else to login.
+          window.location.href = d?.member ? "/" : "/login";
         }
-        // Already claimed — signed-in users go home, everyone else to login.
-        window.location.href = d?.member ? "/" : "/login";
-      })
+      )
       .catch(() => setPhase("claim"));
   }, []);
 

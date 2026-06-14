@@ -84,7 +84,6 @@ program
     "--no-service",
     "Skip launchd/systemd unit; spawn detached with PID file (no auto-restart)"
   )
-  .option("--expose", "Bind to 0.0.0.0, generate a secret, and start (enables remote access)")
   .action(async (opts) => {
     await showBanner(pkg.version);
     // Commander maps --no-service → opts.service=false and --no-browser →
@@ -93,7 +92,26 @@ program
       dataDir: opts.dataDir,
       noBrowser: opts.browser === false,
       noService: opts.service === false,
-      expose: opts.expose === true,
+    });
+  });
+
+// Share the instance: rewrites config (bind + login) and restarts, so it reads
+// as an action, not a start-time option. `--off` reverses it.
+program
+  .command("expose")
+  .description("Share this instance: bind to the network and require a login (--off to reverse)")
+  .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
+  .option("--off", "Reverse: return to local-only access (loopback, no login)")
+  .option("--no-browser", "Don't open browser automatically")
+  .option("--no-service", "Operate against the no-service PID-file path")
+  .action(async (opts) => {
+    await showBanner(pkg.version);
+    await startCommand({
+      dataDir: opts.dataDir,
+      noBrowser: opts.browser === false,
+      noService: opts.service === false,
+      expose: opts.off !== true,
+      local: opts.off === true,
     });
   });
 

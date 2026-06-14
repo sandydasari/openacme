@@ -1,36 +1,20 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import type { AuthStore } from "@openacme/db";
+import type { DeploymentMode } from "@openacme/config";
 import { SESSION_COOKIE_NAME, resolveMember } from "../middleware/auth.js";
+import {
+  buildSessionCookie,
+  clearSessionCookie,
+  isSecure,
+} from "../middleware/cookie.js";
 
 export interface AuthRoutesOptions {
   store: AuthStore;
+  deploymentMode: DeploymentMode;
 }
 
-const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90; // 90 days
-
-function isSecure(c: Context): boolean {
-  const proto = c.req.header("x-forwarded-proto") ?? "";
-  return proto === "https" || c.req.url.startsWith("https:");
-}
-
-function buildCookie(value: string, secure: boolean): string {
-  // HttpOnly: JS can't read it (XSS exfil). SameSite=Lax: top-level
-  // navigation back from /login still sets it. Path=/: covers /api + HTML.
-  const parts = [
-    `${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
-  ];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
-}
-
-function clearCookie(secure: boolean): string {
-  const parts = [`${SESSION_COOKIE_NAME}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
+export interface MemberRoutesOptions {
+  store: AuthStore;
 }
 
 function isValidEmail(email: string): boolean {
@@ -43,7 +27,7 @@ function isValidEmail(email: string): boolean {
  * claim and invites).
  */
 export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
-  const { store } = opts;
+  const { store, deploymentMode } = opts;
 
   app.post("/api/auth/login", async (c) => {
     let body: { email?: string; password?: string };
@@ -60,7 +44,7 @@ export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
     const member = store.verifyPassword(email, password);
     if (!member) return c.json({ error: "Invalid email or password" }, 401);
     const { token } = store.createSession(member.id);
-    c.header("Set-Cookie", buildCookie(token, isSecure(c)));
+    c.header("Set-Cookie", buildSessionCookie(token, isSecure(c)));
     return c.json({ ok: true, token, member });
   });
 
@@ -89,7 +73,7 @@ export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
     }
     const member = store.createMember({ email, password });
     const { token: sessionToken } = store.createSession(member.id);
-    c.header("Set-Cookie", buildCookie(sessionToken, isSecure(c)));
+    c.header("Set-Cookie", buildSessionCookie(sessionToken, isSecure(c)));
     return c.json({ ok: true, token: sessionToken, member }, 201);
   });
 
@@ -102,7 +86,7 @@ export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
     const cookieTok = m ? decodeURIComponent(m[1]!.trim()) : null;
     if (cookieTok) store.deleteSession(cookieTok);
     if (bearer) store.deleteSession(bearer);
-    c.header("Set-Cookie", clearCookie(isSecure(c)));
+    c.header("Set-Cookie", clearSessionCookie(isSecure(c)));
     return c.json({ ok: true });
   });
 
@@ -111,8 +95,10 @@ export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
   app.get("/api/auth/status", (c) => {
     const member = resolveMember(c, store);
     return c.json({
-      needsSetup: store.countMembers() === 0,
-      authRequired: true,
+      // local_trusted has no claim step — the daemon auto-sessions the user.
+      needsSetup:
+        deploymentMode === "authenticated" && store.countMembers() === 0,
+      authRequired: deploymentMode === "authenticated",
       member: member ?? null,
     });
   });
@@ -123,11 +109,16 @@ export function registerAuthRoutes(app: Hono, opts: AuthRoutesOptions): void {
  * route here already has a valid session. Flat-role: any member can invite
  * or revoke any other.
  */
-export function registerMemberRoutes(app: Hono, opts: AuthRoutesOptions): void {
+export function registerMemberRoutes(app: Hono, opts: MemberRoutesOptions): void {
   const { store } = opts;
 
   app.get("/api/members", (c) => {
-    return c.json({ members: store.listMembers() });
+    // The synthetic loopback operator is an implementation detail of
+    // local-trusted mode — keep it out of the human roster.
+    const members = store
+      .listMembers()
+      .filter((m) => !store.isLocalOperatorEmail(m.email));
+    return c.json({ members });
   });
 
   // Mint a one-time enrollment link to hand off out-of-band (no email is
@@ -143,12 +134,19 @@ export function registerMemberRoutes(app: Hono, opts: AuthRoutesOptions): void {
   app.delete("/api/members/:id", (c) => {
     const id = c.req.param("id");
     const all = store.listMembers();
-    if (!all.some((m) => m.id === id)) {
+    const target = all.find((m) => m.id === id);
+    if (!target) {
       return c.json({ error: "Member not found" }, 404);
     }
-    // Refuse to delete the last member — that would drop the whole app back
-    // into claim mode and lock everyone out until someone reads the boot log.
-    if (all.length === 1) {
+    // The synthetic loopback operator isn't a human member; it'd just be
+    // re-created on the next loopback request. Don't let the roster delete it.
+    if (store.isLocalOperatorEmail(target.email)) {
+      return c.json({ error: "Member not found" }, 404);
+    }
+    // Refuse to delete the last human member — that would drop the whole app
+    // back into claim mode and lock everyone out until someone reads the log.
+    const humans = all.filter((m) => !store.isLocalOperatorEmail(m.email));
+    if (humans.length === 1) {
       return c.json({ error: "Cannot remove the only member" }, 400);
     }
     store.deleteMember(id);

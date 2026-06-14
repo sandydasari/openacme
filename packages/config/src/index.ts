@@ -74,4 +74,13 @@ export { loadGlobalMcpServers, saveGlobalMcpServers } from "./mcp-store.js";
 
 export { writeAtomic0600 } from "./atomic.js";
 
+export {
+  isLoopbackBindHost,
+  isLoopbackHostHeader,
+  resolveDeploymentMode,
+  reachableBaseUrl,
+  firstNonInternalIPv4,
+  type DeploymentMode,
+} from "./net.js";
+
 export { readLastVersion, writeLastVersion } from "./version-marker.js";

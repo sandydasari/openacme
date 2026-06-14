@@ -9,20 +9,29 @@ you **don't** need a reverse proxy, TLS certificates, DNS records, or open
 ports. A tunnel handles all of that: your machine makes an outbound connection
 and hands back a public HTTPS URL.
 
-## Create your account
+## Require a login first
 
-OpenAcme always requires a sign-in — local or remote, a public URL is never wide
-open. On first run the daemon prints a one-time setup link to its log:
+On your own machine OpenAcme skips the login — `127.0.0.1` is trusted, so you
+land straight in. The moment you share it, you want a login. Turn that on:
 
 ```sh
-openacme logs        # look for "Claim this instance at …/setup?token=…"
-openacme claim       # or reprint the setup link on demand
+openacme expose
+```
+
+This requires an account for everyone reaching the instance (and opens the port
+so a tunnel or proxy can forward to it). On first run it prints a one-time setup
+link to its log:
+
+```sh
+openacme claim       # print the setup link to create your account
+openacme logs        # or look for "Claim this instance at …/setup?token=…"
 ```
 
 Open that link and set an email + password. The token proves you can read the
 server's log — i.e. that you're the person who deployed it — so a stranger who
-opens your tunnel URL first can't claim the instance. After that, any of the
-tunnels below drops every device at the sign-in screen:
+opens your tunnel URL first can't claim the instance. (Run `openacme expose
+--off` to turn sharing back off.) After claiming, any of the tunnels below
+drops every device at the sign-in screen:
 
 <DocShot
   name="login"

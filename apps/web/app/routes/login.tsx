@@ -34,17 +34,29 @@ function LoginPage() {
 
     fetch(`${API_BASE}/api/auth/status`, { credentials: "include" })
       .then((r) => r.json())
-      .then((data: { needsSetup?: boolean; member?: unknown }) => {
-        if (data?.member) {
-          window.location.href = n || "/";
-          return;
+      .then(
+        (data: {
+          needsSetup?: boolean;
+          member?: unknown;
+          authRequired?: boolean;
+        }) => {
+          if (data?.member) {
+            window.location.href = n || "/";
+            return;
+          }
+          // Local-trusted: no login needed — bounce home; loading the app
+          // shell trips the gate, which mints the auto-session.
+          if (data?.authRequired === false) {
+            window.location.href = n || "/";
+            return;
+          }
+          if (data?.needsSetup) {
+            window.location.href = "/setup";
+            return;
+          }
+          setChecking(false);
         }
-        if (data?.needsSetup) {
-          window.location.href = "/setup";
-          return;
-        }
-        setChecking(false);
-      })
+      )
       .catch(() => setChecking(false));
   }, []);
 
