@@ -145,20 +145,29 @@ export class ToolHostManager implements ToolHostDispatcher {
    *  Spawns the worker (eagerly, from the caller's perspective) so MCP
    *  tool definitions exist before the first prompt build. */
   async discoverMcp(agentId: string): Promise<McpServerDiscovery[]> {
-    const handle = await this.ensureWorker(agentId);
-    const id = randomUUID();
-    const raw = await this.sendRequest(
-      handle,
-      id,
-      { id, method: "mcp_discover" },
-      RPC_TIMEOUT_MS
-    );
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      const err = (parsed as { error?: string })?.error;
-      throw new Error(err ?? "malformed mcp_discover response");
+    // A worker that exits mid-call is retryable by contract — respawn (the
+    // exit handler already evicted the dead handle) and try again, so a
+    // transient blip during agent creation doesn't silently drop MCP tools.
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const handle = await this.ensureWorker(agentId);
+      const id = randomUUID();
+      const raw = await this.sendRequest(
+        handle,
+        id,
+        { id, method: "mcp_discover" },
+        RPC_TIMEOUT_MS
+      );
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) return parsed as McpServerDiscovery[];
+      const err =
+        (parsed as { error?: string })?.error ??
+        "malformed mcp_discover response";
+      if (/worker exited/i.test(err) && attempt < MAX_ATTEMPTS) continue;
+      throw new Error(err);
     }
-    return parsed as McpServerDiscovery[];
+    /* unreachable — the loop returns or throws */
+    throw new Error("mcp_discover failed");
   }
 
   private sendRequest(
