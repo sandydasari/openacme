@@ -852,6 +852,7 @@ export async function createApp(
       }
       validated[name] = result.data;
     }
+    manager.suppressWatch("mcp");
     saveGlobalMcpServers(config.dataDir, validated);
     // Reinit in the background — N agents × connect retries can take
     // minutes, and the catalog write is already durable. The UI polls

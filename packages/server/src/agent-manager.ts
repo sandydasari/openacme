@@ -107,6 +107,7 @@ import {
   type AgentTemplate,
 } from "@openacme/agent-catalog";
 import * as path from "node:path";
+import chokidar, { type FSWatcher } from "chokidar";
 
 // Same shape as `SAFE_ID` in `@openacme/memory` and `@openacme/config`'s
 // agent-store. Duplicated here to avoid a cross-package import for one
@@ -214,6 +215,20 @@ export class AgentManager {
    *  a live worker this process. */
   private stdioMcpRefreshed = new Set<string>();
   readonly skillRegistry: SkillRegistry;
+  /** Watches the config surfaces under dataDir (config.yaml, AGENTS.md,
+   *  mcp.json, agents/<id>/AGENT.md, skills/**\/SKILL.md) so direct file
+   *  edits apply live. Started at the end of the constructor, closed in
+   *  `close()`. */
+  private configWatcher?: FSWatcher;
+  /** Per-surface debounce timers, coalescing editor multi-writes. */
+  private watchDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Surfaces the manager just wrote itself (key -> expiry ms). The watcher
+   *  drops its own echo so a settings-save / agent-CRUD doesn't double-reload. */
+  private watchSuppressed = new Map<string, number>();
+  /** Per-agent hash of {mcpServers, mcpDisabled}, so an AGENT.md hand-edit
+   *  only triggers an MCP reinit (worker restart) when those fields actually
+   *  changed — a persona/tool tweak just evicts the cached Agent. */
+  private agentMcpHash = new Map<string, string>();
   /** Optional model-resolution override, threaded into every Agent. Unset
    *  in production (Agent falls back to the real `getModel`); e2e supplies
    *  a stub. Named distinctly from the `resolveModel(def)` method below,
@@ -599,6 +614,10 @@ export class AgentManager {
     } catch (e) {
       log.warn({ err: e }, "tool-overflow sweep failed");
     }
+
+    // Watch the config surfaces under dataDir so direct file edits (the Acme
+    // agent's own writes, or a human hand-edit) apply live — no restart.
+    this.startConfigWatcher();
   }
 
   /**
@@ -1015,7 +1034,9 @@ export class AgentManager {
    */
   async createAgent(def: AgentDefinition): Promise<Agent> {
     const provisioned = await this.ensureAgentBrowserProfile(def);
+    this.suppressWatch(`agent:${provisioned.id}`);
     this.agentStore.upsert(provisioned);
+    this.agentMcpHash.set(provisioned.id, AgentManager.mcpHashOf(provisioned));
     // A new agent changes every OTHER agent's compiled path policy (its
     // memory/sessions dirs join their deny-read lists) — drop all cached
     // Agents and workers so the next call rebuilds with fresh policies.
@@ -1324,7 +1345,9 @@ export class AgentManager {
         ? { ...existing.model, ...updates.model }
         : existing.model,
     };
+    this.suppressWatch(`agent:${id}`);
     this.agentStore.upsert(updated);
+    this.agentMcpHash.set(id, AgentManager.mcpHashOf(updated));
 
     const mcpChanged =
       hasOwn(updates, "mcpServers") || hasOwn(updates, "mcpDisabled");
@@ -1415,6 +1438,8 @@ export class AgentManager {
   async deleteAgent(id: string): Promise<void> {
     const existing = this.agentStore.get(id);
     if (existing?.managed) throw managedAgentError(id, "deleted");
+    this.suppressWatch(`agent:${id}`);
+    this.agentMcpHash.delete(id);
     const mcpClient = this.mcpClients.get(id);
     if (mcpClient) {
       await mcpClient.disconnect();
@@ -1629,6 +1654,7 @@ export class AgentManager {
         mcpServers.push({ name: m.name, action: "added" });
       }
       if (changed) {
+        this.suppressWatch("mcp");
         saveGlobalMcpServers(this.config.dataDir, globalMcp);
         await this.initMCP();
       }
@@ -1774,6 +1800,7 @@ export class AgentManager {
   /** Set AGENTS.md content. Empty/whitespace deletes the file. Evicts
    *  cached Agents so next activation rebuilds the system prompt. */
   setAgentsMd(content: string): void {
+    this.suppressWatch("agentsmd");
     writeAgentsMd(this.config.dataDir, content);
     this.agentsMd = readAgentsMd(this.config.dataDir);
     this.agents.clear();
@@ -1796,6 +1823,168 @@ export class AgentManager {
     this.agents.clear();
   }
 
+  /** Mark a watched surface as just-written-by-us so the watcher drops its
+   *  own echo (window > debounce + awaitWriteFinish). Public so config-write
+   *  routes (e.g. global mcp.json save in app.ts) can suppress their echo. */
+  suppressWatch(key: string, ms = 800): void {
+    this.watchSuppressed.set(key, Date.now() + ms);
+  }
+
+  private static readonly WATCH_IGNORE_SEGMENTS = new Set([
+    "workspace",
+    "memory",
+    "resources",
+    "browser-profiles",
+    ".tool-overflow",
+    "attachments",
+    "tasks",
+    "sessions",
+    "node_modules",
+    ".git",
+  ]);
+
+  private static mcpHashOf(def: AgentDefinition): string {
+    return JSON.stringify({
+      s: def.mcpServers ?? {},
+      d: [...(def.mcpDisabled ?? [])].sort(),
+    });
+  }
+
+  /** Watch the config surfaces under dataDir so direct file edits apply live.
+   *  chokidar v5 has no glob support, so we watch a few roots and prune the
+   *  noisy subtrees via `ignored`; the per-event handler does the final
+   *  relevance filter by file identity. */
+  private startConfigWatcher(): void {
+    const dataDir = this.config.dataDir;
+    // Watch the dataDir root (always exists) and prune the noisy subtrees via
+    // `ignored`. chokidar v5 mishandles a roots array containing not-yet-created
+    // files (mcp.json / AGENTS.md are absent on fresh installs), so we don't
+    // enumerate files — `watchKeyFor` does the relevance filter per event. Add
+    // the skills dir explicitly only if it lives outside dataDir.
+    const roots = [dataDir];
+    const skillsDir = this.resolveSkillsDir();
+    if (
+      path.relative(dataDir, skillsDir).startsWith("..") &&
+      fs.existsSync(skillsDir)
+    ) {
+      roots.push(skillsDir);
+    }
+    // Seed the per-agent MCP hash so the first AGENT.md edit can diff.
+    for (const def of this.agentStore.list()) {
+      this.agentMcpHash.set(def.id, AgentManager.mcpHashOf(def));
+    }
+    try {
+      const watcher = chokidar.watch(roots, {
+        ignoreInitial: true,
+        persistent: true,
+        ignored: (p: string) => this.shouldIgnoreWatch(p),
+        awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 50 },
+      });
+      watcher.on("add", (p: string) => this.onWatchEvent(p));
+      watcher.on("change", (p: string) => this.onWatchEvent(p));
+      watcher.on("unlink", (p: string) => this.onWatchEvent(p));
+      watcher.on("error", (err: unknown) =>
+        log.warn({ err }, "config watcher error")
+      );
+      this.configWatcher = watcher;
+    } catch (err) {
+      // A watcher failure must never take down the daemon; we just lose the
+      // no-restart-on-hand-edit nicety (settings routes still apply live).
+      log.warn({ err }, "failed to start config watcher");
+    }
+  }
+
+  private shouldIgnoreWatch(absPath: string): boolean {
+    const base = path.basename(absPath);
+    if (base.endsWith(".db") || base.includes(".db-")) return true;
+    const rel = path.relative(this.config.dataDir, absPath);
+    if (!rel || rel.startsWith("..")) return false;
+    for (const seg of rel.split(path.sep)) {
+      if (AgentManager.WATCH_IGNORE_SEGMENTS.has(seg)) return true;
+    }
+    return false;
+  }
+
+  /** Map an absolute path to a debounce key, or null if it's not a surface
+   *  we react to. */
+  private watchKeyFor(absPath: string): string | null {
+    const dataDir = this.config.dataDir;
+    if (absPath === path.join(dataDir, "config.yaml")) return "config";
+    if (absPath === path.join(dataDir, "AGENTS.md")) return "agentsmd";
+    if (absPath === path.join(dataDir, "mcp.json")) return "mcp";
+    const base = path.basename(absPath);
+    if (base === "SKILL.md") return "skills";
+    if (base === "AGENT.md") {
+      const rel = path.relative(this.agentsDir, absPath);
+      if (!rel.startsWith("..")) {
+        const id = rel.split(path.sep)[0];
+        if (id) return `agent:${id}`;
+      }
+    }
+    return null;
+  }
+
+  private onWatchEvent(absPath: string): void {
+    const key = this.watchKeyFor(absPath);
+    if (!key) return;
+    const existing = this.watchDebounce.get(key);
+    if (existing) clearTimeout(existing);
+    this.watchDebounce.set(
+      key,
+      setTimeout(() => {
+        this.watchDebounce.delete(key);
+        void this.runWatchHandler(key);
+      }, 250)
+    );
+  }
+
+  private async runWatchHandler(key: string): Promise<void> {
+    const exp = this.watchSuppressed.get(key);
+    if (exp !== undefined) {
+      this.watchSuppressed.delete(key);
+      if (exp > Date.now()) return; // our own write echo
+    }
+    try {
+      if (key === "config") {
+        const { restartRequired } = this.reloadConfig();
+        // reloadConfig re-suppresses "config"; we ARE the disk edit, so clear
+        // it or we'd swallow the next genuine edit within the window.
+        this.watchSuppressed.delete("config");
+        if (restartRequired.length > 0) {
+          log.info(
+            { restartRequired },
+            "config.yaml edited on disk; these need a restart"
+          );
+        }
+      } else if (key === "agentsmd") {
+        this.agentsMd = readAgentsMd(this.config.dataDir);
+        this.agents.clear();
+      } else if (key === "mcp") {
+        await this.initMCP();
+      } else if (key === "skills") {
+        this.reloadSkills();
+      } else if (key.startsWith("agent:")) {
+        const id = key.slice("agent:".length);
+        this.agents.delete(id);
+        const def = this.agentStore.get(id);
+        if (!def) {
+          // Removed on disk — drop the stale MCP client + hash.
+          this.agentMcpHash.delete(id);
+          await this.queueMcpReinit(id);
+        } else {
+          const next = AgentManager.mcpHashOf(def);
+          if (next !== this.agentMcpHash.get(id)) {
+            this.agentMcpHash.set(id, next);
+            await this.queueMcpReinit(id);
+          }
+        }
+      }
+      log.info({ key }, "applied edit from disk (no restart)");
+    } catch (err) {
+      log.warn({ err, key }, "config watcher handler failed");
+    }
+  }
+
   /**
    * Re-read `config.yaml` from disk and apply everything that can be applied
    * live: evict cached Agents (so the next chat picks up new model / behavior,
@@ -1815,6 +2004,7 @@ export class AgentManager {
    * refresh paths.
    */
   reloadConfig(): { restartRequired: string[] } {
+    this.suppressWatch("config");
     const prev = this.config;
     this.config = loadConfig(this.config.dataDir);
     this.agents.clear();
@@ -2152,6 +2342,9 @@ export class AgentManager {
     // in-process and a turn may have been kicked just before exit.
     this.dispatcher.stop();
     await this.dispatcher.drain();
+    await this.configWatcher?.close();
+    for (const timer of this.watchDebounce.values()) clearTimeout(timer);
+    this.watchDebounce.clear();
     for (const [_, mcpClient] of this.mcpClients) {
       await mcpClient.disconnect();
     }
