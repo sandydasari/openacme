@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { X } from "lucide-react";
+import { Gauge, X } from "lucide-react";
 import { z } from "zod";
 import { Sidebar } from "@/app/components/Sidebar";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
@@ -193,7 +193,8 @@ function UsagePage() {
       <Sidebar />
       <main className="flex flex-1 flex-col overflow-hidden bg-paper">
         <header className="flex h-12 shrink-0 items-center justify-between gap-2 px-3 md:px-6">
-          <h1 className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+          <h1 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+            <Gauge className="size-3.5" aria-hidden />
             Usage
           </h1>
           <div className="inline-flex border border-paper-rule">

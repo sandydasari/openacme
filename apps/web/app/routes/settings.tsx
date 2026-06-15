@@ -25,6 +25,7 @@ import { Sidebar } from "../components/Sidebar";
 import { NotificationsTab } from "../components/NotificationsTab";
 import { MembersTab } from "../components/MembersTab";
 import { API_BASE } from "../lib/api";
+import { docsUrl } from "../lib/links";
 import type { ModelDefaultsView, ModelDefaultsUpdate } from "../lib/types";
 import {
   MCPServerForm,
@@ -38,7 +39,12 @@ import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
 import { Textarea } from "@/app/components/ui/textarea";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
 import { Badge } from "@/app/components/ui/badge";
-import { GoogleIcon, MicrosoftIcon } from "@/app/components/BrandIcons";
+import {
+  GoogleIcon,
+  MicrosoftIcon,
+  ProviderBrandLogo,
+  ToolBrandLogo,
+} from "@/app/components/BrandIcons";
 import {
   Card,
   CardContent,
@@ -74,7 +80,6 @@ interface ServerConfig {
   // default — every agent without its own `model:` block inherits this.
   model: ModelDefaultsView;
   server: { port: number; host: string };
-  behavior: { maxSteps: number };
   skills: { directory: string; autoGenerate: boolean };
 }
 
@@ -253,7 +258,6 @@ function SettingsPage() {
   const [browserKeyInputs, setBrowserKeyInputs] = useState<Record<string, string>>({});
   const [browserProjectIdInput, setBrowserProjectIdInput] = useState("");
   const [browserSaving, setBrowserSaving] = useState<string | null>(null);
-  const [browserPendingRestart, setBrowserPendingRestart] = useState(false);
 
   interface EmailConfigStatus {
     imap: {
@@ -708,9 +712,7 @@ function SettingsPage() {
         toast.error("Failed to save browser settings", { description: data.error });
         return;
       }
-      const data = await res.json().catch(() => ({}));
-      if (data?.needsRestart) setBrowserPendingRestart(true);
-      toast.success("Browser settings saved — restart the daemon to apply");
+      toast.success("Browser settings saved");
       await loadBrowser();
     } catch (e) {
       toast.error("Failed to save browser settings", {
@@ -1058,6 +1060,10 @@ function SettingsPage() {
                       return (
                         <div key={provider.id} className="grid gap-2">
                           <div className="flex items-center gap-2">
+                            <ProviderBrandLogo
+                              provider={provider.id}
+                              className="size-4 shrink-0"
+                            />
                             <Label htmlFor={`key-${provider.id}`}>
                               {provider.name}
                             </Label>
@@ -1152,12 +1158,6 @@ function SettingsPage() {
                         </dt>
                         <dd className="text-ink-soft">
                           {config.server.host}:{config.server.port}
-                        </dd>
-                        <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                          Max steps
-                        </dt>
-                        <dd className="text-ink-soft">
-                          {config.behavior.maxSteps}
                         </dd>
                         <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
                           Skills dir
@@ -1511,7 +1511,8 @@ function SettingsPage() {
                     {mcpLoading && Object.keys(mcpServers).length === 0 ? (
                       <p className="font-mono text-[12px] text-ink-faint">Loading…</p>
                     ) : Object.keys(mcpServers).length === 0 ? (
-                      <p className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
+                      <p className="flex items-center gap-2 border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
+                        <Plug className="size-4 shrink-0 text-ink-faint" aria-hidden />
                         No MCP servers configured yet. Click &ldquo;Add
                         server&rdquo; to start.
                       </p>
@@ -1776,6 +1777,10 @@ function SettingsPage() {
                           return (
                             <div key={p.id} className="grid gap-2">
                               <div className="flex items-center gap-2">
+                                <ToolBrandLogo
+                                  id={p.id}
+                                  className="size-4 shrink-0"
+                                />
                                 <Label htmlFor={`web-key-${p.id}`}>
                                   {p.name}
                                 </Label>
@@ -1856,12 +1861,6 @@ function SettingsPage() {
                       <p className="font-mono text-[12px] text-ink-faint">Loading…</p>
                     ) : (
                       <>
-                        {browserPendingRestart && (
-                          <div className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[11px] text-ink">
-                            Restart OpenAcme to apply the new browser settings.
-                          </div>
-                        )}
-
                         <div className="grid gap-2">
                           <Label>Provider</Label>
                           <Select
@@ -1875,10 +1874,39 @@ function SettingsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="local">Local</SelectItem>
-                              <SelectItem value="browserbase">Browserbase</SelectItem>
-                              <SelectItem value="browser-use">Browser Use</SelectItem>
-                              <SelectItem value="firecrawl">Firecrawl</SelectItem>
+                              <SelectItem value="local">
+                                <span className="flex items-center gap-2">
+                                  <Boxes className="size-3.5 shrink-0" />
+                                  Local
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="browserbase">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="browserbase"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Browserbase
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="browser-use">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="browser-use"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Browser Use
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="firecrawl">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="firecrawl"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Firecrawl
+                                </span>
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2168,7 +2196,15 @@ function SettingsPage() {
                     <CardTitle>Email</CardTitle>
                     <CardDescription>
                       Workforce-wide defaults. Each agent still binds its own mailbox on
-                      its own page.
+                      its own page.{" "}
+                      <a
+                        href={docsUrl("/email")}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-plot-red underline-offset-2 hover:underline"
+                      >
+                        Setup guide →
+                      </a>
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">

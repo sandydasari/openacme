@@ -16,6 +16,7 @@ import { z } from "zod";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
 import { AgentEmailPanel } from "../components/AgentEmailPanel";
+import { EmptyState } from "@/app/components/ui/empty-state";
 import type { ToolInfo, ProviderInfo, ModelPreset } from "../lib/types";
 import {
   MCPServerForm,
@@ -889,9 +890,7 @@ function AgentsPage() {
             )}
           >
             {agents.length === 0 && (
-              <p className="px-4 py-4 font-mono text-[12px] text-ink-faint">
-                No agents configured.
-              </p>
+              <EmptyState icon={Boxes}>No agents configured.</EmptyState>
             )}
             {agents.map((agent) => {
               const isActive = selectedAgent?.id === agent.id;

@@ -1,0 +1,92 @@
+---
+title: Email
+description: Give an agent its own mailbox — its own address, its own identity
+---
+
+Agents can do email — read, search, send, reply. And like the browser, email
+is **per-agent**: each agent you connect gets its own mailbox, its own
+address, its own credentials. An agent's inbox is its inbox; no other agent
+can touch it.
+
+## Why per-agent mailboxes
+
+An email address is an identity. Your recruiter agent emails candidates from
+the recruiting address; your support agent answers from the helpdesk address.
+Keeping those separate isn't just tidy — it's the whole point:
+
+- **Each agent has its own external identity.** Replies come back to the
+  agent that sent them, under a name the recipient recognizes.
+- **Isolation by construction.** The email tools resolve the *current* agent's
+  mailbox — there's no "which mailbox" argument an agent could pass. One agent
+  literally cannot read or send from another's.
+- **Bounded blast radius.** Credentials live per-agent. Rotating or revoking
+  one mailbox never touches the rest of the workforce.
+
+## How it works
+
+Email is a set of **tools**, not a background process. An agent reads or sends
+mail while it's already taking a turn — there's no inbox-watching loop, no
+webhook waking agents up. If you want an agent to check its mail, ask it (or
+give it a recurring task to).
+
+The tools an agent with a mailbox gets:
+
+- `email_list` / `email_search` — browse and search the inbox
+- `email_read` — open a message (body + attachment info)
+- `email_send` / `email_reply` — compose and reply
+- `email_mark` — flag read/unread
+
+Sending is **autonomous** — no draft-and-confirm step. If you've given an
+agent a mailbox, it can send from it, the same way it can run a shell command
+or browse the web. Scope the trust at the mailbox, not at each send.
+
+## Providers
+
+Three backends, picked **per agent** — one agent can be on Gmail while another
+is on a plain IMAP host:
+
+- **IMAP / SMTP** — works with any mail host (Fastmail, Migadu, Zoho, your own
+  server). The friction-free path: for Gmail, an app password over IMAP needs
+  no OAuth app at all.
+- **Gmail** — the Gmail API, via your own Google OAuth app.
+- **Microsoft** — Outlook / Microsoft 365 over Graph, via your own Entra app.
+
+<DocShot
+  name="email-settings"
+  alt="The Settings → Email tab, showing IMAP connection defaults and the Google and Microsoft OAuth app sections"
+  caption="Settings → Email — workforce-wide IMAP defaults and your bring-your-own Google / Microsoft OAuth apps."
+/>
+
+### Bring your own OAuth app
+
+For Gmail and Microsoft, OpenAcme uses **your** OAuth app — you supply the
+client ID and secret in **Settings → Email**. This is the correct model for
+self-hosted software: a shipped, shared OAuth app would put every install
+behind one Google verification and one shared quota. Your app, your quota,
+your control.
+
+For Gmail specifically, **IMAP + an app password is the quickest start** — no
+OAuth app to register. Reach for the Gmail API path when you want Gmail-native
+features or have already set up a Google app.
+
+## Connecting a mailbox to an agent
+
+Open an agent's page and find the **Email** panel. By default an agent has no
+mailbox — it stays empty until you set one up, and the email tools don't even
+appear for that agent until it does.
+
+- **IMAP** — enter the address and password (or app password). If you've set
+  workforce IMAP defaults in Settings, the agent can inherit the host/port and
+  you only fill in the address and password.
+- **Gmail / Microsoft** — click connect and complete the sign-in. The agent
+  ends up bound to whichever account you authorize.
+
+Credentials are written to the agent's own folder (`email.json`, owner-only
+permissions) — never to `config.yaml` and never shared between agents. The
+non-secret binding (provider, address) lives in the agent's `AGENT.md`.
+
+## Turning it off
+
+Disconnect a mailbox from the agent's Email panel — its credentials are
+removed and the email tools disappear from that agent. Other agents are
+unaffected.

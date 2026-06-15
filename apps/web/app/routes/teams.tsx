@@ -16,6 +16,7 @@ import { API_BASE } from "../lib/api";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Badge } from "@/app/components/ui/badge";
+import { EmptyState } from "@/app/components/ui/empty-state";
 import {
   Tabs,
   TabsList,
@@ -232,10 +233,10 @@ function TeamsPage() {
             )}
           >
             {teams.length === 0 && (
-              <p className="px-4 py-4 font-mono text-[12px] text-ink-faint">
+              <EmptyState icon={Users}>
                 No teams yet. Create one to give a group of agents a shared
                 charter and workspace.
-              </p>
+              </EmptyState>
             )}
             {teams.map((team) => {
               const isActive = selected?.id === team.id;

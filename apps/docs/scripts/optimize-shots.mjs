@@ -24,6 +24,8 @@ const SITE = [
   ["taskdetail4-dark.png", "dark/result"],
   ["chat-cole-dark.png", "dark/chat"],
   ["login-dark.png", "dark/login"],
+  ["email-settings-light.png", "light/email-settings"],
+  ["email-settings-dark.png", "dark/email-settings"],
 ];
 
 // README: 1440w pngs, same filenames the README already references

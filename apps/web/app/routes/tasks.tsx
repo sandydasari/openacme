@@ -506,6 +506,7 @@ function TasksPage() {
           <EmptyTasksState />
         ) : visibleTasks.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+            <Search className="size-5 text-ink-faint/70" aria-hidden />
             <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               No tasks match
             </span>

@@ -508,10 +508,6 @@ export function lookupModelMetadata(model: ModelConfig): ModelMetadata {
  * compression on provider 413 / context_overflow errors still fires.
  */
 export const AgentBehaviorSchema = z.object({
-  // Upper bound on Vercel AI SDK agentic steps per turn. Set high so the
-  // agent stops when IT decides (no more tool calls), not when we cap it.
-  // Still finite as a safety net against pathological tool-call loops.
-  maxSteps: z.number().default(1000),
   // Per-call output cap. Without this the Anthropic SDK auto-picks the
   // model's published max (e.g. 128K for opus-4-7) — fine on 1M-context
   // accounts but on a 200K-entitled account it eats nearly the whole

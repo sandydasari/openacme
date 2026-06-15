@@ -113,6 +113,11 @@ import * as path from "node:path";
 // regex; the three must stay in sync.
 const PEER_ID_SAFE = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
+// Internal upper bound on agentic steps per turn — a safety net against
+// pathological tool-call loops, not a user-facing knob. High enough that the
+// agent stops when it has no more tool calls, never because we capped it.
+const DEFAULT_MAX_STEPS = 1000;
+
 /** Pull the operator-facing message out of a `ping_user` event payload.
  *  Payload shape is `{ message: string }` per ping.ts but the column is
  *  JSON-typed so we treat it as `unknown` and narrow defensively. */
@@ -1788,9 +1793,9 @@ export class AgentManager {
    * Returns the settings that genuinely can't hot-apply (diffed old→new), so
    * callers surface a restart prompt only for those:
    *  - `server` — host/port is a live socket bind; can't be swapped in place.
-   *  - `browser` — BrowserManager captures the provider at construction and
-   *    holds live Chrome/cloud sessions; rebuilding mid-automation would
-   *    orphan them, so browser-config changes wait for a restart.
+   *
+   * Browser config hot-swaps the provider (existing sessions keep running on
+   * the old one; the next acquire uses the new one), so it needs no restart.
    *
    * Doesn't reload skills, the agent store, or MCP — those have their own
    * refresh paths.
@@ -1803,15 +1808,24 @@ export class AgentManager {
     // app creds) apply without a process restart.
     this.emailManager = this.buildEmailManager();
 
+    // Hot-swap the browser provider when its config changed. Live sessions
+    // keep their old provider until released; new acquires use the new one.
+    if (JSON.stringify(prev.browser) !== JSON.stringify(this.config.browser)) {
+      this.browserManager.setProvider(
+        createBrowserProvider({
+          name: this.config.browser.provider,
+          dataDir: this.config.dataDir,
+          config: this.config.browser,
+        })
+      );
+    }
+
     const restartRequired: string[] = [];
     if (
       prev.server.host !== this.config.server.host ||
       prev.server.port !== this.config.server.port
     ) {
       restartRequired.push("server");
-    }
-    if (JSON.stringify(prev.browser) !== JSON.stringify(this.config.browser)) {
-      restartRequired.push("browser");
     }
     return { restartRequired };
   }
@@ -1933,7 +1947,10 @@ export class AgentManager {
       model: effectiveModel,
       persona: def.persona,
       tools: effectiveTools,
-      maxSteps: b.maxSteps,
+      // Internal safety-net against pathological tool-call loops — no longer a
+      // user-facing config knob. Set high so the agent stops when IT decides
+      // (no more tool calls), not when we cap it.
+      maxSteps: DEFAULT_MAX_STEPS,
       maxOutputTokens: b.maxOutputTokens,
       skillsIndex,
       compression: {

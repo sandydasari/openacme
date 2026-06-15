@@ -1514,13 +1514,10 @@ export async function createApp(
     if (body.localBrowser === "camoufox" && !isCamoufoxInstalled()) {
       void prefetchCamoufox();
     }
-    // Browser is the one global setting that can't hot-apply (live sessions);
-    // reloadConfig reports it via restartRequired so the prompt is honest.
-    const { restartRequired } = manager.reloadConfig();
-    return c.json({
-      success: true,
-      needsRestart: restartRequired.includes("browser"),
-    });
+    // Live-apply: reloadConfig hot-swaps the browser provider, so the change
+    // takes effect on the next browser session with no restart.
+    manager.reloadConfig();
+    return c.json({ success: true });
   });
 
   app.post("/api/browser/keys", async (c) => {
