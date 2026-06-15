@@ -15,6 +15,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
+import { AgentEmailPanel } from "../components/AgentEmailPanel";
 import type { ToolInfo, ProviderInfo, ModelPreset } from "../lib/types";
 import {
   MCPServerForm,
@@ -94,6 +95,7 @@ interface Agent {
   mcpServers?: Record<string, MCPServerConfigDto>;
   mcpDisabled?: string[];
   managed?: boolean;
+  email?: { provider: "imap" | "gmail" | "microsoft"; address: string };
 }
 
 interface SkillIndexEntry {
@@ -2109,6 +2111,8 @@ function AgentOverviewTab({
           }}
           onChange={(m) => onDraftChange({ ...draft, ...m })}
         />
+
+        {!agent.managed && <AgentEmailPanel agentId={agent.id} />}
 
         <div className="grid gap-2">
           <Label htmlFor="ov-role">

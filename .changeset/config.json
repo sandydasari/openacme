@@ -14,6 +14,7 @@
       "@openacme/cli",
       "@openacme/config",
       "@openacme/db",
+      "@openacme/email",
       "@openacme/llm-provider",
       "@openacme/mcp-client",
       "@openacme/memory",

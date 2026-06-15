@@ -35,6 +35,7 @@ import { registerTeamRoutes } from "./routes/teams.js";
 import { registerSetupRoutes, setDefaultModelIfUnset } from "./routes/setup.js";
 import { registerSkillsHubRoutes } from "./routes/skills-hub.js";
 import { registerAgentCatalogRoutes } from "./routes/agent-catalog.js";
+import { registerEmailRoutes } from "./routes/email.js";
 import { registerStreamRoutes } from "./routes/streams.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerPushRoutes } from "./routes/push.js";
@@ -195,6 +196,12 @@ export async function createApp(
   // Bundled agent catalog — browse + import templates. Mount before the
   // generic /api/agents/:id so /api/agents/catalog/* takes the specific path.
   registerAgentCatalogRoutes(app, manager, config);
+
+  // Per-agent email: bind IMAP / run Gmail+Graph OAuth, status, unbind.
+  // Specific /api/agents/:id/email paths + the /api/email/oauth/callback
+  // redirect target. Mounted after authMiddleware (the OAuth redirect
+  // carries the member cookie in authenticated mode; open mode passes all).
+  registerEmailRoutes(app, manager, config);
 
   // Live SSE streams: per-session (chat pane live updates) and
   // workforce-wide (home page row deltas). Mounted before generic

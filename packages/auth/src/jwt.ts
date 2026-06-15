@@ -42,3 +42,16 @@ export function extractEmail(idToken: string | undefined): string | undefined {
   const email = payload?.["email"];
   return typeof email === "string" ? email : undefined;
 }
+
+/** Email, falling back to `preferred_username` (Microsoft id_tokens may carry
+ *  only the UPN). Used to label an OAuth-connected mailbox. */
+export function extractEmailOrUpn(idToken: string | undefined): string | undefined {
+  if (!idToken) return undefined;
+  const payload = decodeJwtPayload(idToken);
+  if (!payload) return undefined;
+  if (typeof payload["email"] === "string") return payload["email"];
+  if (typeof payload["preferred_username"] === "string") {
+    return payload["preferred_username"];
+  }
+  return undefined;
+}

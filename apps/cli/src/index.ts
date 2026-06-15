@@ -20,6 +20,7 @@ import {
 } from "./commands/members.js";
 import { chatCommand } from "./commands/chat.js";
 import { loginCommand } from "./commands/login.js";
+import { emailLoginCommand, emailStatusCommand } from "./commands/email.js";
 import { logoutCommand } from "./commands/logout.js";
 import {
   skillsListCommand,
@@ -219,6 +220,23 @@ program
   .option("-p, --provider <name>", "openai or anthropic")
   .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
   .action(logoutCommand);
+
+const email = program
+  .command("email")
+  .description("Bind a per-agent email mailbox (IMAP/SMTP, Gmail, Microsoft)");
+
+email
+  .command("login <agentId>")
+  .description("Connect an email account to an agent")
+  .option("-p, --provider <name>", "imap, gmail, or microsoft")
+  .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
+  .action(emailLoginCommand);
+
+email
+  .command("status [agentId]")
+  .description("Show which agents have email bound and credential state")
+  .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
+  .action(emailStatusCommand);
 
 const skills = program
   .command("skills")

@@ -55,6 +55,7 @@ import {
   bindMemory,
   bindTaskStore,
   bindBrowser,
+  bindEmail,
   bindAgentTool,
   bindPingUser,
   bindDeferSession,
@@ -63,6 +64,7 @@ import {
   sweepOverflow,
   deleteSessionToolCalls,
   SYSTEM_TOOLS,
+  EMAIL_TOOL_NAMES,
 } from "@openacme/tools";
 import { ToolHostManager } from "@openacme/tool-host";
 import * as fs from "node:fs";
@@ -73,6 +75,7 @@ import {
   createBrowserProvider,
   type AgentBrowserOverrides,
 } from "@openacme/browser";
+import { EmailManager } from "@openacme/email";
 import { Dispatcher } from "./dispatcher.js";
 import { SessionBroadcaster } from "./broadcaster.js";
 import {
@@ -181,6 +184,7 @@ export class AgentManager {
    *  tools. Lazy: nothing spawns until the first such tool call. */
   readonly toolHostManager: ToolHostManager;
   readonly browserManager: BrowserManager;
+  readonly emailManager: EmailManager;
   readonly agentCatalog: AgentCatalog;
   /** In-memory per-session pub/sub for SSE clients. Shared by scheduler,
    *  agent runtime, and the home + per-session stream routes. */
@@ -455,6 +459,18 @@ export class AgentManager {
         this.ensureBrowserOverridesAtAcquire(id, current),
     });
     bindBrowser({ manager: this.browserManager });
+
+    // Per-agent email. Each agent binds its own mailbox in AGENT.md
+    // (`email:` block); secrets live in `<agentDir>/email.json` (0600).
+    // The provider is selected per-agent, so agent A can be on Gmail while
+    // agent B is on IMAP. Bound via the same placeholder pattern so
+    // @openacme/tools stays free of a runtime dep on @openacme/email.
+    this.emailManager = new EmailManager({
+      agentsDir: this.agentsDir,
+      oauthApp: config.email,
+      resolveAccount: (id) => this.agentStore.get(id)?.email,
+    });
+    bindEmail({ manager: this.emailManager });
 
     // Per-agent tool-host workers: worker-runtime tools (filesystem,
     // shell, exec, process) route here instead of running in the daemon.
@@ -1424,6 +1440,14 @@ export class AgentManager {
       log.warn({ err: e, agentId: id }, "deleteAgent: failed to close browser session");
     }
 
+    // Drop any per-agent email session. The agent's email.json (secrets)
+    // goes away with the agent dir below; nothing else holds it.
+    try {
+      await this.emailManager.closeAgent(id);
+    } catch (e) {
+      log.warn({ err: e, agentId: id }, "deleteAgent: failed to close email session");
+    }
+
     // Sessions: list cross-agent leaves then filter; SessionStore.list
     // is per-agent so we can use it directly here.
     const sessions = this.sessionStore.list(id);
@@ -1861,18 +1885,23 @@ export class AgentManager {
       dataDir: this.config.dataDir,
     });
 
+    // Effective tool set: user-configurable env tools + agent's MCP tools +
+    // always-on system tools (skill_view, memory, session_search, task_*).
+    // Dedup defensively in case a legacy AGENT.md lists a system tool. Email
+    // tools ship in the default list but are excluded when the agent has no
+    // mailbox bound — gated here (we have the def) since a per-tool checkFn
+    // can't see the agent at tool-list build time.
+    const emailTools = new Set<string>(EMAIL_TOOL_NAMES);
+    const effectiveTools = Array.from(
+      new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS])
+    ).filter((t) => def.email || !emailTools.has(t));
+
     const agentConfig: AgentConfig = {
       id: def.id,
       name: def.name,
       model: effectiveModel,
       persona: def.persona,
-      // Effective tool set: user-configurable env tools + agent's MCP
-      // tools + always-on system tools (skill_view, memory, session_search,
-      // task_*). Dedup defensively in case a legacy AGENT.md still lists
-      // a system tool explicitly.
-      tools: Array.from(
-        new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS])
-      ),
+      tools: effectiveTools,
       maxSteps: b.maxSteps,
       maxOutputTokens: b.maxOutputTokens,
       skillsIndex,
@@ -2067,6 +2096,7 @@ export class AgentManager {
     closeAllShellSessions();
     await this.toolHostManager.close();
     await this.browserManager.close();
+    await this.emailManager.close();
     this.db.close();
   }
 }

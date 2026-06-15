@@ -14,6 +14,8 @@ export {
   AgentBehaviorSchema,
   SkillsConfigSchema,
   BrowserConfigSchema,
+  AgentEmailSchema,
+  EmailConfigSchema,
   lookupModelMetadata,
   type Config,
   type Provider,
@@ -28,6 +30,8 @@ export {
   type AgentBehavior,
   type SkillsConfig,
   type BrowserConfig,
+  type AgentEmail,
+  type EmailConfig,
 } from "./schema.js";
 
 export {

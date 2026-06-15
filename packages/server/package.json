@@ -46,6 +46,7 @@
     "@openacme/auth": "workspace:*",
     "@openacme/browser": "workspace:*",
     "@openacme/config": "workspace:*",
+    "@openacme/email": "workspace:*",
     "@openacme/db": "workspace:*",
     "@openacme/llm-provider": "workspace:*",
     "@openacme/mcp-client": "workspace:*",
