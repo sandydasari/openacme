@@ -88,7 +88,8 @@ export function registerEmailRoutes(
   // ── Global email config (Settings → Email) ──
   // Workforce-wide: IMAP connection defaults + BYO OAuth app credentials.
   // Secrets are write-only over the wire (GET returns `configured`, never the
-  // secret). Takes effect on next restart, like the model-config tab.
+  // secret). Applies live — the save route calls reloadConfig (rebuilds the
+  // EmailManager), like the model-config tab.
   app.get("/api/email/config", (c) => {
     const raw = readRawConfig(config.dataDir);
     const e = (raw.email as Record<string, unknown> | undefined) ?? {};

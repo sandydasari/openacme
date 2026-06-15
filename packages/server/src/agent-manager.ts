@@ -175,7 +175,8 @@ export class AgentManager {
   readonly vapid: VapidKeys;
   readonly attachmentsRoot: string;
   readonly agentsDir: string;
-  /** `<dataDir>/AGENTS.md` contents; restart to pick up edits. */
+  /** `<dataDir>/AGENTS.md` contents. Applies live: `setAgentsMd` (UI saves)
+   *  and the config watcher (direct edits) both re-read + evict cached Agents. */
   private agentsMd: string | undefined;
   readonly memoryStore: MemoryStore;
   readonly taskStore: TaskStore;
@@ -831,9 +832,9 @@ export class AgentManager {
 
   /**
    * Tear down and rebuild the MCP client for one agent. Called from
-   * `initMCP` and agent CRUD. (No file watcher: editing `mcp.json`
-   * requires a server restart by design — simpler model than reasoning
-   * about hot reload races.)
+   * `initMCP`, agent CRUD, and the config watcher (a hand-edit of `mcp.json`
+   * re-runs `initMCP`; a per-agent AGENT.md edit re-runs this when its MCP
+   * fields changed).
    */
   async reinitMCPForAgent(id: string): Promise<void> {
     const def = this.agentStore.get(id);

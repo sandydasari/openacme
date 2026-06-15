@@ -101,10 +101,9 @@ When you create a new agent, write the AGENT.md directly. The folder
 gets created on first read. Workspace and memory dirs are created
 on-demand by the platform.
 
-**Restart semantics.** Editing AGENT.md does not automatically
-invalidate the running agent's cached system prompt. After non-trivial
-AGENT.md edits, tell the user to restart the daemon (`openacme
-restart`). Adding/removing agents follows the same rule.
+**Applies live.** The platform watches `AGENT.md` files — your edits (and
+creating or deleting an agent) take effect on the agent's next turn, no
+restart. MCP servers re-init only if you changed `mcpServers`/`mcpDisabled`.
 
 ## SKILL.md format
 
@@ -169,9 +168,9 @@ inherited env is filtered to drop credential-shaped vars like
 server actually needs them), `headers`, `timeout`, `connectTimeout`,
 `enabled`, `allowedTools`.
 
-**Restart semantics.** Editing mcp.json requires a daemon restart. The
-platform reads it once at boot and on agent-config changes; there is no
-file watcher. After editing, tell the user `openacme restart`.
+**Applies live.** The platform watches `mcp.json` — after you edit it, the
+affected agents re-init their MCP connections on their next turn (bringing a
+slow/broken server up can take a few seconds). No restart.
 
 Per-agent private servers go in `mcpServers` on AGENT.md (must not
 collide with global names). Per-agent exclusions go in `mcpDisabled`.
@@ -276,17 +275,17 @@ spawns until the agent first calls a `browser_*` tool. Provider
 (local Chrome / Browserbase / Browser Use / Firecrawl) is set in
 `config.yaml` under `browser`.
 
-## Settings that apply live vs need a restart
+## Everything applies live — almost
 
-Global config changes made through the **web Settings UI** (default
-model, email defaults, browser provider, behavior) apply **live** — the
-platform reloads config and evicts cached Agents, no restart. Only
-changing the server host/port needs a restart.
+The platform watches its config surfaces under the data dir, so **your
+edits take effect on the next turn with no restart**: `config.yaml`
+(model, behavior, browser, email), `AGENTS.md`, `mcp.json`, any
+`agents/<id>/AGENT.md`, and `skills/**/SKILL.md`. The web Settings UI
+applies live too. So do creating, editing, and deleting agents.
 
-But a config change you make by **editing `config.yaml` directly** has
-no file watcher — that still needs `openacme restart` (or the user
-re-saving via Settings). When you hand-edit `config.yaml`, tell the
-user to restart.
+The **one** thing that still needs `openacme restart` is changing the
+server **host or port** — that's a live socket bind and can't be swapped
+in place. Tell the user to restart only in that case.
 
 ## How you set things up
 
@@ -297,8 +296,8 @@ When the user asks you to create a new agent:
 2. Write `<dataDir>/agents/<id>/AGENT.md` with the frontmatter +
    persona body.
 3. File an onboarding task on the new agent so they learn the team.
-4. Tell the user to restart the daemon (`openacme restart`) so the new
-   agent's prompt is built fresh.
+4. That's it — the new agent is picked up live (no restart) and shows up
+   in the roster and picker.
 
 When the user asks you to install a skill:
 
@@ -313,7 +312,8 @@ When the user asks you to add an MCP server:
 
 1. Read `<dataDir>/mcp.json` (or create it as `{}` if missing).
 2. Add the server entry (same shape Claude Desktop / Cursor use).
-3. Tell the user to restart the daemon for the change to take effect.
+3. That's it — the platform watches `mcp.json` and the affected agents
+   re-connect on their next turn (no restart).
 
 When the user asks how something works:
 

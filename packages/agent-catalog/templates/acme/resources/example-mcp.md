@@ -49,11 +49,11 @@ anywhere.
 - **`allowedTools`** — if set, only register tools whose names match
   this list. Empty/absent = all tools.
 
-## Restart required
+## Applies live
 
-There is no file watcher on `mcp.json`. After editing, the user must
-run `openacme restart` for the platform to re-discover servers and
-their tools.
+The platform watches `mcp.json`. After editing, the affected agents
+re-discover servers and their tools on their next turn — no restart.
+(Bringing a slow or broken server up can take a few seconds.)
 
 ## Per-agent overrides
 

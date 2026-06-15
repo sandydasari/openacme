@@ -9,7 +9,7 @@ the commands you'll reach for.
 
 ```bash
 openacme start     # start the daemon (idempotent)
-openacme restart   # restart — required after AGENT.md / mcp.json / config.yaml edits
+openacme restart   # restart — only needed after a server host/port change
 openacme stop
 openacme status    # pid, bind, uptime, recent log
 openacme logs -f   # tail the daemon log

@@ -1382,9 +1382,9 @@ export async function createApp(
   // ── Browser ──
   // Cloud-provider creds live in <dataDir>/.env so they pick up without a
   // restart. Provider selection (`browser.provider`) plus local-only knobs
-  // (executablePath, headless, noSandbox) live in config.yaml; agents
-  // instantiate one provider at AgentManager construction, so changing
-  // those requires a daemon restart.
+  // (executablePath, headless, noSandbox) live in config.yaml; the save route
+  // calls reloadConfig, which hot-swaps the browser provider (live sessions
+  // keep the old one; the next acquire uses the new one) — no restart.
   const BROWSER_PROVIDERS = ["local", "browserbase", "browser-use", "firecrawl"] as const;
   type BrowserProviderId = (typeof BROWSER_PROVIDERS)[number];
   const BROWSER_CRED_VARS: Record<Exclude<BrowserProviderId, "local">, readonly string[]> = {
