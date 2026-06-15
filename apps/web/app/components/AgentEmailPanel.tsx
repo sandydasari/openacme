@@ -18,6 +18,13 @@ type Provider = "imap" | "gmail" | "microsoft";
 interface EmailStatus {
   email: { provider: Provider; address: string } | null;
   redirectUri: string;
+  imapDefaults: {
+    host?: string;
+    port?: number;
+    smtpHost?: string;
+    smtpPort?: number;
+    tls?: boolean;
+  } | null;
   oauthApps: { google: boolean; microsoft: boolean };
   status:
     | { bound: true; kind: "imap" | "oauth"; expiresAt: number | null; account: string | null }
@@ -26,13 +33,15 @@ interface EmailStatus {
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+// All blank — omitted connection fields inherit the global config.email.imap
+// default (or the provider's built-in 993/587) at resolution time.
 const blankImap = {
   address: "",
   host: "",
-  port: "993",
+  port: "",
   user: "",
   smtpHost: "",
-  smtpPort: "587",
+  smtpPort: "",
   password: "",
 };
 
@@ -91,10 +100,15 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          // Send only filled fields — blanks inherit the global default.
           body: JSON.stringify({
-            ...imap,
-            port: Number(imap.port) || 993,
-            smtpPort: Number(imap.smtpPort) || 587,
+            address: imap.address,
+            password: imap.password,
+            ...(imap.host ? { host: imap.host } : {}),
+            ...(imap.user ? { user: imap.user } : {}),
+            ...(imap.smtpHost ? { smtpHost: imap.smtpHost } : {}),
+            ...(imap.port ? { port: Number(imap.port) } : {}),
+            ...(imap.smtpPort ? { smtpPort: Number(imap.smtpPort) } : {}),
           }),
         }
       );
@@ -144,6 +158,7 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
   };
 
   const bound = data?.status.bound === true;
+  const dflt = data?.imapDefaults;
   const oauthConfigured =
     provider === "gmail"
       ? data?.oauthApps.google
@@ -232,20 +247,36 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
             <Pair label="Email address">
               <Input value={imap.address} onChange={set("address")} placeholder="agent@example.com" />
             </Pair>
-            <Pair label="IMAP host">
-              <Input value={imap.host} onChange={set("host")} placeholder="imap.example.com" />
+            <Pair label={dflt?.host ? "IMAP host (optional)" : "IMAP host"}>
+              <Input
+                value={imap.host}
+                onChange={set("host")}
+                placeholder={dflt?.host ? `inherits ${dflt.host}` : "imap.example.com"}
+              />
             </Pair>
             <Pair label="IMAP port">
-              <Input value={imap.port} onChange={set("port")} placeholder="993" />
+              <Input
+                value={imap.port}
+                onChange={set("port")}
+                placeholder={dflt?.port ? `inherits ${dflt.port}` : "993"}
+              />
             </Pair>
             <Pair label="Login user (optional)">
               <Input value={imap.user} onChange={set("user")} placeholder="defaults to address" />
             </Pair>
             <Pair label="SMTP host (optional)">
-              <Input value={imap.smtpHost} onChange={set("smtpHost")} placeholder="defaults to IMAP host" />
+              <Input
+                value={imap.smtpHost}
+                onChange={set("smtpHost")}
+                placeholder={dflt?.smtpHost ? `inherits ${dflt.smtpHost}` : "defaults to IMAP host"}
+              />
             </Pair>
             <Pair label="SMTP port">
-              <Input value={imap.smtpPort} onChange={set("smtpPort")} placeholder="587" />
+              <Input
+                value={imap.smtpPort}
+                onChange={set("smtpPort")}
+                placeholder={dflt?.smtpPort ? `inherits ${dflt.smtpPort}` : "587"}
+              />
             </Pair>
           </div>
           <Pair label="App password">
@@ -259,7 +290,9 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
           <div className="flex justify-end">
             <Button
               onClick={connectImap}
-              disabled={busy || !imap.address || !imap.host || !imap.password}
+              disabled={
+                busy || !imap.address || !imap.password || (!imap.host && !dflt?.host)
+              }
             >
               {bound ? "Re-bind IMAP" : "Connect IMAP"}
             </Button>

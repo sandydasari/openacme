@@ -72,6 +72,7 @@ export function registerEmailRoutes(
     return c.json({
       email: def.email ?? null,
       redirectUri: redirectUri(),
+      imapDefaults: config.email.imap ?? null,
       oauthApps: {
         google: !!config.email.google,
         microsoft: !!config.email.microsoft,
@@ -99,21 +100,32 @@ export function registerEmailRoutes(
       return c.json({ error: "Invalid JSON" }, 400);
     }
     const address = String(body.address ?? "").trim();
-    const host = String(body.host ?? "").trim();
     const password = String(body.password ?? "");
-    if (!address || !host || !password) {
-      return c.json({ error: "address, host, and password are required" }, 400);
+    const host = String(body.host ?? "").trim();
+    if (!address || !password) {
+      return c.json({ error: "address and password are required" }, 400);
     }
-    const email: EmailAccount = {
-      provider: "imap",
-      address,
-      host,
-      port: Number(body.port) || 993,
-      user: String(body.user ?? "").trim() || address,
-      smtpHost: String(body.smtpHost ?? "").trim() || host,
-      smtpPort: Number(body.smtpPort) || 587,
-      tls: body.tls === undefined ? true : !!body.tls,
-    };
+    if (!host && !config.email.imap?.host) {
+      return c.json(
+        { error: "host is required (no global config.email.imap.host default set)" },
+        400
+      );
+    }
+    // Write only the connection fields the caller supplied — omitted ones
+    // inherit the global config.email.imap default at resolution time.
+    const email: EmailAccount = { provider: "imap", address };
+    if (host) email.host = host;
+    const user = String(body.user ?? "").trim();
+    if (user) email.user = user;
+    const smtpHost = String(body.smtpHost ?? "").trim();
+    if (smtpHost) email.smtpHost = smtpHost;
+    if (body.port !== undefined && body.port !== null && body.port !== "") {
+      email.port = Number(body.port);
+    }
+    if (body.smtpPort !== undefined && body.smtpPort !== null && body.smtpPort !== "") {
+      email.smtpPort = Number(body.smtpPort);
+    }
+    if (typeof body.tls === "boolean") email.tls = body.tls;
     writeEmailCredentials(manager.agentsDir, id, {
       version: 1,
       provider: "imap",

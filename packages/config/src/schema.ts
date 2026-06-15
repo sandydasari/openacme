@@ -611,6 +611,19 @@ export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
  * config.yaml readable only by the daemon user.
  */
 export const EmailConfigSchema = z.object({
+  // Default IMAP/SMTP connection settings inherited by per-agent `imap`
+  // mailboxes that omit them — so a workforce on one mail host sets host/port
+  // once here and each agent only supplies its own address + app-password.
+  // Credentials are NEVER global; only these non-secret coordinates.
+  imap: z
+    .object({
+      host: z.string().optional(),
+      port: z.number().optional(),
+      smtpHost: z.string().optional(),
+      smtpPort: z.number().optional(),
+      tls: z.boolean().optional(),
+    })
+    .optional(),
   google: z
     .object({
       clientId: z.string(),

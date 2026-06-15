@@ -468,6 +468,7 @@ export class AgentManager {
     this.emailManager = new EmailManager({
       agentsDir: this.agentsDir,
       oauthApp: config.email,
+      imapDefaults: config.email.imap,
       resolveAccount: (id) => this.agentStore.get(id)?.email,
     });
     bindEmail({ manager: this.emailManager });

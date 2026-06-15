@@ -108,17 +108,32 @@ async function loginImap(
   agentId: string,
   def: AgentDefinition
 ): Promise<void> {
+  // Global defaults (config.email.imap) — blank prompts inherit these.
+  const d = c.config.email.imap;
   const address = await ask("Email address", { placeholder: "agent@example.com" });
   if (address === null || !address) return;
-  const host = await ask("IMAP host", { placeholder: "imap.example.com" });
-  if (host === null || !host) return;
-  const port = await ask("IMAP port", { defaultValue: "993", placeholder: "993" });
+  const host = await ask("IMAP host", {
+    placeholder: d?.host ? `inherits ${d.host}` : "imap.example.com",
+  });
+  if (host === null) return;
+  if (!host && !d?.host) {
+    p.cancel("IMAP host is required (no global config.email.imap.host default).");
+    process.exitCode = 1;
+    return;
+  }
+  const port = await ask("IMAP port", {
+    placeholder: d?.port ? `inherits ${d.port}` : "993",
+  });
   if (port === null) return;
-  const user = await ask("Login user", { defaultValue: address, placeholder: address });
+  const user = await ask("Login user (optional)", { placeholder: address });
   if (user === null) return;
-  const smtpHost = await ask("SMTP host", { defaultValue: host, placeholder: host });
+  const smtpHost = await ask("SMTP host (optional)", {
+    placeholder: d?.smtpHost ? `inherits ${d.smtpHost}` : "defaults to IMAP host",
+  });
   if (smtpHost === null) return;
-  const smtpPort = await ask("SMTP port", { defaultValue: "587", placeholder: "587" });
+  const smtpPort = await ask("SMTP port", {
+    placeholder: d?.smtpPort ? `inherits ${d.smtpPort}` : "587",
+  });
   if (smtpPort === null) return;
   const password = await p.password({ message: "App password" });
   if (p.isCancel(password)) {
@@ -126,16 +141,13 @@ async function loginImap(
     return;
   }
 
-  const email: AgentEmail = {
-    provider: "imap",
-    address,
-    host,
-    port: Number(port) || 993,
-    user: user || address,
-    smtpHost: smtpHost || host,
-    smtpPort: Number(smtpPort) || 587,
-    tls: true,
-  };
+  // Write only what was entered — omitted fields inherit config.email.imap.
+  const email: AgentEmail = { provider: "imap", address };
+  if (host) email.host = host;
+  if (user) email.user = user;
+  if (smtpHost) email.smtpHost = smtpHost;
+  if (port) email.port = Number(port);
+  if (smtpPort) email.smtpPort = Number(smtpPort);
   c.agents.upsert(boundDef(def, email));
   writeEmailCredentials(c.agentsDir, agentId, {
     version: 1,
