@@ -184,7 +184,7 @@ export class AgentManager {
    *  tools. Lazy: nothing spawns until the first such tool call. */
   readonly toolHostManager: ToolHostManager;
   readonly browserManager: BrowserManager;
-  readonly emailManager: EmailManager;
+  emailManager: EmailManager;
   readonly agentCatalog: AgentCatalog;
   /** In-memory per-session pub/sub for SSE clients. Shared by scheduler,
    *  agent runtime, and the home + per-session stream routes. */
@@ -465,13 +465,8 @@ export class AgentManager {
     // The provider is selected per-agent, so agent A can be on Gmail while
     // agent B is on IMAP. Bound via the same placeholder pattern so
     // @openacme/tools stays free of a runtime dep on @openacme/email.
-    this.emailManager = new EmailManager({
-      agentsDir: this.agentsDir,
-      oauthApp: config.email,
-      imapDefaults: config.email.imap,
-      resolveAccount: (id) => this.agentStore.get(id)?.email,
-    });
-    bindEmail({ manager: this.emailManager });
+    // Rebuilt on reloadConfig so global email settings apply without restart.
+    this.emailManager = this.buildEmailManager();
 
     // Per-agent tool-host workers: worker-runtime tools (filesystem,
     // shell, exec, process) route here instead of running in the daemon.
@@ -1796,6 +1791,21 @@ export class AgentManager {
   reloadConfig(): void {
     this.config = loadConfig(this.config.dataDir);
     this.agents.clear();
+    // Rebuild + re-bind email so global email settings (IMAP defaults, OAuth
+    // app creds) apply without a process restart.
+    this.emailManager = this.buildEmailManager();
+  }
+
+  /** Build the EmailManager from current config + re-bind it for the tools. */
+  private buildEmailManager(): EmailManager {
+    const mgr = new EmailManager({
+      agentsDir: this.agentsDir,
+      oauthApp: this.config.email,
+      imapDefaults: this.config.email.imap,
+      resolveAccount: (id) => this.agentStore.get(id)?.email,
+    });
+    bindEmail({ manager: mgr });
+    return mgr;
   }
 
   private createAgentFromDef(def: AgentDefinition): Agent {

@@ -1,5 +1,10 @@
 import type { Hono } from "hono";
-import { reachableBaseUrl, type Config } from "@openacme/config";
+import {
+  reachableBaseUrl,
+  readRawConfig,
+  writeRawConfig,
+  type Config,
+} from "@openacme/config";
 import {
   buildGoogleAuthorizeUrl,
   exchangeGoogleCode,
@@ -63,19 +68,110 @@ export function registerEmailRoutes(
   const bindTools = (tools: string[]): string[] =>
     Array.from(new Set([...tools, ...EMAIL_TOOL_NAMES]));
 
+  // Read the global email config fresh from disk every time, so saves in
+  // Settings → Email are reflected immediately without a process restart
+  // (the captured `config` snapshot would go stale).
+  interface EmailCfgRaw {
+    imap?: {
+      host?: string;
+      port?: number;
+      smtpHost?: string;
+      smtpPort?: number;
+      tls?: boolean;
+    };
+    google?: { clientId?: string; clientSecret?: string };
+    microsoft?: { clientId?: string; clientSecret?: string; tenant?: string };
+  }
+  const liveEmail = (): EmailCfgRaw =>
+    (readRawConfig(config.dataDir).email as EmailCfgRaw | undefined) ?? {};
+
+  // ── Global email config (Settings → Email) ──
+  // Workforce-wide: IMAP connection defaults + BYO OAuth app credentials.
+  // Secrets are write-only over the wire (GET returns `configured`, never the
+  // secret). Takes effect on next restart, like the model-config tab.
+  app.get("/api/email/config", (c) => {
+    const raw = readRawConfig(config.dataDir);
+    const e = (raw.email as Record<string, unknown> | undefined) ?? {};
+    const g = (e.google as Record<string, unknown> | undefined) ?? {};
+    const m = (e.microsoft as Record<string, unknown> | undefined) ?? {};
+    return c.json({
+      imap: e.imap ?? null,
+      google: { clientId: g.clientId ?? "", configured: !!g.clientSecret },
+      microsoft: {
+        clientId: m.clientId ?? "",
+        tenant: m.tenant ?? "",
+        configured: !!m.clientSecret,
+      },
+    });
+  });
+
+  app.post("/api/email/config", async (c) => {
+    let body: {
+      imap?: Record<string, unknown> | null;
+      google?: { clientId?: string; clientSecret?: string };
+      microsoft?: { clientId?: string; clientSecret?: string; tenant?: string };
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const raw = readRawConfig(config.dataDir);
+    const existing = (raw.email as Record<string, unknown> | undefined) ?? {};
+    const next: Record<string, unknown> = { ...existing };
+
+    if (body.imap !== undefined) {
+      const src = body.imap ?? {};
+      const imap: Record<string, unknown> = {};
+      if (src.host) imap.host = String(src.host);
+      if (src.port) imap.port = Number(src.port);
+      if (src.smtpHost) imap.smtpHost = String(src.smtpHost);
+      if (src.smtpPort) imap.smtpPort = Number(src.smtpPort);
+      if (typeof src.tls === "boolean") imap.tls = src.tls;
+      if (Object.keys(imap).length) next.imap = imap;
+      else delete next.imap;
+    }
+
+    for (const prov of ["google", "microsoft"] as const) {
+      const src = body[prov];
+      if (src === undefined) continue;
+      const cur = (existing[prov] as Record<string, unknown> | undefined) ?? {};
+      const merged: Record<string, unknown> = { ...cur };
+      if (src.clientId !== undefined) merged.clientId = src.clientId.trim();
+      // Secret is only overwritten when a non-empty value is supplied, so the
+      // form can save clientId/tenant without re-entering the secret.
+      if (src.clientSecret) merged.clientSecret = src.clientSecret;
+      if (prov === "microsoft") {
+        const tenant = (src as { tenant?: string }).tenant;
+        if (tenant !== undefined) {
+          if (tenant.trim()) merged.tenant = tenant.trim();
+          else delete merged.tenant;
+        }
+      }
+      if (!merged.clientId && !merged.clientSecret) delete next[prov];
+      else next[prov] = merged;
+    }
+
+    writeRawConfig(config.dataDir, { ...raw, email: next });
+    // Rebuild the EmailManager + refresh config so it applies live.
+    manager.reloadConfig();
+    return c.json({ ok: true });
+  });
+
   // Current binding + credential state for an agent (no secrets).
   app.get("/api/agents/:id/email", (c) => {
     const id = c.req.param("id");
     const def = manager.agentStore.get(id);
     if (!def) return c.json({ error: "Agent not found" }, 404);
     const creds = readEmailCredentials(manager.agentsDir, id);
+    const e = liveEmail();
     return c.json({
       email: def.email ?? null,
       redirectUri: redirectUri(),
-      imapDefaults: config.email.imap ?? null,
+      imapDefaults: e.imap ?? null,
       oauthApps: {
-        google: !!config.email.google,
-        microsoft: !!config.email.microsoft,
+        google: !!e.google?.clientSecret,
+        microsoft: !!e.microsoft?.clientSecret,
       },
       status: creds
         ? {
@@ -105,7 +201,7 @@ export function registerEmailRoutes(
     if (!address || !password) {
       return c.json({ error: "address and password are required" }, 400);
     }
-    if (!host && !config.email.imap?.host) {
+    if (!host && !liveEmail().imap?.host) {
       return c.json(
         { error: "host is required (no global config.email.imap.host default set)" },
         400
@@ -154,9 +250,9 @@ export function registerEmailRoutes(
     if (provider !== "gmail" && provider !== "microsoft") {
       return c.json({ error: "Unknown provider" }, 400);
     }
-    const appCreds =
-      provider === "gmail" ? config.email.google : config.email.microsoft;
-    if (!appCreds) {
+    const e = liveEmail();
+    const appCreds = provider === "gmail" ? e.google : e.microsoft;
+    if (!appCreds?.clientId || !appCreds?.clientSecret) {
       return c.json(
         {
           error: `config.email.${provider} { clientId, clientSecret } is not set — add your BYO OAuth app first.`,
@@ -185,7 +281,7 @@ export function registerEmailRoutes(
             scopes: GRAPH_OAUTH_SCOPES,
             challenge,
             state,
-            tenant: config.email.microsoft?.tenant,
+            tenant: e.microsoft?.tenant,
           });
     return c.json({ authUrl });
   });
@@ -203,9 +299,9 @@ export function registerEmailRoutes(
     }
     pending.delete(state);
     try {
-      const appCreds =
-        pend.provider === "gmail" ? config.email.google : config.email.microsoft;
-      if (!appCreds) {
+      const e = liveEmail();
+      const appCreds = pend.provider === "gmail" ? e.google : e.microsoft;
+      if (!appCreds?.clientId || !appCreds?.clientSecret) {
         return c.html(resultPage(false, `config.email.${pend.provider} is no longer set.`));
       }
       const tokens =
@@ -224,7 +320,7 @@ export function registerEmailRoutes(
               verifier: pend.verifier,
               redirectUri: redirectUri(),
               scopes: GRAPH_OAUTH_SCOPES,
-              tenant: config.email.microsoft?.tenant,
+              tenant: e.microsoft?.tenant,
             });
       const def = manager.agentStore.get(pend.agentId);
       if (!def) return c.html(resultPage(false, "Agent no longer exists."));

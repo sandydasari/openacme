@@ -11,9 +11,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/components/ui/select";
+import { Mail } from "lucide-react";
+import { GoogleIcon, MicrosoftIcon } from "@/app/components/BrandIcons";
 import { API_BASE } from "../lib/api";
 
 type Provider = "imap" | "gmail" | "microsoft";
+
+function ProviderIcon({ provider, className }: { provider: string; className?: string }) {
+  if (provider === "gmail") return <GoogleIcon className={className} />;
+  if (provider === "microsoft") return <MicrosoftIcon className={className} />;
+  return <Mail className={className} />;
+}
 
 interface EmailStatus {
   email: { provider: Provider; address: string } | null;
@@ -53,6 +61,9 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
   // When bound, the connect/re-bind form is collapsed behind "Change". When
   // unbound, the form is shown directly (it's the connect flow).
   const [changing, setChanging] = useState(false);
+  // When a global IMAP default exists, default to using it (form asks only for
+  // address + password); unchecking reveals the per-agent connection override.
+  const [useGlobalImap, setUseGlobalImap] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -94,21 +105,28 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
 
   const connectImap = async () => {
     setBusy(true);
+    const useWorkforce = !!data?.imapDefaults?.host && useGlobalImap;
     try {
       const res = await fetch(
         `${API_BASE}/api/agents/${encodeURIComponent(agentId)}/email/imap`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // Send only filled fields — blanks inherit the global default.
+          // Send only filled fields — blanks inherit the global default. When
+          // "use workforce server" is on, send no connection fields at all so
+          // the agent fully inherits config.email.imap.
           body: JSON.stringify({
             address: imap.address,
             password: imap.password,
-            ...(imap.host ? { host: imap.host } : {}),
-            ...(imap.user ? { user: imap.user } : {}),
-            ...(imap.smtpHost ? { smtpHost: imap.smtpHost } : {}),
-            ...(imap.port ? { port: Number(imap.port) } : {}),
-            ...(imap.smtpPort ? { smtpPort: Number(imap.smtpPort) } : {}),
+            ...(useWorkforce
+              ? {}
+              : {
+                  ...(imap.host ? { host: imap.host } : {}),
+                  ...(imap.user ? { user: imap.user } : {}),
+                  ...(imap.smtpHost ? { smtpHost: imap.smtpHost } : {}),
+                  ...(imap.port ? { port: Number(imap.port) } : {}),
+                  ...(imap.smtpPort ? { smtpPort: Number(imap.smtpPort) } : {}),
+                }),
           }),
         }
       );
@@ -169,39 +187,43 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
   const set = (k: keyof typeof blankImap) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setImap((s) => ({ ...s, [k]: e.target.value }));
 
+  const providerLabel =
+    provider === "gmail" ? "Gmail" : provider === "microsoft" ? "Microsoft" : "IMAP";
+
   return (
     <section className="grid gap-3">
       <div className="flex items-center justify-between">
-        <Label>
-          Email mailbox
-          <span className="ml-2 font-normal text-ink-faint">a dedicated address for this agent</span>
-        </Label>
-        {bound && (
-          <Badge variant="secondary">Connected</Badge>
-        )}
+        <Label>Email</Label>
+        {bound && <Badge variant="secondary">Connected</Badge>}
       </div>
+      <p className="-mt-1 text-[13px] text-ink-soft">
+        Give this agent its own mailbox — its own identity, isolated from other agents.
+        Optional.
+      </p>
 
+      {/* Connected */}
       {bound && data?.status.bound && (
         <div className="flex items-center justify-between gap-3 border border-paper-rule bg-paper-sunk/40 px-3 py-2">
-          <div className="min-w-0">
-            <div className="truncate font-mono text-[12px] text-ink">
-              {data.email?.address || data.status.account || "(bound)"}
-            </div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-              {data.email?.provider ?? data.status.kind}
-              {data.status.kind === "oauth" && data.status.expiresAt
-                ? ` · token exp ${new Date(data.status.expiresAt * 1000).toLocaleString()}`
-                : ""}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ProviderIcon
+              provider={data.email?.provider ?? ""}
+              className="size-4 shrink-0"
+            />
+            <div className="min-w-0">
+              <div className="truncate font-mono text-[12px] text-ink">
+                {data.email?.address || data.status.account || "(bound)"}
+              </div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                {data.email?.provider ?? data.status.kind}
+                {data.status.kind === "oauth" && data.status.expiresAt
+                  ? ` · token expires ${new Date(data.status.expiresAt * 1000).toLocaleDateString()}`
+                  : ""}
+              </div>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!changing && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setChanging(true)}
-                disabled={busy}
-              >
+              <Button variant="outline" size="sm" onClick={() => setChanging(true)} disabled={busy}>
                 Change
               </Button>
             )}
@@ -212,125 +234,161 @@ export function AgentEmailPanel({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {(!bound || changing) && (
-        <>
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor={`email-provider-${agentId}`}>
-                {bound ? "Re-bind / change provider" : "Connect a mailbox"}
-              </Label>
-              {bound && changing && (
-                <button
-                  type="button"
-                  onClick={() => setChanging(false)}
-                  className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint transition-colors hover:text-plot-red"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-            <Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
-          <SelectTrigger id={`email-provider-${agentId}`} className="w-full md:w-80">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="imap">IMAP / SMTP — any mailbox</SelectItem>
-            <SelectItem value="gmail">Gmail</SelectItem>
-            <SelectItem value="microsoft">Outlook / Microsoft 365</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {provider === "imap" ? (
-        <div className="grid gap-3 border border-paper-rule bg-paper-sunk/40 p-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Pair label="Email address">
-              <Input value={imap.address} onChange={set("address")} placeholder="agent@example.com" />
-            </Pair>
-            <Pair label={dflt?.host ? "IMAP host (optional)" : "IMAP host"}>
-              <Input
-                value={imap.host}
-                onChange={set("host")}
-                placeholder={dflt?.host ? `inherits ${dflt.host}` : "imap.example.com"}
-              />
-            </Pair>
-            <Pair label="IMAP port">
-              <Input
-                value={imap.port}
-                onChange={set("port")}
-                placeholder={dflt?.port ? `inherits ${dflt.port}` : "993"}
-              />
-            </Pair>
-            <Pair label="Login user (optional)">
-              <Input value={imap.user} onChange={set("user")} placeholder="defaults to address" />
-            </Pair>
-            <Pair label="SMTP host (optional)">
-              <Input
-                value={imap.smtpHost}
-                onChange={set("smtpHost")}
-                placeholder={dflt?.smtpHost ? `inherits ${dflt.smtpHost}` : "defaults to IMAP host"}
-              />
-            </Pair>
-            <Pair label="SMTP port">
-              <Input
-                value={imap.smtpPort}
-                onChange={set("smtpPort")}
-                placeholder={dflt?.smtpPort ? `inherits ${dflt.smtpPort}` : "587"}
-              />
-            </Pair>
-          </div>
-          <Pair label="App password">
-            <Input
-              type="password"
-              value={imap.password}
-              onChange={set("password")}
-              placeholder="app-specific password"
-            />
-          </Pair>
-          <div className="flex justify-end">
-            <Button
-              onClick={connectImap}
-              disabled={
-                busy || !imap.address || !imap.password || (!imap.host && !dflt?.host)
-              }
-            >
-              {bound ? "Re-bind IMAP" : "Connect IMAP"}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-3 border border-paper-rule bg-paper-sunk/40 p-4">
-          {!oauthConfigured ? (
-            <p className="text-sm text-ink-soft">
-              Add{" "}
-              <code className="font-mono text-[12px] text-ink">
-                config.email.{provider === "gmail" ? "google" : "microsoft"}
-              </code>{" "}
-              {"{ clientId, clientSecret }"} (your own OAuth app) to config.yaml, then reload this
-              page.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-ink-soft">
-                Register this redirect URI in your{" "}
-                {provider === "gmail" ? "Google" : "Microsoft"} OAuth app:
-              </p>
-              <code className="block break-all border border-paper-rule bg-paper px-2 py-1 font-mono text-[12px] text-ink">
-                {data?.redirectUri ?? "…"}
-              </code>
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => connectOAuth(provider as "gmail" | "microsoft")}
-                  disabled={busy}
-                >
-                  Connect {provider === "gmail" ? "Gmail" : "Microsoft"}
-                </Button>
-              </div>
-            </>
-          )}
+      {/* Unbound, idle → compact opt-in (no big form until the user asks) */}
+      {!bound && !changing && (
+        <div className="flex items-center justify-between gap-3 border border-paper-rule bg-paper-sunk/40 px-3 py-2">
+          <span className="text-[13px] text-ink-soft">No mailbox connected.</span>
+          <Button size="sm" onClick={() => setChanging(true)}>
+            Set up email
+          </Button>
         </div>
       )}
-        </>
+
+      {/* Setup / re-bind form */}
+      {changing && (
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor={`email-provider-${agentId}`}>Provider</Label>
+            <button
+              type="button"
+              onClick={() => setChanging(false)}
+              className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint transition-colors hover:text-plot-red"
+            >
+              Cancel
+            </button>
+          </div>
+          <Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
+            <SelectTrigger id={`email-provider-${agentId}`} className="w-full md:w-80">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="imap">
+                <span className="flex items-center gap-2">
+                  <Mail className="size-4 text-ink-soft" /> IMAP / SMTP — any mailbox
+                </span>
+              </SelectItem>
+              <SelectItem value="gmail">
+                <span className="flex items-center gap-2">
+                  <GoogleIcon className="size-4" /> Gmail
+                </span>
+              </SelectItem>
+              <SelectItem value="microsoft">
+                <span className="flex items-center gap-2">
+                  <MicrosoftIcon className="size-4" /> Outlook / Microsoft 365
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {provider === "imap" ? (
+            <div className="grid gap-3 border border-paper-rule bg-paper-sunk/40 p-4">
+              {dflt?.host && (
+                <label className="flex items-center gap-2 text-[13px] text-ink-soft">
+                  <input
+                    type="checkbox"
+                    checked={useGlobalImap}
+                    onChange={(e) => setUseGlobalImap(e.target.checked)}
+                    className="accent-plot-red"
+                  />
+                  Use the workforce mail server
+                  <span className="font-mono text-[11px] text-ink-faint">
+                    {dflt.host}
+                    {dflt.port ? `:${dflt.port}` : ""}
+                  </span>
+                </label>
+              )}
+              <div className="grid gap-3 md:grid-cols-2">
+                <Pair label="Email address">
+                  <Input value={imap.address} onChange={set("address")} placeholder="agent@example.com" />
+                </Pair>
+                {!(dflt?.host && useGlobalImap) && (
+                  <>
+                    <Pair label={dflt?.host ? "IMAP host (optional)" : "IMAP host"}>
+                      <Input
+                        value={imap.host}
+                        onChange={set("host")}
+                        placeholder={dflt?.host ? `inherits ${dflt.host}` : "imap.example.com"}
+                      />
+                    </Pair>
+                    <Pair label="IMAP port">
+                      <Input
+                        value={imap.port}
+                        onChange={set("port")}
+                        placeholder={dflt?.port ? `inherits ${dflt.port}` : "993"}
+                      />
+                    </Pair>
+                    <Pair label="Login user (optional)">
+                      <Input value={imap.user} onChange={set("user")} placeholder="defaults to address" />
+                    </Pair>
+                    <Pair label="SMTP host (optional)">
+                      <Input
+                        value={imap.smtpHost}
+                        onChange={set("smtpHost")}
+                        placeholder={dflt?.smtpHost ? `inherits ${dflt.smtpHost}` : "defaults to IMAP host"}
+                      />
+                    </Pair>
+                    <Pair label="SMTP port">
+                      <Input
+                        value={imap.smtpPort}
+                        onChange={set("smtpPort")}
+                        placeholder={dflt?.smtpPort ? `inherits ${dflt.smtpPort}` : "587"}
+                      />
+                    </Pair>
+                  </>
+                )}
+              </div>
+              <Pair label="App password">
+                <Input
+                  type="password"
+                  value={imap.password}
+                  onChange={set("password")}
+                  placeholder="app-specific password"
+                />
+              </Pair>
+              <div className="flex justify-end">
+                <Button
+                  onClick={connectImap}
+                  disabled={busy || !imap.address || !imap.password || (!imap.host && !dflt?.host)}
+                >
+                  {bound ? "Re-bind" : "Connect"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 border border-paper-rule bg-paper-sunk/40 p-4">
+              {!oauthConfigured ? (
+                <p className="text-[13px] text-ink-soft">
+                  No {providerLabel} OAuth app is set up yet.{" "}
+                  <a
+                    href="/settings?tab=email"
+                    className="text-plot-red underline-offset-2 hover:underline"
+                  >
+                    Add it in Settings → Email
+                  </a>
+                  , then come back.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[13px] text-ink-soft">
+                    Register this redirect URI in your {providerLabel} OAuth app
+                    (also in Settings → Email):
+                  </p>
+                  <code className="block break-all border border-paper-rule bg-paper px-2 py-1 font-mono text-[12px] text-ink">
+                    {data?.redirectUri ?? "…"}
+                  </code>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => connectOAuth(provider as "gmail" | "microsoft")}
+                      disabled={busy}
+                    >
+                      Connect {providerLabel}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </section>
   );

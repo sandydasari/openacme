@@ -11,7 +11,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Users,
-  LifeBuoy,
+  BookText,
+  ArrowUpRight,
 } from "lucide-react";
 import { DOCS_URL } from "@/app/lib/links";
 import { cn } from "@/app/lib/utils";
@@ -192,6 +193,33 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
           {children}
         </div>
 
+        {/* Documentation — a labeled nav-style row directly above the bottom
+            bar (external link, opens the docs site). */}
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noreferrer"
+          title={collapsed ? "Documentation" : undefined}
+          className={cn(
+            "group relative flex items-center gap-3 border-t border-paper-rule text-sm transition-colors",
+            "px-4 py-3 md:py-2",
+            collapsed && "md:justify-center md:px-0 md:py-2.5",
+            "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          )}
+        >
+          <BookText className="size-4 shrink-0" />
+          <span className={cn("font-medium", collapsed ? "md:hidden" : "")}>
+            Documentation
+          </span>
+          <ArrowUpRight
+            className={cn(
+              "size-3.5 shrink-0 text-ink-faint transition-colors group-hover:text-ink",
+              collapsed ? "md:hidden" : "ml-auto"
+            )}
+            aria-hidden
+          />
+        </a>
+
         <div
           className={cn(
             "flex items-center border-t border-paper-rule",
@@ -215,19 +243,6 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
               collapsed ? "md:flex-col" : ""
             )}
           >
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noreferrer"
-              title="Documentation"
-              aria-label="Documentation"
-              className={cn(
-                "flex items-center justify-center text-ink-soft transition-colors hover:text-ink focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-plot-red",
-                collapsed ? "px-1 md:size-6 md:px-0" : "px-1"
-              )}
-            >
-              <LifeBuoy className="size-3.5 shrink-0" aria-hidden />
-            </a>
             <button
               type="button"
               onClick={() =>
@@ -251,7 +266,7 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
                 K
               </span>
             </button>
-            <ThemeToggle compact={collapsed} />
+            <ThemeToggle compact />
           </div>
         </div>
       </aside>
