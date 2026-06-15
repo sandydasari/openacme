@@ -544,10 +544,7 @@ export class AgentManager {
 
     // Load skills
     this.skillRegistry = new SkillRegistry();
-    const skillsDir = path.isAbsolute(config.skills.directory)
-      ? config.skills.directory
-      : path.join(config.dataDir, config.skills.directory);
-    this.skillRegistry.loadFromDirectory(skillsDir);
+    this.skillRegistry.loadFromDirectory(this.resolveSkillsDir());
     if (this.skillRegistry.size > 0) {
       console.log(`  📚 Loaded ${this.skillRegistry.size} skills`);
     }
@@ -1779,6 +1776,23 @@ export class AgentManager {
   setAgentsMd(content: string): void {
     writeAgentsMd(this.config.dataDir, content);
     this.agentsMd = readAgentsMd(this.config.dataDir);
+    this.agents.clear();
+  }
+
+  /** Resolve the skills directory (absolute, or relative to dataDir). */
+  private resolveSkillsDir(): string {
+    return path.isAbsolute(this.config.skills.directory)
+      ? this.config.skills.directory
+      : path.join(this.config.dataDir, this.config.skills.directory);
+  }
+
+  /** Rescan the skills dir from disk and evict all cached Agents so the next
+   *  chat rebuilds the system-prompt skill index. The skill index is baked
+   *  into each Agent at creation (`createAgentFromDef`), so a registry rescan
+   *  alone isn't enough — eviction is what makes the change visible. Shared by
+   *  the skill routes and the config watcher. `skill_view` is already live. */
+  reloadSkills(): void {
+    this.skillRegistry.loadFromDirectory(this.resolveSkillsDir());
     this.agents.clear();
   }
 

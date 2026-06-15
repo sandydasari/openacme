@@ -957,6 +957,7 @@ export async function createApp(
         tags || [],
         skillBody || ""
       );
+      manager.reloadSkills();
       return c.json(skill, 201);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
@@ -990,6 +991,7 @@ export async function createApp(
         body.tags ?? existing.tags,
         body.body ?? existing.body
       );
+      manager.reloadSkills();
       return c.json(skill);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
@@ -1011,6 +1013,7 @@ export async function createApp(
     } catch {
       // best-effort cleanup; legacy delete already succeeded
     }
+    manager.reloadSkills();
     return c.json({ success: true });
   });
 
@@ -1077,6 +1080,7 @@ export async function createApp(
       const hub = new SkillHub(skillsDir, manager.skillRegistry);
       try {
         const result = await hub.install(staging, { source: "local" });
+        manager.reloadSkills();
         const skill = manager.skillRegistry.getSkill(result.name);
         return c.json({ success: true, name: result.name, skill }, 201);
       } catch (err) {
