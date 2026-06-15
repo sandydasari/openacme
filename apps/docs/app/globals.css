@@ -335,23 +335,26 @@ html {
 /* Fumadocs chrome → Operator's Console                                */
 /* ------------------------------------------------------------------ */
 
-/* Home nav follows the page frame: constrain its inner container to the
-   same max-w-6xl (72rem) the landing uses and run the vertical hairlines
-   up through it, so the two rails are continuous from the top of the
-   page. (72rem centered in the viewport lands on the same x as the
-   page's border-x.) */
-body:has(main.overflow-x-clip) #nd-nav > div > * {
+/* Nav inner is pinned to the page frame (72rem) on every HomeLayout page —
+   home, blog, changelog — so the header doesn't change width between them.
+   Docs uses a different layout with no #nd-nav, so this leaves it alone. */
+#nd-nav > div > * {
   max-width: 72rem !important;
-  border-inline: 1px solid var(--paper-rule);
   padding-inline: 0;
 }
-body:has(main.overflow-x-clip) #nd-nav nav {
+#nd-nav nav {
   padding-inline: 1.5rem;
 }
 @media (min-width: 640px) {
-  body:has(main.overflow-x-clip) #nd-nav nav {
+  #nd-nav nav {
     padding-inline: 2.5rem;
   }
+}
+
+/* Vertical hairlines run up through the nav only on the framed homepage,
+   continuing the landing's rails. Other pages keep the nav clean. */
+body:has(main.overflow-x-clip) #nd-nav > div > * {
+  border-inline: 1px solid var(--paper-rule);
 }
 
 /* Code: machine-truth surface, slightly cooler than paper-sunk. The shiki
@@ -533,6 +536,94 @@ figure.shiki pre {
   transition: color var(--duration-state) var(--ease-out-quart);
 }
 #nd-page .prose a:not([data-card]):hover {
+  color: var(--plot-red);
+  text-decoration-color: var(--plot-red);
+}
+
+/* ------------------------------------------------------------------ */
+/* Blog + changelog prose → same Operator's Console treatment as docs. */
+/* These pages render outside #nd-page, so mirror the rhythm here.     */
+/* ------------------------------------------------------------------ */
+.prose-console h2 {
+  font-size: 1.4375rem;
+  letter-spacing: -0.01em;
+  margin-top: 2.75rem;
+}
+.prose-console h3 {
+  font-size: 1.125rem;
+  margin-top: 2rem;
+}
+.prose-console p,
+.prose-console li {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+.prose-console ul {
+  list-style-type: square;
+}
+.prose-console li::marker {
+  color: var(--ink-faint);
+}
+.prose-console table {
+  font-size: 0.875rem;
+}
+.prose-console th {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-weight: 500;
+  text-align: left;
+}
+.prose-console th,
+.prose-console td {
+  border: 1px solid var(--paper-rule);
+  padding: 0.5rem 0.75rem;
+}
+.prose-console pre:not(figure.shiki pre) {
+  background-color: var(--code-surface) !important;
+  border: 1px solid var(--code-surface-rule);
+}
+
+/* Inline media — images, video, and embeds (YouTube, etc.) sit on a hairline
+   frame, full-measure, no shadow. Everything authored in the markdown body. */
+.prose-console img,
+.prose-console video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 1.75rem 0;
+  border: 1px solid var(--paper-rule);
+  background-color: var(--paper-sunk);
+}
+.prose-console iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 1.75rem 0;
+  border: 1px solid var(--paper-rule);
+}
+.prose-console figure {
+  margin: 1.75rem 0;
+}
+.prose-console figure img,
+.prose-console figure video {
+  margin: 0;
+}
+.prose-console figcaption {
+  margin-top: 0.5rem;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.prose-console a:not([data-card]) {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--paper-rule);
+  transition: color var(--duration-state) var(--ease-out-quart);
+}
+.prose-console a:not([data-card]):hover {
   color: var(--plot-red);
   text-decoration-color: var(--plot-red);
 }

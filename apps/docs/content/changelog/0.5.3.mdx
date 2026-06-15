@@ -1,0 +1,8 @@
+---
+title: v0.5.3
+version: "0.5.3"
+date: "2026-05-18"
+release: "https://github.com/sandydasari/openacme/releases/tag/%40openacme%2Fcli%400.5.3"
+---
+
+- Ship the web UI's static export in the published `@openacme/server` tarball. The package's `prepack` script already copied `apps/web/out` → `packages/server/web`, but the `files` allowlist excluded `web/`, so the static files were silently dropped from the publish. Result: every `npm install -g @openacme/cli` install loaded the API on :3210 but returned 404 on `/`. Adding `"web"` to `files` makes the published Hono daemon serve the bundled UI as documented.

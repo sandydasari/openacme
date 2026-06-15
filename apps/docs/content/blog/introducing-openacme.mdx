@@ -1,0 +1,85 @@
+---
+title: "Meet OpenAcme: an AI workforce you run yourself"
+description: "Not another chat window. OpenAcme gives you a roster of agents with names, roles, memory, and their own tools — coworkers you hand work to and walk away from."
+date: "2026-06-15"
+author: team
+tags: [launch, overview]
+---
+
+Most AI tools give you a chat box. You type, it answers, you type again. Close
+the tab and the thread is gone. OpenAcme is built around a different idea: a
+**workforce** of agents that work for you, keep their context between sessions,
+and hand results back when they're done.
+
+You're not a user here. You're in charge.
+
+## A roster, not a thread
+
+In OpenAcme, every agent is a coworker you can describe in a sentence. It has a
+**name**, a **role** (what it does, written the way you'd brief a teammate), and
+a **persona** (how it behaves). It carries its own model, tools, skills, memory,
+and workspace — independent from everyone else on the roster.
+
+That separation is the whole point. An analyst and an engineer shouldn't share
+the same browser logins, the same memory, or the same model. Each agent is its
+own thing. You add one, retire one, or swap a model without touching the rest.
+
+## Hand off work and walk away
+
+Agents don't just answer questions — they take **tasks**. You write a task the
+way you'd brief a coworker: a title and what "done" looks like. It lands on a
+shared board, and the dispatcher wakes the right agent to pick it up, usually
+within the minute.
+
+- Tasks can **recur** — a finished daily task re-opens itself for tomorrow.
+- Tasks can **depend** on each other — dependents wait their turn.
+- Results come back as **comments**, with the full event log of what happened.
+
+So you can assign three things on your way out and read the answers when you're
+back, instead of babysitting a prompt.
+
+## Everything a coworker needs
+
+A chat window with plugins isn't a coworker. An agent that gets real work done
+needs its own working setup:
+
+- **Memory** — corrections, preferences, and context saved to a Markdown file
+  per agent, carried into every future session.
+- **Skills** — teachable capabilities in Markdown. Install them from GitHub and
+  marketplaces, or write your own.
+- **A browser** — each agent gets its own browser session, with its own logins
+  and cookies. One agent's session never leaks into another's.
+- **Any model** — mix providers across the roster. Local models work too.
+- **MCP** — wire up any Model Context Protocol server; its tools show up
+  namespaced per agent or shared across the workforce.
+- **Teams** — send work to a team and the manager triages it: claim, reassign,
+  or split.
+
+## It runs where you work
+
+OpenAcme is self-hosted. There is no OpenAcme cloud sitting between you and your
+data — your prompts and files go to the model provider you chose and nowhere
+else.
+
+- **On your laptop:** install, sign in, done. Everything lives in
+  `~/.openacme` — plain Markdown and SQLite you can open, read, and back up.
+- **On a shared server:** run `openacme expose` and your whole team works with
+  the same workforce, behind one URL, with real accounts.
+
+The web console and the CLI are the same product. Anything you can do in the
+browser, you can do from the terminal — including `openacme chat`, which runs an
+agent in-process with no server at all.
+
+## Get started
+
+```bash
+npm install -g @openacme/cli && openacme setup
+```
+
+That walks you through connecting a provider — a Claude or ChatGPT subscription,
+or an API key — and you're ready to hire your first agent. The
+[Quickstart](/docs/quickstart) takes it from there.
+
+This is the first of these notes. We'll use the [blog](/blog) for design notes
+and the things we learn building this, and the [changelog](/changelog) for
+what ships. Welcome aboard.

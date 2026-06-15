@@ -1,0 +1,10 @@
+---
+title: v0.9.1
+version: "0.9.1"
+date: "2026-06-14"
+release: "https://github.com/sandydasari/openacme/releases/tag/%40openacme%2Fcli%400.9.1"
+---
+
+- [#35](https://github.com/sandydasari/openacme/pull/35) [`1582351`](https://github.com/sandydasari/openacme/commit/1582351775c726619614498fa8ec2c01e4e5f42a) Thanks [@ukanwat](https://github.com/ukanwat)! - Fix a crash when upgrading from 0.8.x: the WASM SQLite engine can't open a database left in WAL mode by the previous (better-sqlite3) engine, so the daemon failed on first query with `unable to open database file`.
+
+  `createDatabase` now detects a WAL-mode file on open and converts it in pure JS — it checkpoints the committed WAL frames into the main database, switches the header to rollback journal mode, and removes the `-wal`/`-shm` sidecars. No native code and no data loss; verified byte-for-byte against better-sqlite3's own checkpoint. The conversion is a one-time no-op for databases the WASM engine already owns.
