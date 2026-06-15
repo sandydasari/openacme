@@ -67,7 +67,10 @@ your control.
 
 For Gmail specifically, **IMAP + an app password is the quickest start** — no
 OAuth app to register. Reach for the Gmail API path when you want Gmail-native
-features or have already set up a Google app.
+features or have already set up a Google app. To create the OAuth client, see
+Google's [Create access credentials](https://developers.google.com/workspace/guides/create-credentials)
+(enable the Gmail API, then make an OAuth client ID + secret); for Microsoft,
+[Register an app with Microsoft Graph](https://learn.microsoft.com/en-us/graph/auth-register-app-v2).
 
 ## Connecting a mailbox to an agent
 
@@ -84,6 +87,23 @@ appear for that agent until it does.
 Credentials are written to the agent's own folder (`email.json`, owner-only
 permissions) — never to `config.yaml` and never shared between agents. The
 non-secret binding (provider, address) lives in the agent's `AGENT.md`.
+
+## Provider setup links
+
+The exact steps live with each provider — these are the pages you'll want:
+
+**Gmail (IMAP, quickest)**
+- [Sign in with app passwords](https://support.google.com/accounts/answer/185833) — generate the password to use in the IMAP field (requires 2-Step Verification).
+- [IMAP / SMTP server settings](https://support.google.com/mail/answer/7126229) — `imap.gmail.com:993`, `smtp.gmail.com:465`.
+
+**Gmail (API, via your OAuth app)**
+- [Create access credentials](https://developers.google.com/workspace/guides/create-credentials) — enable the Gmail API and create an OAuth client ID + secret.
+
+**Microsoft 365 / Outlook**
+- [Register an app with Microsoft Graph](https://learn.microsoft.com/en-us/graph/auth-register-app-v2) — for the Graph path (client ID + secret).
+- [Outlook POP/IMAP/SMTP settings](https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040) and [app passwords](https://support.microsoft.com/en-us/account-billing/how-to-get-and-use-app-passwords-5896ed9b-4263-e681-128a-a6f2979a7944) — for the IMAP path.
+
+**Other IMAP hosts** — e.g. [Fastmail app passwords](https://www.fastmail.com/help/clients/apppassword.html). Any host that gives you IMAP + SMTP credentials works; enter them in the agent's Email panel.
 
 ## Turning it off
 
