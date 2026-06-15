@@ -189,8 +189,8 @@ function SettingsPage() {
 
   // Default-model editor — workforce-wide root config.yaml#model. `draft` is
   // hydrated from the loaded `config.model` and pushed via PUT
-  // /api/config/model. Takes effect on next daemon restart (in-memory
-  // AgentManager snapshot doesn't refresh) — surfaced as inline hint.
+  // /api/config/model, which calls reloadConfig server-side so the change
+  // applies live (cached Agents evicted) — no restart.
   const [modelDraft, setModelDraft] = useState<ModelDefaultsView | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
 
@@ -280,7 +280,6 @@ function SettingsPage() {
   const [emailCfg, setEmailCfg] = useState<EmailConfigStatus | null>(null);
   const [emailForm, setEmailForm] = useState({ ...blankEmailForm });
   const [emailSaving, setEmailSaving] = useState(false);
-  const [emailPendingRestart, setEmailPendingRestart] = useState(false);
   const emailRedirect =
     typeof window !== "undefined"
       ? `${window.location.origin}/api/email/oauth/callback`
@@ -338,8 +337,6 @@ function SettingsPage() {
         toast.error("Failed to save email settings", { description: e.error });
         return;
       }
-      const d = (await res.json().catch(() => ({}))) as { requiresRestart?: boolean };
-      if (d?.requiresRestart) setEmailPendingRestart(true);
       toast.success("Email settings saved");
       await loadEmail();
     } catch (e) {
@@ -421,7 +418,7 @@ function SettingsPage() {
         toast.error(err?.error ?? "Failed to save default model");
         return;
       }
-      toast.success("Default model saved (restart to apply)");
+      toast.success("Default model saved");
       // Re-fetch so the editor reflects disk truth (handles server-side
       // schema-strip of fields like apiKey that we never persist).
       await loadConfig();
@@ -1433,10 +1430,6 @@ function SettingsPage() {
                           >
                             {modelSaving ? "Saving…" : "Save default model"}
                           </Button>
-                          <span className="text-[11px] text-ink-faint">
-                            Restart the daemon for changes to take effect on
-                            running agents.
-                          </span>
                         </div>
                       </div>
                     )}
@@ -2179,12 +2172,6 @@ function SettingsPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {emailPendingRestart && (
-                      <div className="border border-paper-rule bg-paper-sunk px-3 py-2 text-[13px] text-ink-soft">
-                        Saved. Restart the daemon to apply.
-                      </div>
-                    )}
-
                     <section className="space-y-3">
                       <div className="flex items-center gap-2">
                         <Mail className="size-4 text-ink-soft" />

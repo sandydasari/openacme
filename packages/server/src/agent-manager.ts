@@ -1778,22 +1778,42 @@ export class AgentManager {
   }
 
   /**
-   * Re-read `config.yaml` from disk and evict cached Agents so the next
-   * chat picks up the new model / behavior / etc. Called by setup paths
-   * (web `/api/setup/*` and `/api/keys`) after they write a top-level
-   * `model` to config so the bundled Acme agent (which inherits the
-   * platform default) reflects the just-saved provider immediately —
-   * without forcing the user to restart the daemon.
+   * Re-read `config.yaml` from disk and apply everything that can be applied
+   * live: evict cached Agents (so the next chat picks up new model / behavior,
+   * which `resolveModel` + `createAgentFromDef` read off `this.config`) and
+   * rebuild the EmailManager (global IMAP defaults + OAuth app creds). This is
+   * the canonical "apply config without restart" path — every settings-save
+   * route calls it instead of asking the user to restart.
    *
-   * Doesn't reload skills, the agent store, or MCP — those have their
-   * own refresh paths.
+   * Returns the settings that genuinely can't hot-apply (diffed old→new), so
+   * callers surface a restart prompt only for those:
+   *  - `server` — host/port is a live socket bind; can't be swapped in place.
+   *  - `browser` — BrowserManager captures the provider at construction and
+   *    holds live Chrome/cloud sessions; rebuilding mid-automation would
+   *    orphan them, so browser-config changes wait for a restart.
+   *
+   * Doesn't reload skills, the agent store, or MCP — those have their own
+   * refresh paths.
    */
-  reloadConfig(): void {
+  reloadConfig(): { restartRequired: string[] } {
+    const prev = this.config;
     this.config = loadConfig(this.config.dataDir);
     this.agents.clear();
     // Rebuild + re-bind email so global email settings (IMAP defaults, OAuth
     // app creds) apply without a process restart.
     this.emailManager = this.buildEmailManager();
+
+    const restartRequired: string[] = [];
+    if (
+      prev.server.host !== this.config.server.host ||
+      prev.server.port !== this.config.server.port
+    ) {
+      restartRequired.push("server");
+    }
+    if (JSON.stringify(prev.browser) !== JSON.stringify(this.config.browser)) {
+      restartRequired.push("browser");
+    }
+    return { restartRequired };
   }
 
   /** Build the EmailManager from current config + re-bind it for the tools. */

@@ -1173,12 +1173,22 @@ export async function createApp(
     const raw = readRawConfig(config.dataDir);
     const existing = (raw.model as Record<string, unknown> | undefined) ?? {};
     const next: Record<string, unknown> = { ...existing };
+    // Only persist keys the caller actually sent. `parsed.data` carries Zod
+    // defaults (auth, cacheTtl) for absent fields — writing those would clobber
+    // the user's on-disk values on a partial update (the setup-must-merge rule).
+    const sentKeys = new Set(Object.keys(body as Record<string, unknown>));
     for (const [k, v] of Object.entries(parsed.data)) {
-      if (v === undefined) continue;
+      if (!sentKeys.has(k) || v === undefined) continue;
       next[k] = v;
     }
     writeRawConfig(config.dataDir, { ...raw, model: next });
-    const ok: ConfigModelUpdateResponse = { ok: true, requiresRestart: true };
+    // Live-apply: reloadConfig evicts cached Agents so the next turn reads the
+    // new default off `this.config`. Model changes never need a restart.
+    const { restartRequired } = manager.reloadConfig();
+    const ok: ConfigModelUpdateResponse = {
+      ok: true,
+      requiresRestart: restartRequired.length > 0,
+    };
     return c.json(ok);
   });
 
@@ -1504,7 +1514,13 @@ export async function createApp(
     if (body.localBrowser === "camoufox" && !isCamoufoxInstalled()) {
       void prefetchCamoufox();
     }
-    return c.json({ success: true, needsRestart: true });
+    // Browser is the one global setting that can't hot-apply (live sessions);
+    // reloadConfig reports it via restartRequired so the prompt is honest.
+    const { restartRequired } = manager.reloadConfig();
+    return c.json({
+      success: true,
+      needsRestart: restartRequired.includes("browser"),
+    });
   });
 
   app.post("/api/browser/keys", async (c) => {
