@@ -51,7 +51,7 @@ re-do.
 - **`name`** — display name, any string.
 - **`role`** — third-person paragraph for coworkers (surfaced via `agent_list`). Recommended shape: what they own, what they handle well, where to redirect work that isn't theirs.
 - **`model`** — optional. Absent inherits root `config.yaml`'s `model`. Per-agent override is useful for models the agent benefits from specifically (e.g., a researcher on a long-context model).
-- **`tools`** — environment-touching tools only. System tools (`memory`, `skill_view`, `session_search`, `task_*`, `agent_list`, `ping_user`, `sleep`) are merged in automatically — do NOT list them here, they'll just be deduped.
+- **`tools`** — environment-touching tools only. System tools (`memory`, `skill_view`, `session_search`, `task_*`, `agent_list`, `ping_user`, `defer_session`) are merged in automatically — do NOT list them here, they'll just be deduped. Email tools (`email_*`) are added only for agents with a mailbox bound.
 - **`mcpServers`** — agent-private MCP servers. Names must not collide with global `mcp.json`.
 - **`mcpDisabled`** — names of global MCP servers this agent should NOT receive.
 - **`skills`** — empty/missing means "every installed skill in the workforce". Non-empty is an allowlist.

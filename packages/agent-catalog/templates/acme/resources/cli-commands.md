@@ -72,6 +72,23 @@ openacme secret show                  # access secret for non-loopback web acces
 openacme secret rotate
 ```
 
+## Per-agent email
+
+Mailboxes are per-agent and opt-in. Credentials live in the agent's
+`email.json` (0600) — never edit that file by hand; use the command or
+the web Email panel.
+
+```bash
+openacme email login <agentId>    # bind a mailbox (imap / gmail / microsoft)
+openacme email status [agentId]   # show bound provider/address + token validity
+```
+
+## Remote access
+
+```bash
+openacme expose       # bind to the network + print a reachable claim link
+```
+
 ## Setup wizard
 
 ```bash
