@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
-    "check-types": "fumadocs-mdx && next typegen && tsc --noEmit"
+    "check-types": "fumadocs-mdx && next typegen && tsc --noEmit",
+    "changelog:gen": "node scripts/generate-changelog.mjs"
   },
   "dependencies": {
     "@repo/ui": "workspace:*",

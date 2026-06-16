@@ -14,7 +14,7 @@
     "test:e2e:web": "pnpm --filter web test:e2e",
     "agent": "pnpm --filter @openacme/cli cli",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && pnpm --filter docs changelog:gen",
     "release": "turbo run build --filter='@openacme/*' && changeset publish"
   },
   "devDependencies": {

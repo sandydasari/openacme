@@ -1,0 +1,8 @@
+---
+title: v0.5.0
+version: "0.5.0"
+date: "2026-05-18"
+release: "https://github.com/sandydasari/openacme/releases/tag/%40openacme%2Fcli%400.5.0"
+---
+
+- Add `cacheTtl: "5m" | "1h"` to model config so callers can opt into Anthropic's 1-hour prompt-cache tier. Threaded into both Anthropic-cache code paths (native Anthropic via `applyAnthropicCacheControl(messages, ttl)` and OpenRouter+Claude via `injectAnthropicCacheControl(body, ttl)`). Per-agent UI in the agents page; workforce-wide default in Settings → Providers backed by new `GET /api/config` (extended) + `PUT /api/config/model`.
