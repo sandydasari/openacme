@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
-import { LoadingHairline } from "@/app/components/ui/loading-hairline";
 import { API_BASE } from "@/app/lib/api";
 import { docsUrl } from "@/app/lib/links";
 import { clearStoredAuthToken } from "./auth-fetch";

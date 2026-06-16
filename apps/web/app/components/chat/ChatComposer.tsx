@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
+import { SkillTextarea } from "@/app/components/chat/SkillTextarea";
+import type { SkillIndexEntry } from "@/app/lib/skill-mentions";
 import { cn } from "@/app/lib/utils";
 
 /** The shared chat input — used by the main chat and the ambient Acme panel so
@@ -25,6 +27,7 @@ export function ChatComposer({
   onDragOver,
   onDragLeave,
   onDrop,
+  skills,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -45,6 +48,9 @@ export function ChatComposer({
   onDragOver?: React.DragEventHandler<HTMLDivElement>;
   onDragLeave?: React.DragEventHandler<HTMLDivElement>;
   onDrop?: React.DragEventHandler<HTMLDivElement>;
+  /** When provided, the input gains `/skill` highlighting + an autocomplete
+   *  picker (main chat only; the Acme panel omits it). */
+  skills?: SkillIndexEntry[];
 }) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Don't send mid-IME-composition (Enter commits the candidate).
@@ -79,20 +85,32 @@ export function ChatComposer({
         {attachmentsBar}
         <div className="flex items-end gap-2 px-2 py-1.5">
           {attachButton}
-          <Textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            autoCapitalize="sentences"
-            autoCorrect="on"
-            spellCheck
-            enterKeyHint="send"
-            className="min-h-[44px] max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:outline-none font-sans text-base md:text-sm"
-          />
+          {skills && skills.length > 0 ? (
+            <SkillTextarea
+              value={value}
+              onChange={onChange}
+              onKeyDown={handleKeyDown}
+              skills={skills}
+              placeholder={placeholder}
+              disabled={disabled}
+              textareaRef={textareaRef}
+            />
+          ) : (
+            <Textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={1}
+              autoCapitalize="sentences"
+              autoCorrect="on"
+              spellCheck
+              enterKeyHint="send"
+              className="min-h-[44px] max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:outline-none font-sans text-base md:text-sm"
+            />
+          )}
           {isStreaming && onStop && (
             <Button
               size="icon"

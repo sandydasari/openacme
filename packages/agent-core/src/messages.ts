@@ -212,12 +212,42 @@ function materializeUiContext(messages: UIMessage[]): UIMessage[] {
   });
 }
 
+// Prepend `modelContent` from any `data-skill-ref` parts on user messages as a
+// leading text part — the SDK strips `data-*` so without this the marker never
+// reaches the model. Per-message (not latest-only): a skill referenced in an
+// earlier turn may still apply, and the marker is one short line.
+function materializeSkillRef(messages: UIMessage[]): UIMessage[] {
+  return messages.map((m) => {
+    if (m.role !== "user" || !Array.isArray(m.parts)) return m;
+    const markers: string[] = [];
+    const otherParts: UIMessage["parts"] = [];
+    for (const p of m.parts) {
+      if ((p as { type?: unknown }).type === "data-skill-ref") {
+        const content = (p as { data?: { modelContent?: unknown } }).data
+          ?.modelContent;
+        if (typeof content === "string" && content.length > 0) {
+          markers.push(content);
+        }
+      } else {
+        otherParts.push(p);
+      }
+    }
+    if (markers.length === 0) return m;
+    const leadingText = {
+      type: "text" as const,
+      text: markers.join("\n\n"),
+    } as UIMessage["parts"][number];
+    return { ...m, parts: [leadingText, ...otherParts] };
+  });
+}
+
 export async function uiToModelMessages(
   messages: UIMessage[],
   opts: { attachmentsRoot: string; tools?: ToolSet }
 ): Promise<ModelMessage[]> {
   const withRecall = materializeRecallContext(messages);
-  const withUi = materializeUiContext(withRecall);
+  const withSkills = materializeSkillRef(withRecall);
+  const withUi = materializeUiContext(withSkills);
   const inlined = inlineFileAttachments(withUi, opts.attachmentsRoot);
   const sanitized = inlined.map((m) => ({
     ...m,
@@ -226,4 +256,8 @@ export async function uiToModelMessages(
   return convertToModelMessages(sanitized, { tools: opts.tools });
 }
 
-export const __test = { materializeRecallContext, materializeUiContext };
+export const __test = {
+  materializeRecallContext,
+  materializeUiContext,
+  materializeSkillRef,
+};
