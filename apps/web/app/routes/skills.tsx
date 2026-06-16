@@ -16,6 +16,7 @@ import { ActiveMarker } from "@/app/components/ui/active-marker";
 import { toast } from "sonner";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
@@ -94,6 +95,19 @@ function SkillsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  usePublishCurrentView(
+    useMemo(
+      () => ({
+        page: "/skills",
+        entityType: "skill" as const,
+        entityId: isCreating ? null : selectedSkill?.name ?? null,
+        tab: activeTab,
+        content: isCreating ? formData : selectedSkill,
+      }),
+      [selectedSkill, isCreating, formData, activeTab]
+    )
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();

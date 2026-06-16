@@ -169,12 +169,56 @@ function materializeRecallContext(messages: UIMessage[]): UIMessage[] {
   });
 }
 
+// Materialize the ambient-Acme view snapshot (`data-ui-context`). Unlike
+// recall, only the LATEST user message's snapshot reaches the model — the view
+// is "where the user is right now"; replaying an older snapshot would mislead
+// (Acme may have edited it since) and bloat the turn. The part is stripped from
+// every message either way (the SDK drops `data-*` anyway; this also keeps the
+// stale snapshots out before conversion).
+function materializeUiContext(messages: UIMessage[]): UIMessage[] {
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  return messages.map((m, i) => {
+    if (!Array.isArray(m.parts)) return m;
+    const hasUiCtx = m.parts.some(
+      (p) => (p as { type?: unknown }).type === "data-ui-context"
+    );
+    if (!hasUiCtx) return m;
+    const otherParts = m.parts.filter(
+      (p) => (p as { type?: unknown }).type !== "data-ui-context"
+    );
+    if (i === lastUserIdx) {
+      const texts: string[] = [];
+      for (const p of m.parts) {
+        if ((p as { type?: unknown }).type !== "data-ui-context") continue;
+        const content = (p as { data?: { modelContent?: unknown } }).data
+          ?.modelContent;
+        if (typeof content === "string" && content.length > 0) texts.push(content);
+      }
+      if (texts.length > 0) {
+        const leadingText = {
+          type: "text" as const,
+          text: texts.join("\n\n"),
+        } as UIMessage["parts"][number];
+        return { ...m, parts: [leadingText, ...otherParts] };
+      }
+    }
+    return { ...m, parts: otherParts };
+  });
+}
+
 export async function uiToModelMessages(
   messages: UIMessage[],
   opts: { attachmentsRoot: string; tools?: ToolSet }
 ): Promise<ModelMessage[]> {
   const withRecall = materializeRecallContext(messages);
-  const inlined = inlineFileAttachments(withRecall, opts.attachmentsRoot);
+  const withUi = materializeUiContext(withRecall);
+  const inlined = inlineFileAttachments(withUi, opts.attachmentsRoot);
   const sanitized = inlined.map((m) => ({
     ...m,
     parts: ensureStepBoundaries(finalizeOrphanToolParts(m.parts)),
@@ -182,4 +226,4 @@ export async function uiToModelMessages(
   return convertToModelMessages(sanitized, { tools: opts.tools });
 }
 
-export const __test = { materializeRecallContext };
+export const __test = { materializeRecallContext, materializeUiContext };

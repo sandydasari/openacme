@@ -17,6 +17,16 @@ function realpathSafe(p: string): string {
   }
 }
 
+/** Resolve a `paths` grant entry: `~` → home, absolute → literal, and a
+ *  bare relative path → under dataDir. The last case lets platform grants
+ *  (`mcp.json`, `agents`, `AGENTS.md`) be expressed in a static template
+ *  without knowing the install's dataDir or the process CWD. */
+function resolveGrantPath(p: string, dataDir: string): string {
+  if (p === "~" || p.startsWith("~/")) return path.join(os.homedir(), p.slice(1));
+  if (path.isAbsolute(p)) return p;
+  return path.join(dataDir, p);
+}
+
 /**
  * Per-agent filesystem access policy — the single source of truth for
  * what an agent's tool-host may touch. Compiled from human-edited state
@@ -31,9 +41,17 @@ function realpathSafe(p: string): string {
  *   - `denyRead`: secrets and other agents' minds (memory / sessions),
  *     credential dirs.
  *
- * srt semantics note: `denyWrite` takes precedence over `allowWrite`,
- * so protected entries must be precise paths — there is no
- * allow-within-deny.
+ * Two tiers of protection. HARD denies — secrets (auth/.env/tokens/db),
+ * coworkers' minds + mailbox, and the agent's own AGENT.md — are
+ * inviolable. SOFT denies — platform config surfaces (config.yaml /
+ * mcp.json), AGENTS.md, coworkers' dirs, team rooms — can be re-opened by
+ * an explicit per-agent `paths` grant in AGENT.md (this is how the Acme
+ * platform agent gets admin write access: it grants the config surfaces;
+ * no special flag). A grant never touches a hard deny.
+ *
+ * srt semantics note: `denyWrite` takes precedence over `allowWrite`, so
+ * there is no allow-within-deny — a grant works by SUBTRACTING covered
+ * entries from the soft-deny list, not by adding an allow.
  *
  * All paths are literal directory subpaths or files — never globs.
  * srt's glob support is macOS-only; literals behave identically through
@@ -47,6 +65,10 @@ export interface PathPolicy {
   denyWrite: string[];
   /** Paths whose reads are denied (secrets, platform state, others' minds). */
   denyRead: string[];
+  /** Paths to re-open for reads (srt `allowRead` punches holes in denyRead).
+   *  Only grants that don't overlap a hard deny — so a broad grant can never
+   *  re-expose a secret or a coworker's mind. */
+  readAllow: string[];
   /** Structured context for rendering the prompt's `## Access` section. */
   notes: {
     workspaceDir: string;
@@ -98,74 +120,103 @@ export function compilePolicy(opts: {
   );
   const memberTeamIds = new Set(memberTeams.map((t) => t.id));
 
-  // Platform state + secrets — protected from both reads and writes.
-  const platformFiles = [
+  const others = agentDefs.filter((a) => a.id !== agentId);
+  const homeCreds = HOME_CREDENTIAL_DIRS.map((p) => path.join(os.homedir(), p));
+
+  // ── HARD denies — inviolable. An agent's `paths` grant can re-open the
+  // SOFT denies below, but NEVER these: secrets, coworkers' minds + mailbox,
+  // and the agent's own AGENT.md (writable would be self-escalation — it
+  // carries the agent's own grants).
+  const secretFiles = [
     path.join(dataDir, "auth.json"),
     path.join(dataDir, "state.db"),
     path.join(dataDir, "state.db-wal"),
     path.join(dataDir, "state.db-shm"),
-    path.join(dataDir, "config.yaml"),
-    path.join(dataDir, "config.json"),
-    path.join(dataDir, "mcp.json"),
     path.join(dataDir, "mcp-tokens"),
     path.join(dataDir, ".env"),
     path.join(dataDir, "push-vapid.json"),
   ];
-
-  const denyRead: string[] = [
-    ...platformFiles,
-    // Other agents' minds and session artifacts. Their workspace/ and
-    // resources/ stay readable (open-office posture). Caveat: their
-    // AGENT.md also stays readable and may carry mcpServers env values —
-    // future hardening could deny <other>/AGENT.md too.
-    ...agentDefs
-      .filter((a) => a.id !== agentId)
-      .flatMap((a) => [
-        path.join(agentsDir, a.id, "memory"),
-        path.join(agentsDir, a.id, "sessions"),
-        path.join(agentsDir, a.id, "browser-profiles"),
-      ]),
-    ...HOME_CREDENTIAL_DIRS.map((p) => path.join(os.homedir(), p)),
+  const othersPrivate = others.flatMap((a) => [
+    path.join(agentsDir, a.id, "memory"),
+    path.join(agentsDir, a.id, "sessions"),
+    path.join(agentsDir, a.id, "browser-profiles"),
+    path.join(agentsDir, a.id, "email.json"),
+  ]);
+  const hardDenyRead = [...secretFiles, ...othersPrivate, ...homeCreds];
+  const hardDenyWrite = [
+    ...secretFiles,
+    ...othersPrivate,
+    ...homeCreds,
+    path.join(agentDir, "AGENT.md"),
   ];
 
-  const denyWrite: string[] = [
-    ...platformFiles,
-    // Workforce-wide shared context — human-owned, injected into every
-    // agent's prompt.
+  // ── SOFT denies — default-protected, but an explicit `paths` grant can
+  // re-open the entries it covers (this is how Acme gets platform-admin
+  // write access: its AGENT.md grants `agents`, `AGENTS.md`, `mcp.json`,
+  // `config.yaml` — no special flag, just data).
+  const configSurfaces = [
+    path.join(dataDir, "config.yaml"),
+    path.join(dataDir, "config.json"),
+    path.join(dataDir, "mcp.json"),
+  ];
+  const softDenyRead = [...configSurfaces];
+  const softDenyWrite = [
+    ...configSurfaces,
     path.join(dataDir, "AGENTS.md"),
-    // Identity files are human-owned. Own AGENT.md included: it carries
-    // the agent's grants and persona, so writing it would be
-    // self-escalation. Charters likewise (they inject into members'
-    // prompts — agent-writable would be cross-agent prompt injection).
-    path.join(agentDir, "AGENT.md"),
-    // Coworkers' directories: readable (minus minds), never writable.
-    ...agentDefs
-      .filter((a) => a.id !== agentId)
-      .map((a) => path.join(agentsDir, a.id)),
-    // Teams: member rooms are co-owned (writable) but the charter is
-    // not; rooms of teams the agent isn't on — and archived teams —
-    // are read-only entirely.
+    // Coworkers' AGENT.md + resources + workspace (minds/mailbox stay hard-
+    // denied above). Default-denied; an `agents` rw grant re-opens them.
+    ...others.map((a) => path.join(agentsDir, a.id)),
+    // Teams: member rooms co-owned (writable) but charter isn't; non-member
+    // and archived team rooms are read-only entirely.
     ...teams.map((t) =>
       memberTeamIds.has(t.id)
         ? path.join(teamsDir, t.id, "TEAM.md")
         : path.join(teamsDir, t.id)
     ),
-    ...HOME_CREDENTIAL_DIRS.map((p) => path.join(os.homedir(), p)),
   ];
 
-  // Per-agent extra grants from AGENT.md frontmatter (human-edited).
-  // With writes open by default these mostly matter as `ro` re-allows
-  // under denied subtrees; `rw` entries are kept for forward-compat.
-  const extraGrants = (self?.paths ?? []).map((g) => ({
-    path: path.resolve(g.path.replace(/^~(?=\/|$)/, os.homedir())),
+  // Per-agent grants from AGENT.md frontmatter (human-edited only — an agent
+  // can't expand its own footprint at runtime). `rw` re-opens writes + reads;
+  // `ro` re-opens reads. A grant covers a soft-deny D if D === grant or D is
+  // under grant. Hard denies are never removed.
+  const grants = (self?.paths ?? []).map((g) => ({
+    path: realpathSafe(resolveGrantPath(g.path, dataDir)),
     access: g.access,
   }));
+  const rwGrants = grants.filter((g) => g.access === "rw").map((g) => g.path);
+  const readGrants = grants.map((g) => g.path);
+  const coveredBy = (d: string, grantPaths: string[]) =>
+    grantPaths.some((g) => d === g || d.startsWith(g + path.sep));
+
+  const hardReadResolved = hardDenyRead.map(realpathSafe);
+  const denyWrite = [
+    ...hardDenyWrite.map(realpathSafe),
+    ...softDenyWrite.map(realpathSafe).filter((d) => !coveredBy(d, rwGrants)),
+  ];
+  const denyRead = [
+    ...hardReadResolved,
+    ...softDenyRead.map(realpathSafe).filter((d) => !coveredBy(d, readGrants)),
+  ];
+
+  // `allowRead` re-opens reads INSIDE denyRead (srt: allowRead beats denyRead).
+  // So a grant may only re-open reads if it doesn't overlap a hard deny in
+  // EITHER direction — otherwise a broad grant like `agents` rw would punch a
+  // hole through the hard denyRead on a coworker's memory/mailbox. Reads of
+  // soft-protected paths are already handled by subtraction above (no allow
+  // needed), so dropping an overlapping grant here costs nothing.
+  const readAllow = readGrants.filter(
+    (g) =>
+      !hardReadResolved.some(
+        (h) => h === g || h.startsWith(g + path.sep) || g.startsWith(h + path.sep)
+      )
+  );
 
   return {
     agentId,
     readWrite: ["/"],
-    denyWrite: [...new Set(denyWrite.map(realpathSafe))],
-    denyRead: [...new Set(denyRead.map(realpathSafe))],
+    denyWrite: [...new Set(denyWrite)],
+    denyRead: [...new Set(denyRead)],
+    readAllow: [...new Set(readAllow)],
     notes: {
       workspaceDir: path.join(agentDir, "workspace"),
       teamWorkspaces: memberTeams.map((t) => ({
@@ -173,7 +224,7 @@ export function compilePolicy(opts: {
         teamName: t.name,
         dir: path.join(teamsDir, t.id, "workspace"),
       })),
-      extraGrants,
+      extraGrants: grants.map((g) => ({ path: g.path, access: g.access })),
     },
   };
 }
@@ -184,9 +235,9 @@ export function toSandboxConfig(policy: PathPolicy): SandboxFsConfig {
     allowWrite: [...policy.readWrite],
     denyWrite: [...policy.denyWrite],
     denyRead: [...policy.denyRead],
-    allowRead: policy.notes.extraGrants
-      .filter((g) => g.access === "ro")
-      .map((g) => g.path),
+    // Only grants that don't overlap a hard deny (computed in compilePolicy);
+    // an overlapping grant must never re-open a secret or a coworker's mind.
+    allowRead: [...(policy.readAllow ?? [])],
   };
 }
 
@@ -211,13 +262,31 @@ export function describePolicy(policy: PathPolicy): string {
     );
   }
   lines.push("");
+  const rwGrants = policy.notes.extraGrants.filter((g) => g.access === "rw");
+  const roGrants = policy.notes.extraGrants.filter((g) => g.access === "ro");
+  const hasGrants = rwGrants.length > 0 || roGrants.length > 0;
   lines.push(
-    "Read-only: your coworkers' directories and the rooms of teams you're " +
-      "not on — you can read their work product, not change it. Agent and " +
-      "team definition files (AGENT.md, TEAM.md, AGENTS.md) are human-owned " +
-      "— readable, never writable, including your own. To co-edit, use a " +
-      "shared team workspace; to request a change, file a task."
+    "Read-only by default" +
+      (hasGrants ? " (except where granted below)" : "") +
+      ": your coworkers' directories and the rooms of teams you're not on — " +
+      "you can read their work product, not change it. Agent and team " +
+      "definition files (AGENT.md, TEAM.md, AGENTS.md) are human-owned — " +
+      "readable, and not writable unless a grant below says otherwise. To " +
+      "co-edit without a grant, use a shared team workspace or file a task."
   );
+  if (hasGrants) {
+    lines.push("");
+    lines.push(
+      "Granted to you specifically — these OVERRIDE the read-only defaults " +
+        "above, and you are expected to edit them directly when asked:"
+    );
+    for (const g of rwGrants) lines.push(`- \`${g.path}\` — read+write`);
+    for (const g of roGrants) lines.push(`- \`${g.path}\` — read-only`);
+    lines.push(
+      "Even with these, secrets (auth, .env, tokens, database) and your " +
+        "coworkers' memory / sessions / mailbox stay off-limits."
+    );
+  }
   lines.push("");
   lines.push(
     "No access: platform credentials and state (auth, config, database), " +

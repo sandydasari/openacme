@@ -68,6 +68,7 @@ import {
 import type { EmojiClickData } from "emoji-picker-react";
 import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
 import { cn } from "@/app/lib/utils";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import { Markdown } from "@/app/components/Markdown";
 import { MarkdownEditor } from "@/app/components/MarkdownEditor";
 import { FileWorkbench } from "@/app/files/FileWorkbench";
@@ -355,10 +356,36 @@ function AgentsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<FormState>(FALLBACK_FORM);
+  // Live draft of the agent in the detail view, bubbled up from AgentDetail so
+  // the ambient panel sees unsaved edits (persona, tools, …), not just the
+  // saved row. Null until the detail view reports.
+  const [detailDraft, setDetailDraft] = useState<Agent | null>(null);
   // Tracks the urlImportTemplate the form has already been hydrated for, so
   // post-mount refreshes of `agents`/`providers` (which re-fire the URL effect)
   // can't race against the user's in-flight selections and reset the form.
   const importHydratedFor = useRef<string | null>(null);
+
+  // Publish the focused agent (live form draft when editing/creating) to the
+  // ambient Acme panel.
+  const editingForm = isEditing || isCreating;
+  usePublishCurrentView(
+    useMemo(
+      () => ({
+        page: "/agents",
+        entityType: "agent" as const,
+        entityId: isCreating ? null : selectedAgent?.id ?? null,
+        tab: detailTab,
+        // Create form → formData; existing agent → the detail view's live draft
+        // (unsaved edits) when it has reported, else the saved row.
+        content: editingForm
+          ? formData
+          : selectedAgent
+            ? detailDraft ?? selectedAgent
+            : null,
+      }),
+      [selectedAgent, isCreating, editingForm, formData, detailDraft, detailTab]
+    )
+  );
   const [mcpDialog, setMcpDialog] = useState<
     { mode: "add" } | { mode: "edit"; initial: MCPServerFormValue } | null
   >(null);
@@ -976,6 +1003,7 @@ function AgentsPage() {
                   setSelectedAgent(updated);
                   void reloadAgents();
                 }}
+                onDraftChange={setDetailDraft}
                 tab={detailTab}
                 onTabChange={(next) =>
                   void navigate({
@@ -1885,6 +1913,7 @@ function AgentDetail({
   tab,
   onTabChange,
   onAgentUpdated,
+  onDraftChange,
   onDelete,
 }: {
   agent: Agent;
@@ -1895,6 +1924,8 @@ function AgentDetail({
   tab: AgentTab;
   onTabChange: (tab: AgentTab) => void;
   onAgentUpdated: (updated: Agent) => void;
+  /** Reports the live (possibly-unsaved) agent for the ambient panel. */
+  onDraftChange?: (live: Agent) => void;
   onDelete: () => void;
 }) {
   // View-is-the-editor: the Overview fields edit a shared draft; this
@@ -1904,6 +1935,31 @@ function AgentDetail({
     setDraft(draftFromAgent(agent));
   }, [agent]);
   const { saving, save } = useSliceSave(agent, onAgentUpdated);
+  // The active config tab (tools/skills/mcp) reports its unsaved draft here;
+  // reset when the tab or agent changes so a stale slice can't leak across.
+  const [tabSlice, setTabSlice] = useState<Partial<Agent>>({});
+  useEffect(() => setTabSlice({}), [tab, agent.id]);
+  const liveAgent = useMemo<Agent>(
+    () => ({
+      ...agent,
+      name: draft.name,
+      avatar: draft.avatar || undefined,
+      role: draft.role,
+      persona: draft.persona,
+      model: {
+        ...agent.model,
+        provider: draft.provider,
+        model: draft.model,
+        auth: draft.auth,
+        cacheTtl: draft.cacheTtl,
+      },
+      ...tabSlice,
+    }),
+    [agent, draft, tabSlice]
+  );
+  useEffect(() => {
+    onDraftChange?.(liveAgent);
+  }, [liveAgent, onDraftChange]);
   const saved = draftFromAgent(agent);
   // Managed locks identity (name/avatar/role/persona) but model stays
   // editable — dirty and the save payload track only what's allowed.
@@ -2037,6 +2093,7 @@ function AgentDetail({
             agent={agent}
             groups={toolGroups}
             onSaved={onAgentUpdated}
+            onDraftChange={setTabSlice}
           />
         </TabsContent>
         <TabsContent value="skills">
@@ -2044,6 +2101,7 @@ function AgentDetail({
             agent={agent}
             allSkills={allSkills}
             onSaved={onAgentUpdated}
+            onDraftChange={setTabSlice}
           />
         </TabsContent>
         <TabsContent value="mcp">
@@ -2051,6 +2109,7 @@ function AgentDetail({
             agent={agent}
             globalServers={globalServers}
             onSaved={onAgentUpdated}
+            onDraftChange={setTabSlice}
           />
         </TabsContent>
         <TabsContent value="workspace">
@@ -2477,15 +2536,20 @@ function AgentToolsTab({
   agent,
   groups,
   onSaved,
+  onDraftChange,
 }: {
   agent: Agent;
   groups: [string, ToolInfo[]][];
   onSaved: (updated: Agent) => void;
+  onDraftChange?: (slice: Partial<Agent>) => void;
 }) {
   const [selected, setSelected] = useState<string[]>(agent.tools);
   useEffect(() => {
     setSelected(agent.tools);
   }, [agent.id, agent.tools]);
+  useEffect(() => {
+    onDraftChange?.({ tools: selected });
+  }, [selected, onDraftChange]);
   const { saving, save } = useSliceSave(agent, onSaved);
 
   if (agent.managed) {
@@ -2535,16 +2599,21 @@ function AgentSkillsTab({
   agent,
   allSkills,
   onSaved,
+  onDraftChange,
 }: {
   agent: Agent;
   allSkills: SkillIndexEntry[];
   onSaved: (updated: Agent) => void;
+  onDraftChange?: (slice: Partial<Agent>) => void;
 }) {
   const savedSkills = useMemo(() => agent.skills ?? [], [agent.skills]);
   const [selected, setSelected] = useState<string[]>(savedSkills);
   useEffect(() => {
     setSelected(savedSkills);
   }, [agent.id, savedSkills]);
+  useEffect(() => {
+    onDraftChange?.({ skills: selected });
+  }, [selected, onDraftChange]);
   const { saving, save } = useSliceSave(agent, onSaved);
 
   if (agent.managed) {
@@ -2598,10 +2667,12 @@ function AgentMcpTab({
   agent,
   globalServers,
   onSaved,
+  onDraftChange,
 }: {
   agent: Agent;
   globalServers: Record<string, MCPServerConfigDto>;
   onSaved: (updated: Agent) => void;
+  onDraftChange?: (slice: Partial<Agent>) => void;
 }) {
   const savedServers = useMemo(
     () => agent.mcpServers ?? {},
@@ -2621,6 +2692,9 @@ function AgentMcpTab({
     setServers(savedServers);
     setDisabled(savedDisabled);
   }, [agent.id, savedServers, savedDisabled]);
+  useEffect(() => {
+    onDraftChange?.({ mcpServers: servers, mcpDisabled: disabled });
+  }, [servers, disabled, onDraftChange]);
   const { saving, save } = useSliceSave(agent, onSaved);
 
   const dirty =

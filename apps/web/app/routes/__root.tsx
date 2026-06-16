@@ -7,6 +7,9 @@ import { HelpOverlay } from "@/app/components/HelpOverlay";
 import { CommandPalette } from "@/app/components/CommandPalette";
 import { RegisterServiceWorker } from "@/app/components/RegisterServiceWorker";
 import { MobileTabBar } from "@/app/components/MobileTabBar";
+import { AcmePanel } from "@/app/components/AcmePanel";
+import { CurrentViewProvider } from "@/app/lib/CurrentViewContext";
+import { AcmePanelProvider } from "@/app/lib/AcmePanelContext";
 import { API_BASE } from "@/app/lib/api";
 
 export const Route = createRootRoute({ component: RootLayout });
@@ -77,13 +80,28 @@ function RootLayout() {
     <TooltipProvider delayDuration={200}>
       <AuthFetch />
       <RegisterServiceWorker />
+      <AcmePanelProvider>
+        <CurrentViewProvider>
+          <Shell />
+        </CurrentViewProvider>
+      </AcmePanelProvider>
+    </TooltipProvider>
+  );
+}
+
+/** App shell. The ambient Acme panel floats over the page (no app-shift) so
+ *  opening it doesn't reflow everything — calmer, changes less on screen. */
+function Shell() {
+  return (
+    <>
       <AuthGate>
         <Outlet />
       </AuthGate>
       <HelpOverlay />
       <CommandPalette />
+      <AcmePanel />
       <Toaster />
       <MobileTabBar />
-    </TooltipProvider>
+    </>
   );
 }

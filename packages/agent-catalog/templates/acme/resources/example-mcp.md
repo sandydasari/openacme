@@ -49,11 +49,12 @@ anywhere.
 - **`allowedTools`** — if set, only register tools whose names match
   this list. Empty/absent = all tools.
 
-## Applies live
+## Applying edits
 
-The platform watches `mcp.json`. After editing, the affected agents
-re-discover servers and their tools on their next turn — no restart.
-(Bringing a slow or broken server up can take a few seconds.)
+After editing `mcp.json`, call the `reload_config` tool to reconnect MCP —
+the affected agents re-discover servers and their tools on their next turn,
+no restart. (Bringing a slow or broken server up can take a few seconds, so
+batch your edits and reload once.) Nothing applies automatically.
 
 ## Per-agent overrides
 

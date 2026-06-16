@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import {
@@ -26,6 +26,7 @@ import { NotificationsTab } from "../components/NotificationsTab";
 import { MembersTab } from "../components/MembersTab";
 import { API_BASE } from "../lib/api";
 import { docsUrl } from "../lib/links";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import type { ModelDefaultsView, ModelDefaultsUpdate } from "../lib/types";
 import {
   MCPServerForm,
@@ -269,6 +270,8 @@ function SettingsPage() {
     } | null;
     google: { clientId: string; configured: boolean };
     microsoft: { clientId: string; tenant: string; configured: boolean };
+    redirectUriAuto?: string;
+    redirectUriOverride?: string;
   }
   const blankEmailForm = {
     host: "",
@@ -280,14 +283,54 @@ function SettingsPage() {
     msClientId: "",
     msClientSecret: "",
     msTenant: "",
+    redirectUri: "",
   };
   const [emailCfg, setEmailCfg] = useState<EmailConfigStatus | null>(null);
   const [emailForm, setEmailForm] = useState({ ...blankEmailForm });
   const [emailSaving, setEmailSaving] = useState(false);
+
+  // Publish the active settings tab + its draft to the ambient Acme panel.
+  usePublishCurrentView(
+    useMemo(() => {
+      const content =
+        activeTab === "providers"
+          ? modelDraft
+          : activeTab === "mcp"
+            ? mcpServers
+            : activeTab === "context"
+              ? { agentsMd: agentsMdDraft }
+              : activeTab === "email"
+                ? emailForm
+                : activeTab === "browser"
+                  ? browserCfg
+                  : activeTab === "web-search"
+                    ? webSearch
+                    : null;
+      return {
+        page: "/settings",
+        entityType: "settings" as const,
+        entityId: null,
+        tab: activeTab,
+        content,
+      };
+    }, [
+      activeTab,
+      modelDraft,
+      mcpServers,
+      agentsMdDraft,
+      emailForm,
+      browserCfg,
+      webSearch,
+    ])
+  );
+  // Redirect URI to register with the OAuth app: the typed override (verbatim)
+  // or the bind-derived default, falling back to the current origin pre-load.
   const emailRedirect =
-    typeof window !== "undefined"
+    emailForm.redirectUri.trim() ||
+    emailCfg?.redirectUriAuto ||
+    (typeof window !== "undefined"
       ? `${window.location.origin}/api/email/oauth/callback`
-      : "/api/email/oauth/callback";
+      : "/api/email/oauth/callback");
 
   const loadEmail = async (signal?: AbortSignal) => {
     try {
@@ -305,6 +348,7 @@ function SettingsPage() {
         msClientId: d.microsoft.clientId,
         msClientSecret: "",
         msTenant: d.microsoft.tenant,
+        redirectUri: d.redirectUriOverride ?? "",
       });
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -334,6 +378,7 @@ function SettingsPage() {
             tenant: f.msTenant,
             ...(f.msClientSecret ? { clientSecret: f.msClientSecret } : {}),
           },
+          redirectUri: f.redirectUri.trim(),
         }),
       });
       if (!res.ok) {
@@ -2262,23 +2307,34 @@ function SettingsPage() {
                           <Badge variant="secondary">Configured</Badge>
                         )}
                       </div>
-                      <p className="text-[13px] text-ink-soft">
-                        Your Google OAuth client. Add this redirect URI:
-                      </p>
-                      <div className="flex items-stretch gap-2">
-                        <code className="flex-1 break-all border border-paper-rule bg-paper-sunk/40 px-2 py-1 font-mono text-[12px] text-ink">
-                          {emailRedirect}
-                        </code>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(emailRedirect);
-                            toast.success("Redirect URI copied");
-                          }}
-                        >
-                          Copy
-                        </Button>
+                      <div className="grid gap-2">
+                        <Label>Redirect URI</Label>
+                        <div className="flex items-stretch gap-2">
+                          <Input
+                            value={emailForm.redirectUri}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, redirectUri: e.target.value }))
+                            }
+                            placeholder={emailCfg?.redirectUriAuto ?? ""}
+                            className="flex-1 font-mono text-[12px]"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(emailRedirect);
+                              toast.success("Redirect URI copied");
+                            }}
+                          >
+                            Copy
+                          </Button>
+                        </div>
+                        <p className="text-[12px] text-ink-faint">
+                          Add this exact URI to your OAuth app. Leave blank to use
+                          the local address (shown); set it when you reach OpenAcme
+                          through a tunnel or reverse proxy. The{" "}
+                          <code>/api/email/oauth/callback</code> path stays the same.
+                        </p>
                       </div>
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="grid gap-2">

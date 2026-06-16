@@ -327,11 +327,13 @@ export const AgentDefinitionSchema = z.object({
   // `email_*` tools are excluded from its tool set by AgentManager. Provider
   // + address are per-agent; secrets live in `<agentDir>/email.json` (0600).
   email: AgentEmailSchema.optional(),
-  // Extra filesystem grants beyond the compiled default policy (own
-  // workspace + team workspaces rw, open-office reads). Human-edited in
-  // AGENT.md only — grants come from definitions, never from agents.
-  // `rw` adds a writable root (e.g. a project repo the agent works on);
-  // `ro` re-allows reads under an otherwise denied subtree.
+  // Extra filesystem grants beyond the compiled default policy. Human-edited
+  // in AGENT.md only — grants come from definitions, never from agents. A
+  // bare relative path resolves under the data dir; `~` and absolute work too.
+  // `rw` re-opens writes (and reads) for the path; `ro` re-opens reads only.
+  // Grants subtract from the SOFT denies (config surfaces, AGENTS.md,
+  // coworkers' dirs, team rooms) — they can NEVER reach the hard denies
+  // (secrets, coworkers' minds/mailbox, the agent's own AGENT.md).
   paths: z
     .array(
       z.object({
@@ -635,6 +637,13 @@ export const EmailConfigSchema = z.object({
     })
     .optional()
     .describe("BYO Microsoft Entra app (Graph) — your own client credentials."),
+  // Exact OAuth redirect URI to use, overriding the bind-derived default.
+  // Set this to the URI registered in your Google/Microsoft app when the
+  // daemon is reached through a tunnel or reverse proxy (the bind host can't
+  // know the external origin). Used verbatim — OAuth requires the registered,
+  // authorize, and token-exchange URIs to match byte-for-byte. Empty → derive
+  // from the local bind address.
+  redirectUri: z.string().url().optional(),
 });
 export type EmailConfig = z.infer<typeof EmailConfigSchema>;
 

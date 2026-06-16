@@ -97,7 +97,7 @@ describe("compilePolicy (open-by-default writes, protected deny list)", () => {
     expect(p.denyRead).toContain(path.join(os.homedir(), ".ssh"));
   });
 
-  it("carries ro extra grants into allowRead (re-allow under a denied subtree)", () => {
+  it("carries ro + rw extra grants into allowRead (both grant reads)", () => {
     const defs = [
       agent("zoe", {
         paths: [
@@ -109,13 +109,63 @@ describe("compilePolicy (open-by-default writes, protected deny list)", () => {
     ];
     const p = compile({ agentDefs: defs });
     const sandbox = toSandboxConfig(p);
-    expect(sandbox.allowRead).toEqual(["/opt/shared-data"]);
-    // rw grants are forward-compat no-ops under open-default writes,
-    // but they survive in notes for the prompt / future posture changes.
+    expect(sandbox.allowRead).toContain("/opt/shared-data");
+    expect(sandbox.allowRead).toContain(path.join(os.homedir(), "dev/myrepo"));
     expect(p.notes.extraGrants).toContainEqual({
       path: path.join(os.homedir(), "dev/myrepo"),
       access: "rw",
     });
+  });
+
+  it("rw grants subtract from SOFT denies but never from HARD denies", () => {
+    // Admin-style grants (what the Acme template ships): bare paths resolve
+    // under the data dir.
+    const defs = [
+      agent("zoe", {
+        paths: [
+          { path: "agents", access: "rw" },
+          { path: "AGENTS.md", access: "rw" },
+          { path: "mcp.json", access: "rw" },
+          { path: "config.yaml", access: "rw" },
+        ],
+      }),
+      agent("max"),
+    ];
+    const p = compile({ agentDefs: defs });
+    // Soft denies re-opened for writes:
+    expect(p.denyWrite).not.toContain(`${DATA_DIR}/config.yaml`);
+    expect(p.denyWrite).not.toContain(`${DATA_DIR}/mcp.json`);
+    expect(p.denyWrite).not.toContain(`${DATA_DIR}/AGENTS.md`);
+    expect(p.denyWrite).not.toContain(`${DATA_DIR}/agents/max`);
+    // …and for reads (config surfaces become readable):
+    expect(p.denyRead).not.toContain(`${DATA_DIR}/config.yaml`);
+    expect(p.denyRead).not.toContain(`${DATA_DIR}/mcp.json`);
+    // HARD denies survive the `agents` rw grant — secrets, coworker minds +
+    // mailbox, and own AGENT.md stay locked even though they're under granted
+    // paths:
+    expect(p.denyWrite).toContain(`${DATA_DIR}/auth.json`);
+    expect(p.denyWrite).toContain(`${DATA_DIR}/.env`);
+    expect(p.denyWrite).toContain(`${DATA_DIR}/state.db`);
+    expect(p.denyWrite).toContain(`${DATA_DIR}/agents/max/memory`);
+    expect(p.denyWrite).toContain(`${DATA_DIR}/agents/max/email.json`);
+    expect(p.denyWrite).toContain(`${DATA_DIR}/agents/zoe/AGENT.md`);
+    expect(p.denyRead).toContain(`${DATA_DIR}/auth.json`);
+    expect(p.denyRead).toContain(`${DATA_DIR}/agents/max/email.json`);
+    expect(p.denyRead).toContain(`${DATA_DIR}/agents/max/memory`);
+    // …and the broad `agents` grant must NOT land in allowRead — srt's
+    // allowRead beats denyRead, so that would re-expose coworkers' minds.
+    const sandbox = toSandboxConfig(p);
+    expect(sandbox.allowRead).not.toContain(`${DATA_DIR}/agents`);
+  });
+
+  it("a grant can never re-open a hard secret, even named directly", () => {
+    const defs = [
+      agent("zoe", { paths: [{ path: "auth.json", access: "rw" }] }),
+      agent("max"),
+    ];
+    const p = compile({ agentDefs: defs });
+    expect(p.denyWrite).toContain(`${DATA_DIR}/auth.json`);
+    expect(p.denyRead).toContain(`${DATA_DIR}/auth.json`);
   });
 
   it("emits no globs anywhere (Linux literal-bind parity)", () => {
@@ -145,7 +195,19 @@ describe("describePolicy", () => {
     expect(text).toContain(`${DATA_DIR}/agents/zoe/workspace`);
     expect(text).toContain('team "Website"');
     expect(text).toContain("Read-write: most of this machine");
-    expect(text).toContain("Read-only:");
+    expect(text).toContain("Read-only by default");
     expect(text).toContain("No access:");
+  });
+
+  it("lists rw grants as overrides in the Access section", () => {
+    const p = compile({
+      agentDefs: [
+        agent("zoe", { paths: [{ path: "mcp.json", access: "rw" }] }),
+        agent("max"),
+      ],
+    });
+    const text = describePolicy(p);
+    expect(text).toContain("OVERRIDE the read-only defaults");
+    expect(text).toMatch(new RegExp(`${DATA_DIR}/mcp\\.json.*read\\+write`));
   });
 });

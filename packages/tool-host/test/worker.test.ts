@@ -14,6 +14,7 @@ function policyFor(dir: string) {
     readWrite: ["/"],
     denyWrite: [path.join(dir, "protected")],
     denyRead: [path.join(dir, "secrets")],
+    readAllow: [],
     notes: {
       workspaceDir: path.join(dir, "agents", agentId, "workspace"),
       teamWorkspaces: [],

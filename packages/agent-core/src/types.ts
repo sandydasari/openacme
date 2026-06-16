@@ -92,6 +92,19 @@ export interface OpenAcmeDataParts {
     statusCode?: number;
     message: string;
   };
+  /** Ambient-Acme view context, attached to a USER message by the web panel
+   *  so Acme sees what the user is looking at. `modelContent` is the
+   *  pre-rendered `<ui-context>` block; `materializeUiContext` prepends it to
+   *  the LATEST user message only and strips this part from every message —
+   *  stale earlier-turn snapshots never reach the model. The small fields
+   *  drive a "context: viewing X" chip. */
+  "ui-context": {
+    page: string;
+    entityType: string | null;
+    entityId: string | null;
+    tab?: string | null;
+    modelContent: string;
+  };
   // SDK-required index signature for unknown data-* keys.
   // `any` (not `unknown`) so named keys still narrow on a discriminated union.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
