@@ -65,6 +65,7 @@ export function AcmePanel() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const freshRef = useRef<string | null>(null);
+  const triedResume = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<CurrentView | null>(view);
   useEffect(() => {
@@ -87,6 +88,43 @@ export function AcmePanel() {
       cancelled = true;
     };
   }, [open, acme]);
+
+  // Resume the most recent Acme conversation on first open (continue, not a
+  // blank chat every time). The "+" button starts fresh; a page reload
+  // resumes the latest again.
+  useEffect(() => {
+    if (!open || !acme || sessionId || triedResume.current) return;
+    triedResume.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const home = await fetch(`${API_BASE}/api/home`).then((r) =>
+          r.ok ? r.json() : null
+        );
+        if (!home || cancelled) return;
+        const all = [
+          ...(home.running ?? []),
+          ...(home.waiting ?? []),
+          ...(home.idle ?? []),
+        ] as { sessionId: string; agentId: string; lastActivity: number }[];
+        const latest = all
+          .filter((s) => s.agentId === acme.id)
+          .sort((a, b) => (b.lastActivity ?? 0) - (a.lastActivity ?? 0))[0];
+        if (!latest) return;
+        const msgs = (await fetch(
+          `${API_BASE}/api/sessions/${latest.sessionId}/messages`
+        ).then((r) => (r.ok ? r.json() : []))) as OpenAcmeUIMessage[];
+        if (cancelled) return;
+        setSessionId(latest.sessionId);
+        setMessages(Array.isArray(msgs) ? msgs : []);
+      } catch {
+        // best-effort — fall back to a fresh chat
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, acme, sessionId]);
 
   const live = useLiveSession(
     sessionId || null,
@@ -168,7 +206,14 @@ export function AcmePanel() {
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[440px] flex-col border-l border-paper-rule bg-paper shadow-xl"
+      className={cn(
+        "fixed z-40 flex flex-col bg-paper border border-paper-rule shadow-2xl",
+        // Floats over the page (no app-shift). Same bg as the app's surfaces;
+        // the shadow + border + inset is what reads as "elevated". Mobile:
+        // near-full screen; desktop: a docked floating card on the right.
+        "inset-x-2 bottom-2 top-2 rounded-lg",
+        "md:inset-x-auto md:right-3 md:inset-y-3 md:w-[440px]"
+      )}
       role="complementary"
       aria-label="Acme panel"
     >
