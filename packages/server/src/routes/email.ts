@@ -62,8 +62,13 @@ export function registerEmailRoutes(
   config: Config
 ): void {
   const pending = new Map<string, PendingOAuth>();
-  const redirectUri = () =>
+  // Bind-derived default; correct for local installs.
+  const autoRedirectUri = () =>
     `${reachableBaseUrl(config.server).url}/api/email/oauth/callback`;
+  // Effective URI: the configured override (verbatim, for tunnels/proxies) or
+  // the auto default. OAuth requires byte-for-byte match across registered /
+  // authorize / token-exchange, so we never reshape the override.
+  const redirectUri = () => liveEmail().redirectUri?.trim() || autoRedirectUri();
 
   const bindTools = (tools: string[]): string[] =>
     Array.from(new Set([...tools, ...EMAIL_TOOL_NAMES]));
@@ -81,6 +86,7 @@ export function registerEmailRoutes(
     };
     google?: { clientId?: string; clientSecret?: string };
     microsoft?: { clientId?: string; clientSecret?: string; tenant?: string };
+    redirectUri?: string;
   }
   const liveEmail = (): EmailCfgRaw =>
     (readRawConfig(config.dataDir).email as EmailCfgRaw | undefined) ?? {};
@@ -103,6 +109,10 @@ export function registerEmailRoutes(
         tenant: m.tenant ?? "",
         configured: !!m.clientSecret,
       },
+      // The bind-derived default (placeholder) + the saved override, so the UI
+      // can offer an editable redirect URI field. The override is used verbatim.
+      redirectUriAuto: autoRedirectUri(),
+      redirectUriOverride: (e.redirectUri as string | undefined) ?? "",
     });
   });
 
@@ -111,6 +121,8 @@ export function registerEmailRoutes(
       imap?: Record<string, unknown> | null;
       google?: { clientId?: string; clientSecret?: string };
       microsoft?: { clientId?: string; clientSecret?: string; tenant?: string };
+      /** Exact OAuth redirect URI override (tunnel/proxy). Empty clears it. */
+      redirectUri?: string;
     };
     try {
       body = await c.req.json();
@@ -120,6 +132,18 @@ export function registerEmailRoutes(
     const raw = readRawConfig(config.dataDir);
     const existing = (raw.email as Record<string, unknown> | undefined) ?? {};
     const next: Record<string, unknown> = { ...existing };
+
+    if (body.redirectUri !== undefined) {
+      const trimmed = body.redirectUri.trim();
+      if (trimmed) {
+        if (!/^https?:\/\//i.test(trimmed)) {
+          return c.json({ error: "redirectUri must start with http:// or https://" }, 400);
+        }
+        next.redirectUri = trimmed;
+      } else {
+        delete next.redirectUri;
+      }
+    }
 
     if (body.imap !== undefined) {
       const src = body.imap ?? {};

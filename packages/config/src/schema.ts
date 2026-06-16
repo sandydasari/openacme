@@ -637,6 +637,13 @@ export const EmailConfigSchema = z.object({
     })
     .optional()
     .describe("BYO Microsoft Entra app (Graph) — your own client credentials."),
+  // Exact OAuth redirect URI to use, overriding the bind-derived default.
+  // Set this to the URI registered in your Google/Microsoft app when the
+  // daemon is reached through a tunnel or reverse proxy (the bind host can't
+  // know the external origin). Used verbatim — OAuth requires the registered,
+  // authorize, and token-exchange URIs to match byte-for-byte. Empty → derive
+  // from the local bind address.
+  redirectUri: z.string().url().optional(),
 });
 export type EmailConfig = z.infer<typeof EmailConfigSchema>;
 
