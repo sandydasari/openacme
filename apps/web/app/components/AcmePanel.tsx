@@ -207,10 +207,11 @@ export function AcmePanel() {
   return (
     <aside
       className={cn(
-        "fixed z-40 flex flex-col bg-paper border border-paper-rule shadow-2xl",
-        // Floats over the page (no app-shift). Same bg as the app's surfaces;
-        // the shadow + border + inset is what reads as "elevated". Mobile:
-        // near-full screen; desktop: a docked floating card on the right.
+        "fixed z-40 flex flex-col bg-paper-sunk border border-ink/15 shadow-2xl",
+        // Floats over the page (no app-shift). A distinct surface (paper-sunk
+        // + a stronger border + shadow) so it reads as a separate panel, not a
+        // continuation of the page behind it. Mobile near-full; desktop a
+        // docked floating card on the right.
         "inset-x-2 bottom-2 top-2 rounded-lg",
         "md:inset-x-auto md:right-3 md:inset-y-3 md:w-[440px]"
       )}
