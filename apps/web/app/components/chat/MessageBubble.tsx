@@ -25,34 +25,27 @@ export type MessageAgent = {
   model: { model: string };
 };
 
-type UiContextData = {
-  page?: string;
-  entityType?: string | null;
-  entityId?: string | null;
-  tab?: string | null;
+type SkillRefData = {
+  names?: string[];
   modelContent?: string;
 };
 
-/** Subtle marker on a user message: the ambient panel attached the live view as
- *  a hidden part that fed the model. Shows page · entity · tab; the full
- *  materialized block is the hover title. */
-function UiContextChip({ data }: { data: UiContextData }) {
-  const bits = [
-    data.page,
-    data.entityId
-      ? `${data.entityType ?? "entity"} ${data.entityId}`
-      : data.entityType ?? null,
-    data.tab ? `tab ${data.tab}` : null,
-  ].filter(Boolean);
+/** Skills the user referenced with `/name` in the composer. The full marker
+ *  fed to the model is the hover title. */
+function SkillRefChip({ data }: { data: SkillRefData }) {
+  const names = data.names ?? [];
+  if (names.length === 0) return null;
   return (
     <div
-      className="mb-2 inline-flex max-w-full items-center gap-1.5 border border-paper-rule bg-paper-sunk px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint"
+      className="mb-2 inline-flex max-w-full flex-wrap items-center gap-1.5 border border-paper-rule bg-paper-sunk px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint"
       title={data.modelContent ?? undefined}
     >
-      <span className="text-plot-red">context</span>
-      <span className="truncate normal-case tracking-normal text-ink-soft">
-        {bits.join(" · ")}
-      </span>
+      <span className="text-plot-red">skill</span>
+      {names.map((n) => (
+        <span key={n} className="normal-case tracking-normal text-ink-soft">
+          /{n}
+        </span>
+      ))}
     </div>
   );
 }
@@ -248,19 +241,18 @@ export const MessageBubble = memo(function MessageBubble({
       return !mt.startsWith("image/") && mt !== "application/pdf";
     });
     // The ambient Acme panel attaches the live view as a hidden data part that
-    // never renders as text but IS materialized into the model input. Surface a
-    // chip so the user can see what context their message carried (full block
-    // on hover).
-    const uiCtx = message.parts.find(
-      (p) => (p as { type?: unknown }).type === "data-ui-context"
-    ) as { data?: UiContextData } | undefined;
+    // never renders here (it IS materialized into the model input server-side).
+    // Per product decision the page-context carries silently — no chip.
+    const skillRef = message.parts.find(
+      (p) => (p as { type?: unknown }).type === "data-skill-ref"
+    ) as { data?: SkillRefData } | undefined;
     return (
       <section className="section-enter border-t border-paper-rule py-5 first:border-t-0 first:pt-0">
         <MessageHeader
           role="user"
           createdAt={(message as { createdAt?: number }).createdAt}
         />
-        {uiCtx?.data && <UiContextChip data={uiCtx.data} />}
+        {skillRef?.data && <SkillRefChip data={skillRef.data} />}
         {text && (
           <div className="text-sm leading-relaxed text-ink break-words">
             <Markdown>{text}</Markdown>

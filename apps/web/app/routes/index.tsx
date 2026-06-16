@@ -1,5 +1,4 @@
 import {
-  memo,
   useState,
   useRef,
   useEffect,
@@ -10,14 +9,17 @@ import {
 import { ArrowDown, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import type { UIMessage } from "ai";
-import type { MessageMetadata, OpenAcmeUIMessage } from "../lib/types";
+import type { OpenAcmeUIMessage } from "../lib/types";
 import { Sidebar } from "../components/Sidebar";
 import { HomeView } from "../components/HomeView";
 import { useLiveSession } from "../lib/useLiveSession";
-import { Markdown } from "../components/Markdown";
 import { AttachmentChip } from "../components/AttachmentChip";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { ChatComposer } from "../components/chat/ChatComposer";
+import {
+  buildSkillRefParts,
+  type SkillIndexEntry,
+} from "../lib/skill-mentions";
 import { API_BASE } from "../lib/api";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
@@ -32,10 +34,7 @@ import {
   FilePreviewDialog,
   type FilePreviewTarget,
 } from "../files/FilePreviewDialog";
-import {
-  useFileLinkResolver,
-  type FileLinkTarget,
-} from "../files/useFileLinkResolver";
+import { useFileLinkResolver } from "../files/useFileLinkResolver";
 import {
   Select,
   SelectContent,
@@ -60,6 +59,9 @@ interface Agent {
   model: { provider: string; model: string };
   persona: string;
   tools: string[];
+  /** This agent's skill allowlist (empty = all). Floats these to the top of
+   *  the composer's `/` picker. */
+  skills?: string[];
 }
 
 interface ModelOption {
@@ -89,7 +91,6 @@ interface PendingAttachment {
   error?: string;
 }
 
-type Part = UIMessage["parts"][number];
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([p.then((v) => v), new Promise<null>((r) => setTimeout(() => r(null), ms))]);
@@ -128,6 +129,7 @@ function ChatPage() {
     null
   );
   const [input, setInput] = useState("");
+  const [skills, setSkills] = useState<SkillIndexEntry[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [modelCatalog, setModelCatalog] = useState<{
@@ -153,6 +155,25 @@ function ChatPage() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+
+  // Skill index for the composer's `/` picker (the same Level-0 index the
+  // agent gets in its prompt). Fetched once; refs let `send` read it freshly.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`${API_BASE}/api/skills`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: SkillIndexEntry[]) =>
+        setSkills(Array.isArray(list) ? list : [])
+      )
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+  const skillNames = useMemo(
+    () => new Set(skills.map((s) => s.name)),
+    [skills]
+  );
+  const skillNamesRef = useRef(skillNames);
+  skillNamesRef.current = skillNames;
 
   // URL ↔ state sync — URL is the canonical store, state mirrors it.
   //
@@ -520,6 +541,18 @@ function ChatPage() {
 
   const activeAgent = agents.find((a) => a.id === activeAgentId);
 
+  // Float the active agent's configured skills to the top of the `/` picker.
+  // When it has no allowlist (sees all), leave the natural order. Sort is
+  // stable, so order within each group is preserved (and a typed query still
+  // ranks by match relevance inside SkillTextarea).
+  const orderedSkills = useMemo(() => {
+    const pri = new Set(activeAgent?.skills ?? []);
+    if (pri.size === 0) return skills;
+    return [...skills].sort(
+      (a, b) => (pri.has(a.name) ? 0 : 1) - (pri.has(b.name) ? 0 : 1)
+    );
+  }, [skills, activeAgent]);
+
   // File-path linkification: inline code spans in assistant prose that
   // resolve to real files under the agent's roots open a preview dialog.
   // The streaming message settles at end of turn; it's scanned then.
@@ -759,6 +792,7 @@ function ChatPage() {
         mediaType: p.mediaType,
         filename: p.filename,
       })),
+      ...(buildSkillRefParts(text, skillNamesRef.current) as UIMessage["parts"]),
     ];
     const optimisticUser: OpenAcmeUIMessage = {
       id: userMessageId,
@@ -1168,6 +1202,7 @@ function ChatPage() {
               }
               sendLabel={isStreaming ? "Queue message" : "Send message"}
               textareaRef={inputRef}
+              skills={orderedSkills}
               isDragging={isDragging}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}

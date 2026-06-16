@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": ["CI", "OPENACME_E2E_PORT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
