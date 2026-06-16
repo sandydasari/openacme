@@ -78,7 +78,7 @@ interface AgentBrowserInstance {
  * sites. Each agent is a distinct persona; the runtime should reflect that.
  */
 export class BrowserManager {
-  private readonly provider: BrowserProvider;
+  private provider: BrowserProvider;
   private readonly resolveOverrides:
     | ((agentId: string) => AgentBrowserOverrides | undefined)
     | null;
@@ -114,6 +114,15 @@ export class BrowserManager {
 
   get providerName(): string {
     return this.provider.name;
+  }
+
+  /**
+   * Hot-swap the provider (config reload). Existing acquired sessions keep
+   * running on their old provider until released; the next acquire uses the
+   * new one. Lets browser-config changes apply without a daemon restart.
+   */
+  setProvider(provider: BrowserProvider): void {
+    this.provider = provider;
   }
 
   // ───────────────────────── lifecycle ─────────────────────────

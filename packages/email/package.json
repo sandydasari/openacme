@@ -1,0 +1,54 @@
+{
+  "name": "@openacme/email",
+  "version": "0.11.0",
+  "description": "Per-agent email for OpenAcme — pluggable provider (IMAP/SMTP, Gmail, Microsoft Graph), per-agent identity + isolated credentials.",
+  "license": "MIT",
+  "author": "sandydasari",
+  "homepage": "https://github.com/sandydasari/openacme/tree/main/packages/email#readme",
+  "bugs": "https://github.com/sandydasari/openacme/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sandydasari/openacme.git",
+    "directory": "packages/email"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.16.2",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "googleapis": "^144.0.0",
+    "imapflow": "^1.0.171",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/mailparser": "^3.4.5",
+    "@types/node": "^22.15.3",
+    "@types/nodemailer": "^6.4.16",
+    "typescript": "5.9.2",
+    "vitest": "^2.1.9"
+  }
+}

@@ -17,6 +17,23 @@ export {
   type AnthropicLoginResult,
 } from "./oauth-anthropic.js";
 
+export {
+  oauthAuthorizeGoogle,
+  buildGoogleAuthorizeUrl,
+  exchangeGoogleCode,
+  googleRedirectUri,
+  type GoogleAuthorizeOptions,
+  type OAuthFlowResult,
+} from "./oauth-google.js";
+
+export {
+  oauthAuthorizeMicrosoft,
+  buildMicrosoftAuthorizeUrl,
+  exchangeMicrosoftCode,
+  microsoftRedirectUri,
+  type MicrosoftAuthorizeOptions,
+} from "./oauth-microsoft.js";
+
 export { getOAuthToken } from "./refresh.js";
 
 export {

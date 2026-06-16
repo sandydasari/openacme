@@ -36,6 +36,11 @@ export {
   type BrowserBindings,
 } from "./builtins/browser/bindings.js";
 export {
+  bindEmail,
+  EMAIL_TOOL_NAMES,
+  type EmailBindings,
+} from "./builtins/email/bindings.js";
+export {
   bindAgentTool,
   type AgentToolBindings,
   type AgentSummary,
@@ -81,3 +86,4 @@ import "./builtins/agent.js";
 import "./builtins/ping.js";
 import "./builtins/defer-session.js";
 import "./builtins/browser/index.js";
+import "./builtins/email/index.js";

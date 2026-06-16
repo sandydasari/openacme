@@ -100,6 +100,7 @@ export function registerSkillsHubRoutes(
         nameOverride: body.nameOverride,
         force: Boolean(body.force),
       });
+      manager.reloadSkills();
       return c.json(result, 201);
     } catch (err) {
       if (err instanceof HubError) {
@@ -119,6 +120,7 @@ export function registerSkillsHubRoutes(
     const name = c.req.param("name");
     const ok = hub.uninstall(name);
     if (!ok) return c.json({ error: "not installed via hub" }, 404);
+    manager.reloadSkills();
     return c.json({ name });
   });
 
@@ -133,6 +135,7 @@ export function registerSkillsHubRoutes(
     const name = body.name?.trim();
     try {
       const result = await hub.update(name && name.length > 0 ? name : undefined);
+      manager.reloadSkills();
       return c.json(result);
     } catch (err) {
       return c.json({ error: errMsg(err) }, 500);

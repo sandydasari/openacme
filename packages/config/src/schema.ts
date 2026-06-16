@@ -188,6 +188,40 @@ export const AgentBrowserOverridesSchema = z
 export type AgentBrowserOverrides = z.infer<typeof AgentBrowserOverridesSchema>;
 
 /**
+ * Per-agent email binding — the agent's own mailbox identity. Non-secret
+ * only; the IMAP password / OAuth tokens live in `<agentDir>/email.json`
+ * (mode 0600), never here. Each agent picks its own provider, so agent A can
+ * be on Gmail while agent B is on a self-hosted IMAP host.
+ */
+export const AgentEmailSchema = z
+  .object({
+    provider: z.enum(["imap", "gmail", "microsoft"]),
+    address: z.string().describe("The agent's email address."),
+    host: z.string().optional().describe("IMAP only: IMAP server hostname."),
+    port: z.number().optional().describe("IMAP only: IMAP port (default 993)."),
+    user: z
+      .string()
+      .optional()
+      .describe("IMAP only: login user (defaults to `address`)."),
+    smtpHost: z
+      .string()
+      .optional()
+      .describe("IMAP only: SMTP server hostname (defaults to `host`)."),
+    smtpPort: z
+      .number()
+      .optional()
+      .describe("IMAP only: SMTP port (default 587)."),
+    tls: z
+      .boolean()
+      .optional()
+      .describe(
+        "IMAP only: implicit TLS (default true, port 993). Set false for a STARTTLS host (port 143) — the client still upgrades to TLS."
+      ),
+  })
+  .strict();
+export type AgentEmail = z.infer<typeof AgentEmailSchema>;
+
+/**
  * Agent definition — a named agent with its own config.
  */
 export const AgentDefinitionSchema = z.object({
@@ -249,6 +283,12 @@ export const AgentDefinitionSchema = z.object({
       "browser_console_messages",
       "browser_tabs",
       "browser_act",
+      "email_list",
+      "email_search",
+      "email_read",
+      "email_send",
+      "email_reply",
+      "email_mark",
     ]),
   // Agent-PRIVATE MCP servers — names must not collide with the global
   // catalog at `<dataDir>/mcp.json`. The agent-store enforces this on
@@ -283,6 +323,10 @@ export const AgentDefinitionSchema = z.object({
   // Same idea as `<agentDir>/browser-profiles/` for the local provider —
   // each agent gets its own remote profile on cloud providers.
   browser: AgentBrowserOverridesSchema.optional(),
+  // Per-agent email mailbox. Absent → the agent has no email and its
+  // `email_*` tools are excluded from its tool set by AgentManager. Provider
+  // + address are per-agent; secrets live in `<agentDir>/email.json` (0600).
+  email: AgentEmailSchema.optional(),
   // Extra filesystem grants beyond the compiled default policy (own
   // workspace + team workspaces rw, open-office reads). Human-edited in
   // AGENT.md only — grants come from definitions, never from agents.
@@ -464,10 +508,6 @@ export function lookupModelMetadata(model: ModelConfig): ModelMetadata {
  * compression on provider 413 / context_overflow errors still fires.
  */
 export const AgentBehaviorSchema = z.object({
-  // Upper bound on Vercel AI SDK agentic steps per turn. Set high so the
-  // agent stops when IT decides (no more tool calls), not when we cap it.
-  // Still finite as a safety net against pathological tool-call loops.
-  maxSteps: z.number().default(1000),
   // Per-call output cap. Without this the Anthropic SDK auto-picks the
   // model's published max (e.g. 128K for opus-4-7) — fine on 1M-context
   // accounts but on a 200K-entitled account it eats nearly the whole
@@ -559,6 +599,46 @@ export const BrowserConfigSchema = z.object({
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 
 /**
+ * Workforce-wide email config. Per-agent mailboxes are bound in each
+ * AGENT.md (`email:` block) with secrets in `<agentDir>/email.json`. The
+ * only thing that lives here is the BYO OAuth app credentials shared across
+ * agents — one Google / Microsoft app authorizes many agent mailboxes.
+ * These app credentials are sensitive; prefer env-var injection and keep
+ * config.yaml readable only by the daemon user.
+ */
+export const EmailConfigSchema = z.object({
+  // Default IMAP/SMTP connection settings inherited by per-agent `imap`
+  // mailboxes that omit them — so a workforce on one mail host sets host/port
+  // once here and each agent only supplies its own address + app-password.
+  // Credentials are NEVER global; only these non-secret coordinates.
+  imap: z
+    .object({
+      host: z.string().optional(),
+      port: z.number().optional(),
+      smtpHost: z.string().optional(),
+      smtpPort: z.number().optional(),
+      tls: z.boolean().optional(),
+    })
+    .optional(),
+  google: z
+    .object({
+      clientId: z.string(),
+      clientSecret: z.string(),
+    })
+    .optional()
+    .describe("BYO Google OAuth app (Gmail API) — your own client credentials."),
+  microsoft: z
+    .object({
+      clientId: z.string(),
+      clientSecret: z.string(),
+      tenant: z.string().optional(),
+    })
+    .optional()
+    .describe("BYO Microsoft Entra app (Graph) — your own client credentials."),
+});
+export type EmailConfig = z.infer<typeof EmailConfigSchema>;
+
+/**
  * Root configuration schema — maps to config.yaml
  *
  * Agents are not stored here. They live as folders under
@@ -573,5 +653,6 @@ export const ConfigSchema = z.object({
   skills: SkillsConfigSchema.prefault({}),
   web: WebConfigSchema.prefault({}),
   browser: BrowserConfigSchema.prefault({}),
+  email: EmailConfigSchema.prefault({}),
 });
 export type Config = z.infer<typeof ConfigSchema>;

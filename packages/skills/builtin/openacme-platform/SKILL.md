@@ -29,20 +29,26 @@ user can override with `OPENACME_DATA_DIR`. Layout:
 ├── skills/<name>/SKILL.md  # workforce-wide skills (you can write these)
 ├── agents/<id>/
 │   ├── AGENT.md            # YAML frontmatter + persona body
+│   ├── email.json          # per-agent mailbox creds (0600). NEVER touch.
 │   ├── workspace/          # default cwd for the agent's shell + filesystem tools
 │   ├── resources/          # user-supplied reference files (style guides, templates)
+│   ├── browser-profiles/   # per-agent browser profile (chromium/ and/or firefox/)
 │   └── memory/
 │       ├── MEMORY.md       # index, always injected into prompt
 │       ├── <topic>.md      # entry files read on demand
 │       └── peers/<id>.md   # notes about a coworker, from prior delegations
+├── teams/<id>/TEAM.md      # team definition (members, manager) + body
 ├── tasks/<id>.md           # one file per task (YAML frontmatter + body)
-├── attachments/<sid>/<aid>/<file>   # chat file uploads
-└── browser-profile/        # shared Chrome user-data-dir
+└── attachments/<sid>/<aid>/<file>   # chat file uploads
 ```
 
+Each agent runs its own browser (separate profile, separate cookies)
+and its own mailbox — both per-agent, never shared. `email.json` holds
+mailbox credentials and is off-limits alongside the other secrets.
+
 **Off-limits files** (do not read, do not write, no exceptions):
-`auth.json`, `.env`, `mcp-tokens/`, `state.db`. These are platform
-secrets and corruption-prone state. If the user asks you to inspect
+`auth.json`, `.env`, `mcp-tokens/`, `agents/<id>/email.json`,
+`state.db`. These are platform secrets and corruption-prone state. If the user asks you to inspect
 their provider credentials, tell them to check `<dataDir>/.env` or
 `<dataDir>/auth.json` themselves — don't open the file.
 
@@ -81,8 +87,9 @@ Key fields:
 - `tools` — environment-touching tools (shell, file IO, web, exec,
   browser). Introspection / self-management tools (`memory`,
   `skill_view`, `session_search`, `task_*`, `agent_list`, `ping_user`,
-  `sleep`) are **always-on system tools** merged in automatically — do
-  NOT list them here.
+  `defer_session`) are **always-on system tools** merged in
+  automatically — do NOT list them here. Email tools (`email_list`,
+  `email_send`, …) appear only for agents that have a mailbox bound.
 - `mcpServers` — agent-private MCP servers (names must not collide with
   global mcp.json).
 - `mcpDisabled` — global mcp.json server names this agent should not
@@ -94,10 +101,9 @@ When you create a new agent, write the AGENT.md directly. The folder
 gets created on first read. Workspace and memory dirs are created
 on-demand by the platform.
 
-**Restart semantics.** Editing AGENT.md does not automatically
-invalidate the running agent's cached system prompt. After non-trivial
-AGENT.md edits, tell the user to restart the daemon (`openacme
-restart`). Adding/removing agents follows the same rule.
+**Applies live.** The platform watches `AGENT.md` files — your edits (and
+creating or deleting an agent) take effect on the agent's next turn, no
+restart. MCP servers re-init only if you changed `mcpServers`/`mcpDisabled`.
 
 ## SKILL.md format
 
@@ -162,9 +168,9 @@ inherited env is filtered to drop credential-shaped vars like
 server actually needs them), `headers`, `timeout`, `connectTimeout`,
 `enabled`, `allowedTools`.
 
-**Restart semantics.** Editing mcp.json requires a daemon restart. The
-platform reads it once at boot and on agent-config changes; there is no
-file watcher. After editing, tell the user `openacme restart`.
+**Applies live.** The platform watches `mcp.json` — after you edit it, the
+affected agents re-init their MCP connections on their next turn (bringing a
+slow/broken server up can take a few seconds). No restart.
 
 Per-agent private servers go in `mcpServers` on AGENT.md (must not
 collide with global names). Per-agent exclusions go in `mcpDisabled`.
@@ -184,8 +190,10 @@ Agents automatically — no restart needed.
 Tasks are filesystem-backed at `<dataDir>/tasks/<id>.md`. One file per
 task, YAML frontmatter + markdown body.
 
-**Lifecycle:** `open ↔ blocked` (auto-flip based on `depends_on`),
-`→ in_progress` (claimed by assignee), `→ done | canceled` (terminal).
+**Lifecycle:** `open → in_progress` (claimed by assignee) `→ done |
+canceled` (terminal). `blocked` is **explicit-only** — `depends_on`
+does NOT auto-flip status. Readiness (deps satisfied AND `start_at`
+due) is computed fresh at read time by the dispatcher, not stored.
 Recurring tasks self-reset to `open` with the next fire time when
 marked `done`; use `canceled` to stop a recurrence permanently.
 
@@ -199,10 +207,13 @@ marked `done`; use `canceled` to stop a recurrence permanently.
 - **Events** are the signal log (status changes, comments, dep
   unblocks) — read-only, queried via `/api/tasks/:id/events`.
 
-**Scheduler.** Pure event-driven. When a task event fires, the
-scheduler wakes the assignee's session for one autonomous turn. The
-agent picks what to work on from the prompt's task snapshot. No
-periodic tick.
+**Dispatcher.** Tick-based, not event-reactive. A ~60s tick walks
+agents and decides who to wake; task events don't wake anything
+directly — they land as **inbox rows** the next tick observes. When an
+agent has pending inbox rows (or a ready task), the dispatcher wakes
+its session for one autonomous turn and the agent picks what to work
+on. Wake latency is bounded by the tick (~60s from task creation to
+the assignee starting).
 
 **Onboarding pattern.** When you create a new agent, file an
 **onboarding task** on them: `task_create(assignee: <newId>, title:
@@ -218,15 +229,63 @@ Per-agent memory at `<dataDir>/agents/<id>/memory/`. Uses Anthropic's
 `memory_20250818` tool spec — six ops (`view`, `create`, `str_replace`,
 `insert`, `delete`, `rename`) against virtual paths under `/memories/`.
 
-`MEMORY.md` is the index — always injected into the prompt. Cap 2200
-chars (write-time). Entries live in topic files (`<topic>.md`) loaded
-on demand.
+`MEMORY.md` is the index — always injected into the prompt. Write-time
+char cap is the agent's `memoryCharLimit` (default 4000). Entries live
+in topic files (`<topic>.md`) loaded on demand.
 
 **Peer notes.** Convention is `peers/<peerId>.md` — one note per
 coworker keyed by stable agent id. Captures lived nuance from prior
 delegations, NOT a paraphrase of the canonical role. The `agent_list`
 tool surfaces peer notes inline so a delegating agent sees both
 canonical role and their own learned context.
+
+## Teams
+
+A team groups agents under a shared name. Defined at
+`<dataDir>/teams/<id>/TEAM.md` (frontmatter + body): `members` (agent
+ids) and an optional `manager` (must be a member). The manager is a
+**routing default, not authority**: a team-addressed `task_create`
+(team set, no assignee) lands on the manager for triage, members'
+prompts show `Manager: <id>`, and the manager's prompt gets a
+triage-duty note. No charter powers, no extra tools. You can create
+and edit teams by writing TEAM.md.
+
+## Email
+
+Email is **per-agent and opt-in** — each agent that gets a mailbox has
+its own address, credentials, and isolation. The email tools resolve
+the *current* agent's mailbox; there is no "which mailbox" argument, so
+one agent literally cannot touch another's. Backends: generic
+IMAP/SMTP, Gmail API, Microsoft Graph (Gmail/Microsoft use a
+bring-your-own OAuth app set in Settings → Email).
+
+You manage the **non-secret binding** (provider, address) in an
+agent's `email` frontmatter, but **never** the credentials —
+`agents/<id>/email.json` is off-limits. To connect a mailbox, point the
+user at the agent's Email panel in the web UI (or `openacme email
+login <agentId>`); the email tools only appear for an agent once a
+mailbox is bound.
+
+## Browser
+
+Each agent gets its own browser session (separate profile under
+`agents/<id>/browser-profiles/`, separate cookies and fingerprint) so
+logins and bans never cascade across the workforce. Lazy — nothing
+spawns until the agent first calls a `browser_*` tool. Provider
+(local Chrome / Browserbase / Browser Use / Firecrawl) is set in
+`config.yaml` under `browser`.
+
+## Everything applies live — almost
+
+The platform watches its config surfaces under the data dir, so **your
+edits take effect on the next turn with no restart**: `config.yaml`
+(model, behavior, browser, email), `AGENTS.md`, `mcp.json`, any
+`agents/<id>/AGENT.md`, and `skills/**/SKILL.md`. The web Settings UI
+applies live too. So do creating, editing, and deleting agents.
+
+The **one** thing that still needs `openacme restart` is changing the
+server **host or port** — that's a live socket bind and can't be swapped
+in place. Tell the user to restart only in that case.
 
 ## How you set things up
 
@@ -237,8 +296,8 @@ When the user asks you to create a new agent:
 2. Write `<dataDir>/agents/<id>/AGENT.md` with the frontmatter +
    persona body.
 3. File an onboarding task on the new agent so they learn the team.
-4. Tell the user to restart the daemon (`openacme restart`) so the new
-   agent's prompt is built fresh.
+4. That's it — the new agent is picked up live (no restart) and shows up
+   in the roster and picker.
 
 When the user asks you to install a skill:
 
@@ -253,10 +312,54 @@ When the user asks you to add an MCP server:
 
 1. Read `<dataDir>/mcp.json` (or create it as `{}` if missing).
 2. Add the server entry (same shape Claude Desktop / Cursor use).
-3. Tell the user to restart the daemon for the change to take effect.
+3. That's it — the platform watches `mcp.json` and the affected agents
+   re-connect on their next turn (no restart).
 
 When the user asks how something works:
 
 - Walk through the relevant section of this skill in your own words.
 - Reference your `resources/` folder — it has example AGENT.md /
   SKILL.md / mcp.json snippets you can show.
+- Link the docs when the user wants the full walkthrough or
+  screenshots (see below).
+
+## Docs site
+
+There's a public docs site at **https://openacme.pages.dev/docs** with
+walkthroughs and screenshots. This skill is your fast reference for
+*doing* things; the docs are the deep-dive you point the user to when
+they want to read more or set up something step-by-step. Useful pages:
+
+- `/docs/quickstart` — install + first run
+- `/docs/agents` · `/docs/teams` · `/docs/tasks` — the workforce model
+- `/docs/skills` · `/docs/memory` · `/docs/mcp` — capabilities
+- `/docs/browser` · `/docs/email` — per-agent browser and mailbox setup
+- `/docs/configuration` · `/docs/self-hosting` · `/docs/remote-access` —
+  config, deploying on a server, exposing it safely
+- `/docs/cli` · `/docs/troubleshooting`
+
+Cite a specific page rather than the bare site when you can. For
+provider-specific setup (Gmail app passwords, Microsoft OAuth, etc.)
+the `/docs/email` page links the official upstream guides.
+
+### Embedding screenshots in chat
+
+The web chat renders standard markdown images, so you can show a UI
+screenshot inline:
+
+```
+![Settings → Email](https://openacme.pages.dev/screens/light/email-settings.webp)
+```
+
+URL pattern: `https://openacme.pages.dev/screens/<theme>/<name>.webp`
+where `<theme>` is `light` or `dark`. **Only use these known names** —
+never invent a filename; a wrong URL renders as a broken image:
+
+`agents`, `board`, `brief`, `chat`, `email-settings`, `home`, `login`,
+`result`, `skills`, `teams`.
+
+Use this when a screenshot genuinely helps the user find something in
+the UI (e.g. "the Email panel is here") — not on every reply. Two
+caveats: you can't *see* these images (you're citing a known URL, not
+viewing it), and they only render in the **web** chat — the terminal
+chat shows alt text only, so always keep the alt text descriptive.

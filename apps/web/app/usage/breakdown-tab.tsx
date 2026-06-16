@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { AgentAvatar } from "@/app/components/ui/agent-avatar";
+import { ModelProviderLogo } from "@/app/components/BrandIcons";
 import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
 import { Badge } from "@/app/components/ui/badge";
 import { cn } from "@/app/lib/utils";
@@ -172,9 +173,13 @@ export function ModelTable({
               "group border-b border-paper-rule py-2 text-left transition-colors last:border-b-0 hover:bg-paper-sunk"
             )}
           >
-            <span className="truncate font-mono text-xs text-ink">
-              {r.key}
-              <span className="meta-row ml-2 text-ink-faint opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="flex min-w-0 items-center gap-2 font-mono text-xs text-ink">
+              <ModelProviderLogo
+                model={r.key}
+                className="size-3.5 shrink-0 text-ink-soft"
+              />
+              <span className="truncate">{r.key}</span>
+              <span className="meta-row text-ink-faint opacity-0 transition-opacity group-hover:opacity-100">
                 activity →
               </span>
             </span>

@@ -18,12 +18,14 @@ import {
   Globe2,
   Bell,
   Users,
+  Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Sidebar } from "../components/Sidebar";
 import { NotificationsTab } from "../components/NotificationsTab";
 import { MembersTab } from "../components/MembersTab";
 import { API_BASE } from "../lib/api";
+import { docsUrl } from "../lib/links";
 import type { ModelDefaultsView, ModelDefaultsUpdate } from "../lib/types";
 import {
   MCPServerForm,
@@ -37,6 +39,12 @@ import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
 import { Textarea } from "@/app/components/ui/textarea";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
 import { Badge } from "@/app/components/ui/badge";
+import {
+  GoogleIcon,
+  MicrosoftIcon,
+  ProviderBrandLogo,
+  ToolBrandLogo,
+} from "@/app/components/BrandIcons";
 import {
   Card,
   CardContent,
@@ -72,7 +80,6 @@ interface ServerConfig {
   // default — every agent without its own `model:` block inherits this.
   model: ModelDefaultsView;
   server: { port: number; host: string };
-  behavior: { maxSteps: number };
   skills: { directory: string; autoGenerate: boolean };
 }
 
@@ -164,6 +171,7 @@ const SETTINGS_TABS = [
   "mcp",
   "web-search",
   "browser",
+  "email",
   "notifications",
   "context",
 ] as const;
@@ -186,8 +194,8 @@ function SettingsPage() {
 
   // Default-model editor — workforce-wide root config.yaml#model. `draft` is
   // hydrated from the loaded `config.model` and pushed via PUT
-  // /api/config/model. Takes effect on next daemon restart (in-memory
-  // AgentManager snapshot doesn't refresh) — surfaced as inline hint.
+  // /api/config/model, which calls reloadConfig server-side so the change
+  // applies live (cached Agents evicted) — no restart.
   const [modelDraft, setModelDraft] = useState<ModelDefaultsView | null>(null);
   const [modelSaving, setModelSaving] = useState(false);
 
@@ -250,7 +258,99 @@ function SettingsPage() {
   const [browserKeyInputs, setBrowserKeyInputs] = useState<Record<string, string>>({});
   const [browserProjectIdInput, setBrowserProjectIdInput] = useState("");
   const [browserSaving, setBrowserSaving] = useState<string | null>(null);
-  const [browserPendingRestart, setBrowserPendingRestart] = useState(false);
+
+  interface EmailConfigStatus {
+    imap: {
+      host?: string;
+      port?: number;
+      smtpHost?: string;
+      smtpPort?: number;
+      tls?: boolean;
+    } | null;
+    google: { clientId: string; configured: boolean };
+    microsoft: { clientId: string; tenant: string; configured: boolean };
+  }
+  const blankEmailForm = {
+    host: "",
+    port: "",
+    smtpHost: "",
+    smtpPort: "",
+    googleClientId: "",
+    googleClientSecret: "",
+    msClientId: "",
+    msClientSecret: "",
+    msTenant: "",
+  };
+  const [emailCfg, setEmailCfg] = useState<EmailConfigStatus | null>(null);
+  const [emailForm, setEmailForm] = useState({ ...blankEmailForm });
+  const [emailSaving, setEmailSaving] = useState(false);
+  const emailRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/email/oauth/callback`
+      : "/api/email/oauth/callback";
+
+  const loadEmail = async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/email/config`, { signal });
+      if (!res.ok) return;
+      const d = (await res.json()) as EmailConfigStatus;
+      setEmailCfg(d);
+      setEmailForm({
+        host: d.imap?.host ?? "",
+        port: d.imap?.port?.toString() ?? "",
+        smtpHost: d.imap?.smtpHost ?? "",
+        smtpPort: d.imap?.smtpPort?.toString() ?? "",
+        googleClientId: d.google.clientId,
+        googleClientSecret: "",
+        msClientId: d.microsoft.clientId,
+        msClientSecret: "",
+        msTenant: d.microsoft.tenant,
+      });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+    }
+  };
+
+  const saveEmail = async () => {
+    setEmailSaving(true);
+    try {
+      const f = emailForm;
+      const res = await fetch(`${API_BASE}/api/email/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imap: {
+            host: f.host,
+            port: f.port ? Number(f.port) : undefined,
+            smtpHost: f.smtpHost,
+            smtpPort: f.smtpPort ? Number(f.smtpPort) : undefined,
+          },
+          google: {
+            clientId: f.googleClientId,
+            ...(f.googleClientSecret ? { clientSecret: f.googleClientSecret } : {}),
+          },
+          microsoft: {
+            clientId: f.msClientId,
+            tenant: f.msTenant,
+            ...(f.msClientSecret ? { clientSecret: f.msClientSecret } : {}),
+          },
+        }),
+      });
+      if (!res.ok) {
+        const e = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error("Failed to save email settings", { description: e.error });
+        return;
+      }
+      toast.success("Email settings saved");
+      await loadEmail();
+    } catch (e) {
+      toast.error("Failed to save email settings", {
+        description: (e as Error).message,
+      });
+    } finally {
+      setEmailSaving(false);
+    }
+  };
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -261,6 +361,7 @@ function SettingsPage() {
     loadAgentsMd(ctrl.signal);
     loadWebSearch(ctrl.signal);
     loadBrowser(ctrl.signal);
+    loadEmail(ctrl.signal);
     return () => ctrl.abort();
     // loadMcp is useCallback-stabilized; intentionally run-once at mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,7 +422,7 @@ function SettingsPage() {
         toast.error(err?.error ?? "Failed to save default model");
         return;
       }
-      toast.success("Default model saved (restart to apply)");
+      toast.success("Default model saved");
       // Re-fetch so the editor reflects disk truth (handles server-side
       // schema-strip of fields like apiKey that we never persist).
       await loadConfig();
@@ -611,9 +712,7 @@ function SettingsPage() {
         toast.error("Failed to save browser settings", { description: data.error });
         return;
       }
-      const data = await res.json().catch(() => ({}));
-      if (data?.needsRestart) setBrowserPendingRestart(true);
-      toast.success("Browser settings saved — restart the daemon to apply");
+      toast.success("Browser settings saved");
       await loadBrowser();
     } catch (e) {
       toast.error("Failed to save browser settings", {
@@ -910,6 +1009,10 @@ function SettingsPage() {
                     <Globe2 className="size-3.5" />
                     Browser
                   </TabsTrigger>
+                  <TabsTrigger value="email" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
+                    <Mail className="size-3.5" />
+                    Email
+                  </TabsTrigger>
                   <TabsTrigger value="notifications" className="h-9 shrink-0 max-md:!w-auto md:px-4 data-[state=active]:bg-paper-sunk data-[state=active]:font-medium">
                     <Bell className="size-3.5" />
                     Notifications
@@ -957,6 +1060,10 @@ function SettingsPage() {
                       return (
                         <div key={provider.id} className="grid gap-2">
                           <div className="flex items-center gap-2">
+                            <ProviderBrandLogo
+                              provider={provider.id}
+                              className="size-4 shrink-0"
+                            />
                             <Label htmlFor={`key-${provider.id}`}>
                               {provider.name}
                             </Label>
@@ -1051,12 +1158,6 @@ function SettingsPage() {
                         </dt>
                         <dd className="text-ink-soft">
                           {config.server.host}:{config.server.port}
-                        </dd>
-                        <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                          Max steps
-                        </dt>
-                        <dd className="text-ink-soft">
-                          {config.behavior.maxSteps}
                         </dd>
                         <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
                           Skills dir
@@ -1329,10 +1430,6 @@ function SettingsPage() {
                           >
                             {modelSaving ? "Saving…" : "Save default model"}
                           </Button>
-                          <span className="text-[11px] text-ink-faint">
-                            Restart the daemon for changes to take effect on
-                            running agents.
-                          </span>
                         </div>
                       </div>
                     )}
@@ -1414,7 +1511,8 @@ function SettingsPage() {
                     {mcpLoading && Object.keys(mcpServers).length === 0 ? (
                       <p className="font-mono text-[12px] text-ink-faint">Loading…</p>
                     ) : Object.keys(mcpServers).length === 0 ? (
-                      <p className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
+                      <p className="flex items-center gap-2 border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
+                        <Plug className="size-4 shrink-0 text-ink-faint" aria-hidden />
                         No MCP servers configured yet. Click &ldquo;Add
                         server&rdquo; to start.
                       </p>
@@ -1679,6 +1777,10 @@ function SettingsPage() {
                           return (
                             <div key={p.id} className="grid gap-2">
                               <div className="flex items-center gap-2">
+                                <ToolBrandLogo
+                                  id={p.id}
+                                  className="size-4 shrink-0"
+                                />
                                 <Label htmlFor={`web-key-${p.id}`}>
                                   {p.name}
                                 </Label>
@@ -1759,12 +1861,6 @@ function SettingsPage() {
                       <p className="font-mono text-[12px] text-ink-faint">Loading…</p>
                     ) : (
                       <>
-                        {browserPendingRestart && (
-                          <div className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[11px] text-ink">
-                            Restart OpenAcme to apply the new browser settings.
-                          </div>
-                        )}
-
                         <div className="grid gap-2">
                           <Label>Provider</Label>
                           <Select
@@ -1778,10 +1874,39 @@ function SettingsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="local">Local</SelectItem>
-                              <SelectItem value="browserbase">Browserbase</SelectItem>
-                              <SelectItem value="browser-use">Browser Use</SelectItem>
-                              <SelectItem value="firecrawl">Firecrawl</SelectItem>
+                              <SelectItem value="local">
+                                <span className="flex items-center gap-2">
+                                  <Boxes className="size-3.5 shrink-0" />
+                                  Local
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="browserbase">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="browserbase"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Browserbase
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="browser-use">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="browser-use"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Browser Use
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="firecrawl">
+                                <span className="flex items-center gap-2">
+                                  <ToolBrandLogo
+                                    id="firecrawl"
+                                    className="size-3.5 shrink-0"
+                                  />
+                                  Firecrawl
+                                </span>
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2060,6 +2185,182 @@ function SettingsPage() {
                           Save
                         </Button>
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="email">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Email</CardTitle>
+                    <CardDescription>
+                      Workforce-wide defaults. Each agent still binds its own mailbox on
+                      its own page.{" "}
+                      <a
+                        href={docsUrl("/email")}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-plot-red underline-offset-2 hover:underline"
+                      >
+                        Setup guide →
+                      </a>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <section className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Mail className="size-4 text-ink-soft" />
+                        <span className="text-sm font-medium text-ink">
+                          IMAP / SMTP connection defaults
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-ink-soft">
+                        Agents on IMAP inherit these when left blank.
+                      </p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label>IMAP host</Label>
+                          <Input
+                            value={emailForm.host}
+                            onChange={(e) => setEmailForm((s) => ({ ...s, host: e.target.value }))}
+                            placeholder="imap.example.com"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>IMAP port</Label>
+                          <Input
+                            value={emailForm.port}
+                            onChange={(e) => setEmailForm((s) => ({ ...s, port: e.target.value }))}
+                            placeholder="993"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>SMTP host</Label>
+                          <Input
+                            value={emailForm.smtpHost}
+                            onChange={(e) => setEmailForm((s) => ({ ...s, smtpHost: e.target.value }))}
+                            placeholder="smtp.example.com"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>SMTP port</Label>
+                          <Input
+                            value={emailForm.smtpPort}
+                            onChange={(e) => setEmailForm((s) => ({ ...s, smtpPort: e.target.value }))}
+                            placeholder="587"
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3 border-t border-paper-rule pt-5">
+                      <div className="flex items-center gap-2">
+                        <GoogleIcon className="size-4" />
+                        <span className="text-sm font-medium text-ink">Gmail</span>
+                        {emailCfg?.google.configured && (
+                          <Badge variant="secondary">Configured</Badge>
+                        )}
+                      </div>
+                      <p className="text-[13px] text-ink-soft">
+                        Your Google OAuth client. Add this redirect URI:
+                      </p>
+                      <div className="flex items-stretch gap-2">
+                        <code className="flex-1 break-all border border-paper-rule bg-paper-sunk/40 px-2 py-1 font-mono text-[12px] text-ink">
+                          {emailRedirect}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(emailRedirect);
+                            toast.success("Redirect URI copied");
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label>Client ID</Label>
+                          <Input
+                            value={emailForm.googleClientId}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, googleClientId: e.target.value }))
+                            }
+                            placeholder="…apps.googleusercontent.com"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Client secret</Label>
+                          <Input
+                            type="password"
+                            value={emailForm.googleClientSecret}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, googleClientSecret: e.target.value }))
+                            }
+                            placeholder={
+                              emailCfg?.google.configured ? "•••••• (unchanged)" : "GOCSPX-…"
+                            }
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-3 border-t border-paper-rule pt-5">
+                      <div className="flex items-center gap-2">
+                        <MicrosoftIcon className="size-4" />
+                        <span className="text-sm font-medium text-ink">
+                          Outlook / Microsoft 365
+                        </span>
+                        {emailCfg?.microsoft.configured && (
+                          <Badge variant="secondary">Configured</Badge>
+                        )}
+                      </div>
+                      <p className="text-[13px] text-ink-soft">
+                        Your Microsoft Entra app — same redirect URI, under Web.
+                      </p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label>Client ID</Label>
+                          <Input
+                            value={emailForm.msClientId}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, msClientId: e.target.value }))
+                            }
+                            placeholder="application (client) id"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Client secret</Label>
+                          <Input
+                            type="password"
+                            value={emailForm.msClientSecret}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, msClientSecret: e.target.value }))
+                            }
+                            placeholder={
+                              emailCfg?.microsoft.configured ? "•••••• (unchanged)" : "client secret"
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>Tenant (optional)</Label>
+                          <Input
+                            value={emailForm.msTenant}
+                            onChange={(e) =>
+                              setEmailForm((s) => ({ ...s, msTenant: e.target.value }))
+                            }
+                            placeholder="common"
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <div className="flex justify-end border-t border-paper-rule pt-5">
+                      <Button onClick={saveEmail} disabled={emailSaving}>
+                        {emailSaving ? "Saving…" : "Save email settings"}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

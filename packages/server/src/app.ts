@@ -35,6 +35,7 @@ import { registerTeamRoutes } from "./routes/teams.js";
 import { registerSetupRoutes, setDefaultModelIfUnset } from "./routes/setup.js";
 import { registerSkillsHubRoutes } from "./routes/skills-hub.js";
 import { registerAgentCatalogRoutes } from "./routes/agent-catalog.js";
+import { registerEmailRoutes } from "./routes/email.js";
 import { registerStreamRoutes } from "./routes/streams.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerPushRoutes } from "./routes/push.js";
@@ -195,6 +196,12 @@ export async function createApp(
   // Bundled agent catalog — browse + import templates. Mount before the
   // generic /api/agents/:id so /api/agents/catalog/* takes the specific path.
   registerAgentCatalogRoutes(app, manager, config);
+
+  // Per-agent email: bind IMAP / run Gmail+Graph OAuth, status, unbind.
+  // Specific /api/agents/:id/email paths + the /api/email/oauth/callback
+  // redirect target. Mounted after authMiddleware (the OAuth redirect
+  // carries the member cookie in authenticated mode; open mode passes all).
+  registerEmailRoutes(app, manager, config);
 
   // Live SSE streams: per-session (chat pane live updates) and
   // workforce-wide (home page row deltas). Mounted before generic
@@ -845,6 +852,7 @@ export async function createApp(
       }
       validated[name] = result.data;
     }
+    manager.suppressWatch("mcp");
     saveGlobalMcpServers(config.dataDir, validated);
     // Reinit in the background — N agents × connect retries can take
     // minutes, and the catalog write is already durable. The UI polls
@@ -950,6 +958,7 @@ export async function createApp(
         tags || [],
         skillBody || ""
       );
+      manager.reloadSkills();
       return c.json(skill, 201);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
@@ -983,6 +992,7 @@ export async function createApp(
         body.tags ?? existing.tags,
         body.body ?? existing.body
       );
+      manager.reloadSkills();
       return c.json(skill);
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
@@ -1004,6 +1014,7 @@ export async function createApp(
     } catch {
       // best-effort cleanup; legacy delete already succeeded
     }
+    manager.reloadSkills();
     return c.json({ success: true });
   });
 
@@ -1070,6 +1081,7 @@ export async function createApp(
       const hub = new SkillHub(skillsDir, manager.skillRegistry);
       try {
         const result = await hub.install(staging, { source: "local" });
+        manager.reloadSkills();
         const skill = manager.skillRegistry.getSkill(result.name);
         return c.json({ success: true, name: result.name, skill }, 201);
       } catch (err) {
@@ -1166,12 +1178,22 @@ export async function createApp(
     const raw = readRawConfig(config.dataDir);
     const existing = (raw.model as Record<string, unknown> | undefined) ?? {};
     const next: Record<string, unknown> = { ...existing };
+    // Only persist keys the caller actually sent. `parsed.data` carries Zod
+    // defaults (auth, cacheTtl) for absent fields — writing those would clobber
+    // the user's on-disk values on a partial update (the setup-must-merge rule).
+    const sentKeys = new Set(Object.keys(body as Record<string, unknown>));
     for (const [k, v] of Object.entries(parsed.data)) {
-      if (v === undefined) continue;
+      if (!sentKeys.has(k) || v === undefined) continue;
       next[k] = v;
     }
     writeRawConfig(config.dataDir, { ...raw, model: next });
-    const ok: ConfigModelUpdateResponse = { ok: true, requiresRestart: true };
+    // Live-apply: reloadConfig evicts cached Agents so the next turn reads the
+    // new default off `this.config`. Model changes never need a restart.
+    const { restartRequired } = manager.reloadConfig();
+    const ok: ConfigModelUpdateResponse = {
+      ok: true,
+      requiresRestart: restartRequired.length > 0,
+    };
     return c.json(ok);
   });
 
@@ -1360,9 +1382,9 @@ export async function createApp(
   // ── Browser ──
   // Cloud-provider creds live in <dataDir>/.env so they pick up without a
   // restart. Provider selection (`browser.provider`) plus local-only knobs
-  // (executablePath, headless, noSandbox) live in config.yaml; agents
-  // instantiate one provider at AgentManager construction, so changing
-  // those requires a daemon restart.
+  // (executablePath, headless, noSandbox) live in config.yaml; the save route
+  // calls reloadConfig, which hot-swaps the browser provider (live sessions
+  // keep the old one; the next acquire uses the new one) — no restart.
   const BROWSER_PROVIDERS = ["local", "browserbase", "browser-use", "firecrawl"] as const;
   type BrowserProviderId = (typeof BROWSER_PROVIDERS)[number];
   const BROWSER_CRED_VARS: Record<Exclude<BrowserProviderId, "local">, readonly string[]> = {
@@ -1497,7 +1519,10 @@ export async function createApp(
     if (body.localBrowser === "camoufox" && !isCamoufoxInstalled()) {
       void prefetchCamoufox();
     }
-    return c.json({ success: true, needsRestart: true });
+    // Live-apply: reloadConfig hot-swaps the browser provider, so the change
+    // takes effect on the next browser session with no restart.
+    manager.reloadConfig();
+    return c.json({ success: true });
   });
 
   app.post("/api/browser/keys", async (c) => {

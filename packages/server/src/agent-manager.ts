@@ -55,6 +55,7 @@ import {
   bindMemory,
   bindTaskStore,
   bindBrowser,
+  bindEmail,
   bindAgentTool,
   bindPingUser,
   bindDeferSession,
@@ -63,6 +64,7 @@ import {
   sweepOverflow,
   deleteSessionToolCalls,
   SYSTEM_TOOLS,
+  EMAIL_TOOL_NAMES,
 } from "@openacme/tools";
 import { ToolHostManager } from "@openacme/tool-host";
 import * as fs from "node:fs";
@@ -73,6 +75,7 @@ import {
   createBrowserProvider,
   type AgentBrowserOverrides,
 } from "@openacme/browser";
+import { EmailManager } from "@openacme/email";
 import { Dispatcher } from "./dispatcher.js";
 import { SessionBroadcaster } from "./broadcaster.js";
 import {
@@ -104,11 +107,17 @@ import {
   type AgentTemplate,
 } from "@openacme/agent-catalog";
 import * as path from "node:path";
+import chokidar, { type FSWatcher } from "chokidar";
 
 // Same shape as `SAFE_ID` in `@openacme/memory` and `@openacme/config`'s
 // agent-store. Duplicated here to avoid a cross-package import for one
 // regex; the three must stay in sync.
 const PEER_ID_SAFE = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+
+// Internal upper bound on agentic steps per turn — a safety net against
+// pathological tool-call loops, not a user-facing knob. High enough that the
+// agent stops when it has no more tool calls, never because we capped it.
+const DEFAULT_MAX_STEPS = 1000;
 
 /** Pull the operator-facing message out of a `ping_user` event payload.
  *  Payload shape is `{ message: string }` per ping.ts but the column is
@@ -166,7 +175,8 @@ export class AgentManager {
   readonly vapid: VapidKeys;
   readonly attachmentsRoot: string;
   readonly agentsDir: string;
-  /** `<dataDir>/AGENTS.md` contents; restart to pick up edits. */
+  /** `<dataDir>/AGENTS.md` contents. Applies live: `setAgentsMd` (UI saves)
+   *  and the config watcher (direct edits) both re-read + evict cached Agents. */
   private agentsMd: string | undefined;
   readonly memoryStore: MemoryStore;
   readonly taskStore: TaskStore;
@@ -181,6 +191,7 @@ export class AgentManager {
    *  tools. Lazy: nothing spawns until the first such tool call. */
   readonly toolHostManager: ToolHostManager;
   readonly browserManager: BrowserManager;
+  emailManager: EmailManager;
   readonly agentCatalog: AgentCatalog;
   /** In-memory per-session pub/sub for SSE clients. Shared by scheduler,
    *  agent runtime, and the home + per-session stream routes. */
@@ -205,6 +216,20 @@ export class AgentManager {
    *  a live worker this process. */
   private stdioMcpRefreshed = new Set<string>();
   readonly skillRegistry: SkillRegistry;
+  /** Watches the config surfaces under dataDir (config.yaml, AGENTS.md,
+   *  mcp.json, agents/<id>/AGENT.md, skills/**\/SKILL.md) so direct file
+   *  edits apply live. Started at the end of the constructor, closed in
+   *  `close()`. */
+  private configWatcher?: FSWatcher;
+  /** Per-surface debounce timers, coalescing editor multi-writes. */
+  private watchDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Surfaces the manager just wrote itself (key -> expiry ms). The watcher
+   *  drops its own echo so a settings-save / agent-CRUD doesn't double-reload. */
+  private watchSuppressed = new Map<string, number>();
+  /** Per-agent hash of {mcpServers, mcpDisabled}, so an AGENT.md hand-edit
+   *  only triggers an MCP reinit (worker restart) when those fields actually
+   *  changed — a persona/tool tweak just evicts the cached Agent. */
+  private agentMcpHash = new Map<string, string>();
   /** Optional model-resolution override, threaded into every Agent. Unset
    *  in production (Agent falls back to the real `getModel`); e2e supplies
    *  a stub. Named distinctly from the `resolveModel(def)` method below,
@@ -456,6 +481,14 @@ export class AgentManager {
     });
     bindBrowser({ manager: this.browserManager });
 
+    // Per-agent email. Each agent binds its own mailbox in AGENT.md
+    // (`email:` block); secrets live in `<agentDir>/email.json` (0600).
+    // The provider is selected per-agent, so agent A can be on Gmail while
+    // agent B is on IMAP. Bound via the same placeholder pattern so
+    // @openacme/tools stays free of a runtime dep on @openacme/email.
+    // Rebuilt on reloadConfig so global email settings apply without restart.
+    this.emailManager = this.buildEmailManager();
+
     // Per-agent tool-host workers: worker-runtime tools (filesystem,
     // shell, exec, process) route here instead of running in the daemon.
     // Policy is compiled fresh at every worker (re)spawn so AGENT.md /
@@ -527,10 +560,7 @@ export class AgentManager {
 
     // Load skills
     this.skillRegistry = new SkillRegistry();
-    const skillsDir = path.isAbsolute(config.skills.directory)
-      ? config.skills.directory
-      : path.join(config.dataDir, config.skills.directory);
-    this.skillRegistry.loadFromDirectory(skillsDir);
+    this.skillRegistry.loadFromDirectory(this.resolveSkillsDir());
     if (this.skillRegistry.size > 0) {
       console.log(`  📚 Loaded ${this.skillRegistry.size} skills`);
     }
@@ -585,6 +615,10 @@ export class AgentManager {
     } catch (e) {
       log.warn({ err: e }, "tool-overflow sweep failed");
     }
+
+    // Watch the config surfaces under dataDir so direct file edits (the Acme
+    // agent's own writes, or a human hand-edit) apply live — no restart.
+    this.startConfigWatcher();
   }
 
   /**
@@ -798,9 +832,9 @@ export class AgentManager {
 
   /**
    * Tear down and rebuild the MCP client for one agent. Called from
-   * `initMCP` and agent CRUD. (No file watcher: editing `mcp.json`
-   * requires a server restart by design — simpler model than reasoning
-   * about hot reload races.)
+   * `initMCP`, agent CRUD, and the config watcher (a hand-edit of `mcp.json`
+   * re-runs `initMCP`; a per-agent AGENT.md edit re-runs this when its MCP
+   * fields changed).
    */
   async reinitMCPForAgent(id: string): Promise<void> {
     const def = this.agentStore.get(id);
@@ -1001,7 +1035,9 @@ export class AgentManager {
    */
   async createAgent(def: AgentDefinition): Promise<Agent> {
     const provisioned = await this.ensureAgentBrowserProfile(def);
+    this.suppressWatch(`agent:${provisioned.id}`);
     this.agentStore.upsert(provisioned);
+    this.agentMcpHash.set(provisioned.id, AgentManager.mcpHashOf(provisioned));
     // A new agent changes every OTHER agent's compiled path policy (its
     // memory/sessions dirs join their deny-read lists) — drop all cached
     // Agents and workers so the next call rebuilds with fresh policies.
@@ -1310,7 +1346,9 @@ export class AgentManager {
         ? { ...existing.model, ...updates.model }
         : existing.model,
     };
+    this.suppressWatch(`agent:${id}`);
     this.agentStore.upsert(updated);
+    this.agentMcpHash.set(id, AgentManager.mcpHashOf(updated));
 
     const mcpChanged =
       hasOwn(updates, "mcpServers") || hasOwn(updates, "mcpDisabled");
@@ -1401,6 +1439,8 @@ export class AgentManager {
   async deleteAgent(id: string): Promise<void> {
     const existing = this.agentStore.get(id);
     if (existing?.managed) throw managedAgentError(id, "deleted");
+    this.suppressWatch(`agent:${id}`);
+    this.agentMcpHash.delete(id);
     const mcpClient = this.mcpClients.get(id);
     if (mcpClient) {
       await mcpClient.disconnect();
@@ -1422,6 +1462,14 @@ export class AgentManager {
       await this.browserManager.closeAgent(id);
     } catch (e) {
       log.warn({ err: e, agentId: id }, "deleteAgent: failed to close browser session");
+    }
+
+    // Drop any per-agent email session. The agent's email.json (secrets)
+    // goes away with the agent dir below; nothing else holds it.
+    try {
+      await this.emailManager.closeAgent(id);
+    } catch (e) {
+      log.warn({ err: e, agentId: id }, "deleteAgent: failed to close email session");
     }
 
     // Sessions: list cross-agent leaves then filter; SessionStore.list
@@ -1607,6 +1655,7 @@ export class AgentManager {
         mcpServers.push({ name: m.name, action: "added" });
       }
       if (changed) {
+        this.suppressWatch("mcp");
         saveGlobalMcpServers(this.config.dataDir, globalMcp);
         await this.initMCP();
       }
@@ -1752,25 +1801,250 @@ export class AgentManager {
   /** Set AGENTS.md content. Empty/whitespace deletes the file. Evicts
    *  cached Agents so next activation rebuilds the system prompt. */
   setAgentsMd(content: string): void {
+    this.suppressWatch("agentsmd");
     writeAgentsMd(this.config.dataDir, content);
     this.agentsMd = readAgentsMd(this.config.dataDir);
     this.agents.clear();
   }
 
+  /** Resolve the skills directory (absolute, or relative to dataDir). */
+  private resolveSkillsDir(): string {
+    return path.isAbsolute(this.config.skills.directory)
+      ? this.config.skills.directory
+      : path.join(this.config.dataDir, this.config.skills.directory);
+  }
+
+  /** Rescan the skills dir from disk and evict all cached Agents so the next
+   *  chat rebuilds the system-prompt skill index. The skill index is baked
+   *  into each Agent at creation (`createAgentFromDef`), so a registry rescan
+   *  alone isn't enough — eviction is what makes the change visible. Shared by
+   *  the skill routes and the config watcher. `skill_view` is already live. */
+  reloadSkills(): void {
+    this.skillRegistry.loadFromDirectory(this.resolveSkillsDir());
+    this.agents.clear();
+  }
+
+  /** Mark a watched surface as just-written-by-us so the watcher drops its
+   *  own echo (window > debounce + awaitWriteFinish). Public so config-write
+   *  routes (e.g. global mcp.json save in app.ts) can suppress their echo. */
+  suppressWatch(key: string, ms = 800): void {
+    this.watchSuppressed.set(key, Date.now() + ms);
+  }
+
+  private static readonly WATCH_IGNORE_SEGMENTS = new Set([
+    "workspace",
+    "memory",
+    "resources",
+    "browser-profiles",
+    ".tool-overflow",
+    "attachments",
+    "tasks",
+    "sessions",
+    "node_modules",
+    ".git",
+  ]);
+
+  private static mcpHashOf(def: AgentDefinition): string {
+    return JSON.stringify({
+      s: def.mcpServers ?? {},
+      d: [...(def.mcpDisabled ?? [])].sort(),
+    });
+  }
+
+  /** Watch the config surfaces under dataDir so direct file edits apply live.
+   *  chokidar v5 has no glob support, so we watch a few roots and prune the
+   *  noisy subtrees via `ignored`; the per-event handler does the final
+   *  relevance filter by file identity. */
+  private startConfigWatcher(): void {
+    const dataDir = this.config.dataDir;
+    // Watch the dataDir root (always exists) and prune the noisy subtrees via
+    // `ignored`. chokidar v5 mishandles a roots array containing not-yet-created
+    // files (mcp.json / AGENTS.md are absent on fresh installs), so we don't
+    // enumerate files — `watchKeyFor` does the relevance filter per event. Add
+    // the skills dir explicitly only if it lives outside dataDir.
+    const roots = [dataDir];
+    const skillsDir = this.resolveSkillsDir();
+    if (
+      path.relative(dataDir, skillsDir).startsWith("..") &&
+      fs.existsSync(skillsDir)
+    ) {
+      roots.push(skillsDir);
+    }
+    // Seed the per-agent MCP hash so the first AGENT.md edit can diff.
+    for (const def of this.agentStore.list()) {
+      this.agentMcpHash.set(def.id, AgentManager.mcpHashOf(def));
+    }
+    try {
+      const watcher = chokidar.watch(roots, {
+        ignoreInitial: true,
+        persistent: true,
+        ignored: (p: string) => this.shouldIgnoreWatch(p),
+        awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 50 },
+      });
+      watcher.on("add", (p: string) => this.onWatchEvent(p));
+      watcher.on("change", (p: string) => this.onWatchEvent(p));
+      watcher.on("unlink", (p: string) => this.onWatchEvent(p));
+      watcher.on("error", (err: unknown) =>
+        log.warn({ err }, "config watcher error")
+      );
+      this.configWatcher = watcher;
+    } catch (err) {
+      // A watcher failure must never take down the daemon; we just lose the
+      // no-restart-on-hand-edit nicety (settings routes still apply live).
+      log.warn({ err }, "failed to start config watcher");
+    }
+  }
+
+  private shouldIgnoreWatch(absPath: string): boolean {
+    const base = path.basename(absPath);
+    if (base.endsWith(".db") || base.includes(".db-")) return true;
+    const rel = path.relative(this.config.dataDir, absPath);
+    if (!rel || rel.startsWith("..")) return false;
+    for (const seg of rel.split(path.sep)) {
+      if (AgentManager.WATCH_IGNORE_SEGMENTS.has(seg)) return true;
+    }
+    return false;
+  }
+
+  /** Map an absolute path to a debounce key, or null if it's not a surface
+   *  we react to. */
+  private watchKeyFor(absPath: string): string | null {
+    const dataDir = this.config.dataDir;
+    if (absPath === path.join(dataDir, "config.yaml")) return "config";
+    if (absPath === path.join(dataDir, "AGENTS.md")) return "agentsmd";
+    if (absPath === path.join(dataDir, "mcp.json")) return "mcp";
+    const base = path.basename(absPath);
+    if (base === "SKILL.md") return "skills";
+    if (base === "AGENT.md") {
+      const rel = path.relative(this.agentsDir, absPath);
+      if (!rel.startsWith("..")) {
+        const id = rel.split(path.sep)[0];
+        if (id) return `agent:${id}`;
+      }
+    }
+    return null;
+  }
+
+  private onWatchEvent(absPath: string): void {
+    const key = this.watchKeyFor(absPath);
+    if (!key) return;
+    const existing = this.watchDebounce.get(key);
+    if (existing) clearTimeout(existing);
+    this.watchDebounce.set(
+      key,
+      setTimeout(() => {
+        this.watchDebounce.delete(key);
+        void this.runWatchHandler(key);
+      }, 250)
+    );
+  }
+
+  private async runWatchHandler(key: string): Promise<void> {
+    const exp = this.watchSuppressed.get(key);
+    if (exp !== undefined) {
+      this.watchSuppressed.delete(key);
+      if (exp > Date.now()) return; // our own write echo
+    }
+    try {
+      if (key === "config") {
+        const { restartRequired } = this.reloadConfig();
+        // reloadConfig re-suppresses "config"; we ARE the disk edit, so clear
+        // it or we'd swallow the next genuine edit within the window.
+        this.watchSuppressed.delete("config");
+        if (restartRequired.length > 0) {
+          log.info(
+            { restartRequired },
+            "config.yaml edited on disk; these need a restart"
+          );
+        }
+      } else if (key === "agentsmd") {
+        this.agentsMd = readAgentsMd(this.config.dataDir);
+        this.agents.clear();
+      } else if (key === "mcp") {
+        await this.initMCP();
+      } else if (key === "skills") {
+        this.reloadSkills();
+      } else if (key.startsWith("agent:")) {
+        const id = key.slice("agent:".length);
+        this.agents.delete(id);
+        const def = this.agentStore.get(id);
+        if (!def) {
+          // Removed on disk — drop the stale MCP client + hash.
+          this.agentMcpHash.delete(id);
+          await this.queueMcpReinit(id);
+        } else {
+          const next = AgentManager.mcpHashOf(def);
+          if (next !== this.agentMcpHash.get(id)) {
+            this.agentMcpHash.set(id, next);
+            await this.queueMcpReinit(id);
+          }
+        }
+      }
+      log.info({ key }, "applied edit from disk (no restart)");
+    } catch (err) {
+      log.warn({ err, key }, "config watcher handler failed");
+    }
+  }
+
   /**
-   * Re-read `config.yaml` from disk and evict cached Agents so the next
-   * chat picks up the new model / behavior / etc. Called by setup paths
-   * (web `/api/setup/*` and `/api/keys`) after they write a top-level
-   * `model` to config so the bundled Acme agent (which inherits the
-   * platform default) reflects the just-saved provider immediately —
-   * without forcing the user to restart the daemon.
+   * Re-read `config.yaml` from disk and apply everything that can be applied
+   * live: evict cached Agents (so the next chat picks up new model / behavior,
+   * which `resolveModel` + `createAgentFromDef` read off `this.config`) and
+   * rebuild the EmailManager (global IMAP defaults + OAuth app creds). This is
+   * the canonical "apply config without restart" path — every settings-save
+   * route calls it instead of asking the user to restart.
    *
-   * Doesn't reload skills, the agent store, or MCP — those have their
-   * own refresh paths.
+   * Returns the settings that genuinely can't hot-apply (diffed old→new), so
+   * callers surface a restart prompt only for those:
+   *  - `server` — host/port is a live socket bind; can't be swapped in place.
+   *
+   * Browser config hot-swaps the provider (existing sessions keep running on
+   * the old one; the next acquire uses the new one), so it needs no restart.
+   *
+   * Doesn't reload skills, the agent store, or MCP — those have their own
+   * refresh paths.
    */
-  reloadConfig(): void {
+  reloadConfig(): { restartRequired: string[] } {
+    this.suppressWatch("config");
+    const prev = this.config;
     this.config = loadConfig(this.config.dataDir);
     this.agents.clear();
+    // Rebuild + re-bind email so global email settings (IMAP defaults, OAuth
+    // app creds) apply without a process restart.
+    this.emailManager = this.buildEmailManager();
+
+    // Hot-swap the browser provider when its config changed. Live sessions
+    // keep their old provider until released; new acquires use the new one.
+    if (JSON.stringify(prev.browser) !== JSON.stringify(this.config.browser)) {
+      this.browserManager.setProvider(
+        createBrowserProvider({
+          name: this.config.browser.provider,
+          dataDir: this.config.dataDir,
+          config: this.config.browser,
+        })
+      );
+    }
+
+    const restartRequired: string[] = [];
+    if (
+      prev.server.host !== this.config.server.host ||
+      prev.server.port !== this.config.server.port
+    ) {
+      restartRequired.push("server");
+    }
+    return { restartRequired };
+  }
+
+  /** Build the EmailManager from current config + re-bind it for the tools. */
+  private buildEmailManager(): EmailManager {
+    const mgr = new EmailManager({
+      agentsDir: this.agentsDir,
+      oauthApp: this.config.email,
+      imapDefaults: this.config.email.imap,
+      resolveAccount: (id) => this.agentStore.get(id)?.email,
+    });
+    bindEmail({ manager: mgr });
+    return mgr;
   }
 
   private createAgentFromDef(def: AgentDefinition): Agent {
@@ -1861,19 +2135,27 @@ export class AgentManager {
       dataDir: this.config.dataDir,
     });
 
+    // Effective tool set: user-configurable env tools + agent's MCP tools +
+    // always-on system tools (skill_view, memory, session_search, task_*).
+    // Dedup defensively in case a legacy AGENT.md lists a system tool. Email
+    // tools ship in the default list but are excluded when the agent has no
+    // mailbox bound — gated here (we have the def) since a per-tool checkFn
+    // can't see the agent at tool-list build time.
+    const emailTools = new Set<string>(EMAIL_TOOL_NAMES);
+    const effectiveTools = Array.from(
+      new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS])
+    ).filter((t) => def.email || !emailTools.has(t));
+
     const agentConfig: AgentConfig = {
       id: def.id,
       name: def.name,
       model: effectiveModel,
       persona: def.persona,
-      // Effective tool set: user-configurable env tools + agent's MCP
-      // tools + always-on system tools (skill_view, memory, session_search,
-      // task_*). Dedup defensively in case a legacy AGENT.md still lists
-      // a system tool explicitly.
-      tools: Array.from(
-        new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS])
-      ),
-      maxSteps: b.maxSteps,
+      tools: effectiveTools,
+      // Internal safety-net against pathological tool-call loops — no longer a
+      // user-facing config knob. Set high so the agent stops when IT decides
+      // (no more tool calls), not when we cap it.
+      maxSteps: DEFAULT_MAX_STEPS,
       maxOutputTokens: b.maxOutputTokens,
       skillsIndex,
       compression: {
@@ -2061,12 +2343,16 @@ export class AgentManager {
     // in-process and a turn may have been kicked just before exit.
     this.dispatcher.stop();
     await this.dispatcher.drain();
+    await this.configWatcher?.close();
+    for (const timer of this.watchDebounce.values()) clearTimeout(timer);
+    this.watchDebounce.clear();
     for (const [_, mcpClient] of this.mcpClients) {
       await mcpClient.disconnect();
     }
     closeAllShellSessions();
     await this.toolHostManager.close();
     await this.browserManager.close();
+    await this.emailManager.close();
     this.db.close();
   }
 }

@@ -9,7 +9,7 @@ the commands you'll reach for.
 
 ```bash
 openacme start     # start the daemon (idempotent)
-openacme restart   # restart — required after AGENT.md / mcp.json / config.yaml edits
+openacme restart   # restart — only needed after a server host/port change
 openacme stop
 openacme status    # pid, bind, uptime, recent log
 openacme logs -f   # tail the daemon log
@@ -70,6 +70,23 @@ openacme login --provider anthropic   # OAuth sign-in with Claude
 openacme logout
 openacme secret show                  # access secret for non-loopback web access
 openacme secret rotate
+```
+
+## Per-agent email
+
+Mailboxes are per-agent and opt-in. Credentials live in the agent's
+`email.json` (0600) — never edit that file by hand; use the command or
+the web Email panel.
+
+```bash
+openacme email login <agentId>    # bind a mailbox (imap / gmail / microsoft)
+openacme email status [agentId]   # show bound provider/address + token validity
+```
+
+## Remote access
+
+```bash
+openacme expose       # bind to the network + print a reachable claim link
 ```
 
 ## Setup wizard

@@ -15,6 +15,8 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
+import { AgentEmailPanel } from "../components/AgentEmailPanel";
+import { EmptyState } from "@/app/components/ui/empty-state";
 import type { ToolInfo, ProviderInfo, ModelPreset } from "../lib/types";
 import {
   MCPServerForm,
@@ -94,6 +96,7 @@ interface Agent {
   mcpServers?: Record<string, MCPServerConfigDto>;
   mcpDisabled?: string[];
   managed?: boolean;
+  email?: { provider: "imap" | "gmail" | "microsoft"; address: string };
 }
 
 interface SkillIndexEntry {
@@ -887,9 +890,7 @@ function AgentsPage() {
             )}
           >
             {agents.length === 0 && (
-              <p className="px-4 py-4 font-mono text-[12px] text-ink-faint">
-                No agents configured.
-              </p>
+              <EmptyState icon={Boxes}>No agents configured.</EmptyState>
             )}
             {agents.map((agent) => {
               const isActive = selectedAgent?.id === agent.id;
@@ -2109,6 +2110,8 @@ function AgentOverviewTab({
           }}
           onChange={(m) => onDraftChange({ ...draft, ...m })}
         />
+
+        {!agent.managed && <AgentEmailPanel agentId={agent.id} />}
 
         <div className="grid gap-2">
           <Label htmlFor="ov-role">
