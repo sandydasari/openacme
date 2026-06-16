@@ -7,7 +7,10 @@ import { HelpOverlay } from "@/app/components/HelpOverlay";
 import { CommandPalette } from "@/app/components/CommandPalette";
 import { RegisterServiceWorker } from "@/app/components/RegisterServiceWorker";
 import { MobileTabBar } from "@/app/components/MobileTabBar";
+import { AcmePanel } from "@/app/components/AcmePanel";
 import { CurrentViewProvider } from "@/app/lib/CurrentViewContext";
+import { AcmePanelProvider, useAcmePanel } from "@/app/lib/AcmePanelContext";
+import { cn } from "@/app/lib/utils";
 import { API_BASE } from "@/app/lib/api";
 
 export const Route = createRootRoute({ component: RootLayout });
@@ -78,15 +81,37 @@ function RootLayout() {
     <TooltipProvider delayDuration={200}>
       <AuthFetch />
       <RegisterServiceWorker />
-      <CurrentViewProvider>
+      <AcmePanelProvider>
+        <CurrentViewProvider>
+          <Shell />
+        </CurrentViewProvider>
+      </AcmePanelProvider>
+    </TooltipProvider>
+  );
+}
+
+/** App shell. When the ambient Acme panel is docked it shifts the whole app
+ *  left (desktop) so the page stays fully visible while Acme edits it — rather
+ *  than overlaying the content. */
+function Shell() {
+  const { open } = useAcmePanel();
+  return (
+    <>
+      <div
+        className={cn(
+          "transition-[padding] duration-200 ease-out",
+          open && "md:pr-[440px]"
+        )}
+      >
         <AuthGate>
           <Outlet />
         </AuthGate>
-        <HelpOverlay />
-        <CommandPalette />
-        <Toaster />
-        <MobileTabBar />
-      </CurrentViewProvider>
-    </TooltipProvider>
+      </div>
+      <HelpOverlay />
+      <CommandPalette />
+      <AcmePanel />
+      <Toaster />
+      <MobileTabBar />
+    </>
   );
 }

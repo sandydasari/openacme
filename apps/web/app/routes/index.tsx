@@ -7,7 +7,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { ArrowDown, ArrowUp, Square, Paperclip } from "lucide-react";
+import { ArrowDown, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import type { UIMessage } from "ai";
 import type { MessageMetadata, OpenAcmeUIMessage } from "../lib/types";
@@ -17,11 +17,11 @@ import { useLiveSession } from "../lib/useLiveSession";
 import { Markdown } from "../components/Markdown";
 import { AttachmentChip } from "../components/AttachmentChip";
 import { MessageBubble } from "../components/chat/MessageBubble";
+import { ChatComposer } from "../components/chat/ChatComposer";
 import { API_BASE } from "../lib/api";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { Button } from "@/app/components/ui/button";
-import { Textarea } from "@/app/components/ui/textarea";
 import { SectionEyebrow } from "@/app/components/ui/section-eyebrow";
 import { AgentRef } from "@/app/components/ui/agent-ref";
 import { AgentAvatar } from "@/app/components/ui/agent-avatar";
@@ -828,13 +828,6 @@ function ChatPage() {
     setQueuedMessages((q) => q.filter((m) => !messageIds.has(m.id)));
   }, [messages, queuedMessages.length]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void send();
-    }
-  };
 
   const cancelQueued = useCallback(
     async (messageId: string) => {
@@ -1154,135 +1147,85 @@ function ChatPage() {
                 </ul>
               </div>
             )}
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                Compose
-              </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                <kbd className="border border-paper-rule px-1 py-px text-ink-soft">Enter</kbd>{" "}
-                send ·{" "}
-                <kbd className="border border-paper-rule px-1 py-px text-ink-soft">⇧ Enter</kbd>{" "}
-                newline
-              </span>
-            </div>
-            <div
-              className={cn(
-                "border border-paper-rule bg-paper transition-colors focus-within:border-plot-red focus-within:outline focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-plot-red",
-                isDragging && "border-plot-red bg-paper-sunk"
-              )}
+            <ChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={() => void send()}
+              onStop={() => stop()}
+              isStreaming={isStreaming}
+              disabled={!activeAgentId}
+              placeholder={
+                activeAgent
+                  ? isStreaming
+                    ? `Queue next message for ${activeAgent.name}…`
+                    : `Message ${activeAgent.name}`
+                  : "Select an agent"
+              }
+              sendDisabled={
+                (!input.trim() && pendingAttachments.length === 0) ||
+                !activeAgentId ||
+                pendingAttachments.some((p) => p.status === "uploading")
+              }
+              sendLabel={isStreaming ? "Queue message" : "Send message"}
+              textareaRef={inputRef}
+              isDragging={isDragging}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
-            >
-              {pendingAttachments.length > 0 && (
-                <div className="flex flex-nowrap gap-1.5 overflow-x-auto border-b border-paper-rule bg-paper-sunk px-3 py-2 md:flex-wrap md:overflow-visible">
-                  {pendingAttachments.map((p) => (
-                    <AttachmentChip
-                      key={p.localId}
-                      kind={
-                        p.kind ?? (p.mediaType.startsWith("image/") ? "image" : "file")
-                      }
-                      mediaType={p.mediaType}
-                      size={p.size}
-                      name={p.filename}
-                      status={p.status}
-                      error={p.error}
-                      removable
-                      onRemove={() => removePending(p.localId)}
-                    />
-                  ))}
-                </div>
-              )}
-              <div className="flex items-end gap-2 px-2 py-1.5">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={ALLOWED_UPLOAD_MIMES.join(",")}
-                  className="hidden"
-                  onChange={(e) => {
-                    const files = e.target.files ? Array.from(e.target.files) : [];
-                    void uploadFiles(files);
-                    e.target.value = "";
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!activeAgentId || !acceptsAttachments}
-                  className="shrink-0"
-                  aria-label="Attach files"
-                  title={
-                    acceptsAttachments
-                      ? "Attach files (images, PDFs)"
-                      : "Active model accepts text only — switch with the model picker"
-                  }
-                >
-                  <Paperclip className="size-4" />
-                </Button>
-                <Textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    activeAgent
-                      ? isStreaming
-                        ? `Queue next message for ${activeAgent.name}…`
-                        : `Message ${activeAgent.name}`
-                      : "Select an agent"
-                  }
-                  disabled={!activeAgentId}
-                  rows={1}
-                  autoCapitalize="sentences"
-                  autoCorrect="on"
-                  spellCheck
-                  enterKeyHint="send"
-                  className="min-h-[44px] max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:outline-none font-sans text-base md:text-sm"
-                />
-                {/* When the agent is mid-turn we show BOTH Stop and Send.
-                    Send queues the message (server writes it to chat + to
-                    the inbox; the running turn keeps going, the new
-                    message gets picked up on the next turn). Stop aborts
-                    the current run if the user wants to redirect instead.
-                    When idle, only Send is shown. */}
-                {isStreaming && (
+              attachmentsBar={
+                pendingAttachments.length > 0 ? (
+                  <div className="flex flex-nowrap gap-1.5 overflow-x-auto border-b border-paper-rule bg-paper-sunk px-3 py-2 md:flex-wrap md:overflow-visible">
+                    {pendingAttachments.map((p) => (
+                      <AttachmentChip
+                        key={p.localId}
+                        kind={
+                          p.kind ?? (p.mediaType.startsWith("image/") ? "image" : "file")
+                        }
+                        mediaType={p.mediaType}
+                        size={p.size}
+                        name={p.filename}
+                        status={p.status}
+                        error={p.error}
+                        removable
+                        onRemove={() => removePending(p.localId)}
+                      />
+                    ))}
+                  </div>
+                ) : null
+              }
+              attachButton={
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ALLOWED_UPLOAD_MIMES.join(",")}
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files ? Array.from(e.target.files) : [];
+                      void uploadFiles(files);
+                      e.target.value = "";
+                    }}
+                  />
                   <Button
+                    type="button"
                     size="icon"
-                    variant="destructive"
-                    onClick={() => stop()}
+                    variant="ghost"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!activeAgentId || !acceptsAttachments}
                     className="shrink-0"
-                    aria-label="Stop generating"
+                    aria-label="Attach files"
+                    title={
+                      acceptsAttachments
+                        ? "Attach files (images, PDFs)"
+                        : "Active model accepts text only — switch with the model picker"
+                    }
                   >
-                    <Square className="size-4 fill-current" />
-                    <span className="sr-only">Stop</span>
+                    <Paperclip className="size-4" />
                   </Button>
-                )}
-                <Button
-                  size="icon"
-                  onClick={() => void send()}
-                  disabled={
-                    (!input.trim() && pendingAttachments.length === 0) ||
-                    !activeAgentId ||
-                    pendingAttachments.some((p) => p.status === "uploading")
-                  }
-                  className="shrink-0"
-                  aria-label={isStreaming ? "Queue message" : "Send message"}
-                  title={
-                    isStreaming
-                      ? "Queue for next turn (current turn keeps going)"
-                      : "Send"
-                  }
-                >
-                  <ArrowUp className="size-4" />
-                  <span className="sr-only">
-                    {isStreaming ? "Queue" : "Send"}
-                  </span>
-                </Button>
-              </div>
-            </div>
+                </>
+              }
+            />
           </div>
         </div>
       </main>

@@ -5,6 +5,7 @@ import {
   Bot,
   BookOpen,
   Command,
+  Compass,
   Gauge,
   ListChecks,
   Settings,
@@ -192,6 +193,38 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
         >
           {children}
         </div>
+
+        {/* Ask Acme — labeled nav-style row that opens the ambient panel
+            (the platform helper, summonable from anywhere). */}
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("openacme:open-acme"))
+          }
+          title="Ask Acme — the platform helper (⌘⇧K)"
+          aria-label="Ask Acme"
+          aria-keyshortcuts="Meta+Shift+K Control+Shift+K"
+          className={cn(
+            "group relative flex w-full items-center gap-3 border-t border-paper-rule text-sm font-medium transition-colors",
+            "px-4 py-3 md:py-2.5",
+            collapsed && "md:justify-center md:px-0",
+            // Accent it: this isn't a page, it's the platform helper. plot-red
+            // icon + tinted hover so it reads as the one special action.
+            "text-ink hover:bg-plot-red/10 hover:text-plot-red"
+          )}
+        >
+          <Compass className="size-4 shrink-0 text-plot-red" />
+          <span className={cn(collapsed ? "md:hidden" : "")}>Ask Acme</span>
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint",
+              collapsed ? "md:hidden" : "ml-auto"
+            )}
+            aria-hidden
+          >
+            ⌘⇧K
+          </span>
+        </button>
 
         {/* Documentation — a labeled nav-style row directly above the bottom
             bar (external link, opens the docs site). */}
