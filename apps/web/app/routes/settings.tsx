@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import {
@@ -26,6 +26,7 @@ import { NotificationsTab } from "../components/NotificationsTab";
 import { MembersTab } from "../components/MembersTab";
 import { API_BASE } from "../lib/api";
 import { docsUrl } from "../lib/links";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import type { ModelDefaultsView, ModelDefaultsUpdate } from "../lib/types";
 import {
   MCPServerForm,
@@ -284,6 +285,41 @@ function SettingsPage() {
   const [emailCfg, setEmailCfg] = useState<EmailConfigStatus | null>(null);
   const [emailForm, setEmailForm] = useState({ ...blankEmailForm });
   const [emailSaving, setEmailSaving] = useState(false);
+
+  // Publish the active settings tab + its draft to the ambient Acme panel.
+  usePublishCurrentView(
+    useMemo(() => {
+      const content =
+        activeTab === "providers"
+          ? modelDraft
+          : activeTab === "mcp"
+            ? mcpServers
+            : activeTab === "context"
+              ? { agentsMd: agentsMdDraft }
+              : activeTab === "email"
+                ? emailForm
+                : activeTab === "browser"
+                  ? browserCfg
+                  : activeTab === "web-search"
+                    ? webSearch
+                    : null;
+      return {
+        page: "/settings",
+        entityType: "settings" as const,
+        entityId: null,
+        tab: activeTab,
+        content,
+      };
+    }, [
+      activeTab,
+      modelDraft,
+      mcpServers,
+      agentsMdDraft,
+      emailForm,
+      browserCfg,
+      webSearch,
+    ])
+  );
   const emailRedirect =
     typeof window !== "undefined"
       ? `${window.location.origin}/api/email/oauth/callback`

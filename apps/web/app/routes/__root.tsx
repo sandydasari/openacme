@@ -7,6 +7,7 @@ import { HelpOverlay } from "@/app/components/HelpOverlay";
 import { CommandPalette } from "@/app/components/CommandPalette";
 import { RegisterServiceWorker } from "@/app/components/RegisterServiceWorker";
 import { MobileTabBar } from "@/app/components/MobileTabBar";
+import { CurrentViewProvider } from "@/app/lib/CurrentViewContext";
 import { API_BASE } from "@/app/lib/api";
 
 export const Route = createRootRoute({ component: RootLayout });
@@ -77,13 +78,15 @@ function RootLayout() {
     <TooltipProvider delayDuration={200}>
       <AuthFetch />
       <RegisterServiceWorker />
-      <AuthGate>
-        <Outlet />
-      </AuthGate>
-      <HelpOverlay />
-      <CommandPalette />
-      <Toaster />
-      <MobileTabBar />
+      <CurrentViewProvider>
+        <AuthGate>
+          <Outlet />
+        </AuthGate>
+        <HelpOverlay />
+        <CommandPalette />
+        <Toaster />
+        <MobileTabBar />
+      </CurrentViewProvider>
     </TooltipProvider>
   );
 }

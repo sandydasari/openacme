@@ -13,6 +13,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { Sidebar } from "../components/Sidebar";
 import { API_BASE } from "../lib/api";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Badge } from "@/app/components/ui/badge";
@@ -96,6 +97,19 @@ function TeamsPage() {
   }, [urlId]);
 
   const teamTasks = useTeamTasks(selected?.id ?? null);
+
+  usePublishCurrentView(
+    useMemo(
+      () => ({
+        page: "/teams",
+        entityType: "team" as const,
+        entityId: selected?.id ?? null,
+        tab,
+        content: selected,
+      }),
+      [selected, tab]
+    )
+  );
 
   function startCreate() {
     setIsCreating(true);

@@ -21,6 +21,7 @@ import {
 } from "@/app/components/ui/dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { cn } from "@/app/lib/utils";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import { FilterCombobox } from "../tasks/filter-combobox";
 import { TasksBoard } from "../tasks/board";
 import { TaskDetailPanel, type AgentOption } from "../tasks/detail";
@@ -56,6 +57,18 @@ function TasksPage() {
   const [confirmDeleteMode, setConfirmDeleteMode] = useState<
     "simple" | "cascade"
   >("simple");
+
+  usePublishCurrentView(
+    useMemo(
+      () => ({
+        page: "/tasks",
+        entityType: "task" as const,
+        entityId: selected?.id ?? null,
+        content: draft ?? selected,
+      }),
+      [selected, draft]
+    )
+  );
   // Pending navigation parked behind the discard-unsaved-changes dialog.
   const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
   const [teamFilter, setTeamFilter] = useState<string>("all");

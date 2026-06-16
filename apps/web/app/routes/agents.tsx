@@ -68,6 +68,7 @@ import {
 import type { EmojiClickData } from "emoji-picker-react";
 import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
 import { cn } from "@/app/lib/utils";
+import { usePublishCurrentView } from "@/app/lib/CurrentViewContext";
 import { Markdown } from "@/app/components/Markdown";
 import { MarkdownEditor } from "@/app/components/MarkdownEditor";
 import { FileWorkbench } from "@/app/files/FileWorkbench";
@@ -359,6 +360,22 @@ function AgentsPage() {
   // post-mount refreshes of `agents`/`providers` (which re-fire the URL effect)
   // can't race against the user's in-flight selections and reset the form.
   const importHydratedFor = useRef<string | null>(null);
+
+  // Publish the focused agent (live form draft when editing/creating) to the
+  // ambient Acme panel.
+  const editingForm = isEditing || isCreating;
+  usePublishCurrentView(
+    useMemo(
+      () => ({
+        page: "/agents",
+        entityType: "agent" as const,
+        entityId: isCreating ? null : selectedAgent?.id ?? null,
+        tab: detailTab,
+        content: editingForm ? formData : selectedAgent,
+      }),
+      [selectedAgent, isCreating, editingForm, formData, detailTab]
+    )
+  );
   const [mcpDialog, setMcpDialog] = useState<
     { mode: "add" } | { mode: "edit"; initial: MCPServerFormValue } | null
   >(null);
