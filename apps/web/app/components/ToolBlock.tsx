@@ -629,7 +629,19 @@ function renderBody({
     case "session_search": {
       const out = parseJsonish(output);
       const results = pickResults(out);
-      if (!results || results.length === 0) return null;
+      if (!results || results.length === 0) {
+        // Provider returned a text blob instead of structured items
+        // (e.g. Exa unauthenticated) — render it rather than nothing.
+        const content = out && str(out.content);
+        if (content) {
+          return (
+            <pre className="max-h-60 overflow-auto px-3 py-2 font-mono text-[11px] leading-snug text-ink-soft whitespace-pre-wrap break-words">
+              {trim(content, 4000)}
+            </pre>
+          );
+        }
+        return null;
+      }
       return (
         <div className="divide-y divide-paper-rule">
           {results.slice(0, 8).map((r, i) => (
@@ -1194,7 +1206,17 @@ function countResults(out: Record<string, unknown> | null): number | null {
   if (!out) return null;
   const candidates = [out.results, out.matches, out.hits, out.items, out.tasks];
   for (const c of candidates) {
-    if (Array.isArray(c)) return c.length;
+    if (Array.isArray(c) && c.length > 0) return c.length;
+  }
+  // Some providers (e.g. Exa unauthenticated) return results as an
+  // LLM-formatted `content` blob with an empty `results` array — don't
+  // mislead with "0 results" when content is present; the count is unknown.
+  if (typeof out.content === "string" && out.content.trim().length > 0) {
+    return null;
+  }
+  // Every result key is an empty array → genuinely zero.
+  for (const c of candidates) {
+    if (Array.isArray(c)) return 0;
   }
   return null;
 }
