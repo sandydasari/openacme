@@ -1,29 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { X, Plus, SquareArrowOutUpRight } from "lucide-react";
+import { X, Plus, Paperclip, SquareArrowOutUpRight } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
-import { useLiveSession } from "@/app/lib/useLiveSession";
+import { AttachmentChip } from "@/app/components/AttachmentChip";
 import { MessageBubble } from "@/app/components/chat/MessageBubble";
 import { ChatComposer } from "@/app/components/chat/ChatComposer";
+import { useChatSession } from "@/app/lib/useChatSession";
 import { useCurrentView, type CurrentView } from "@/app/lib/CurrentViewContext";
 import { useAcmePanel } from "@/app/lib/AcmePanelContext";
 import { API_BASE } from "@/app/lib/api";
-import type { OpenAcmeUIMessage } from "@/app/lib/types";
+import { ALLOWED_UPLOAD_MIMES, type OpenAcmeUIMessage } from "@/app/lib/types";
 import { cn } from "@/app/lib/utils";
 
 interface AcmeAgent {
   id: string;
   name: string;
   model: { provider: string; model: string };
-}
-
-/** Resolve `p`, or null after `ms` — so a never-opening SSE (fresh session
- *  subscribed this same tick) can't hang the POST. Mirrors routes/index.tsx. */
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    p,
-    new Promise<null>((r) => setTimeout(() => r(null), ms)),
-  ]);
 }
 
 /** Render the live view as the `<ui-context>` block Acme sees. Structured, not
@@ -60,17 +52,40 @@ export function AcmePanel() {
   const { open, setOpen } = useAcmePanel();
   const [acme, setAcme] = useState<AcmeAgent | null>(null);
   const [sessionId, setSessionId] = useState("");
-  const [messages, setMessages] = useState<OpenAcmeUIMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const freshRef = useRef<string | null>(null);
   const triedResume = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<CurrentView | null>(view);
   useEffect(() => {
     viewRef.current = view;
   }, [view]);
+
+  // Attach the current view as a data-ui-context part on each user message.
+  const buildExtraParts = useCallback((): OpenAcmeUIMessage["parts"] => {
+    const v = viewRef.current;
+    if (!v) return [];
+    return [
+      {
+        type: "data-ui-context",
+        data: {
+          page: v.page,
+          entityType: v.entityType,
+          entityId: v.entityId,
+          tab: v.tab ?? null,
+          modelContent: renderUiContext(v),
+        },
+      } as OpenAcmeUIMessage["parts"][number],
+    ];
+  }, []);
+
+  // The same chat engine the main chat uses — send, streaming, attachments,
+  // queued mid-turn sends, status board.
+  const chat = useChatSession({
+    agentId: acme?.id ?? "",
+    sessionId,
+    setSessionId,
+    acceptsAttachments: true,
+    buildExtraParts,
+  });
 
   // Resolve the managed Acme agent once the panel is first opened.
   useEffect(() => {
@@ -90,8 +105,7 @@ export function AcmePanel() {
   }, [open, acme]);
 
   // Resume the most recent Acme conversation on first open (continue, not a
-  // blank chat every time). The "+" button starts fresh; a page reload
-  // resumes the latest again.
+  // blank chat every time). "+" starts fresh; a reload resumes the latest.
   useEffect(() => {
     if (!open || !acme || sessionId || triedResume.current) return;
     triedResume.current = true;
@@ -116,7 +130,7 @@ export function AcmePanel() {
         ).then((r) => (r.ok ? r.json() : []))) as OpenAcmeUIMessage[];
         if (cancelled) return;
         setSessionId(latest.sessionId);
-        setMessages(Array.isArray(msgs) ? msgs : []);
+        chat.setMessages(Array.isArray(msgs) ? msgs : []);
       } catch {
         // best-effort — fall back to a fresh chat
       }
@@ -124,94 +138,26 @@ export function AcmePanel() {
     return () => {
       cancelled = true;
     };
-  }, [open, acme, sessionId]);
-
-  const live = useLiveSession(
-    sessionId || null,
-    sessionId ? setMessages : null
-  );
-  const isStreaming = submitting || live.state === "running";
+  }, [open, acme, sessionId, chat]);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, open]);
+  }, [chat.messages, open]);
 
   const startNew = useCallback(() => {
     setSessionId("");
-    setMessages([]);
-    setError(null);
-  }, []);
+    chat.setMessages([]);
+  }, [chat]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
-    if (!text || !acme) return;
-    let sid = sessionId;
-    const isNew = !sid;
-    if (isNew) {
-      sid = crypto.randomUUID();
-      freshRef.current = sid;
-      setSessionId(sid);
-    }
-    const v = viewRef.current;
-    const parts: OpenAcmeUIMessage["parts"] = [{ type: "text", text }];
-    if (v) {
-      parts.push({
-        type: "data-ui-context",
-        data: {
-          page: v.page,
-          entityType: v.entityType,
-          entityId: v.entityId,
-          tab: v.tab ?? null,
-          modelContent: renderUiContext(v),
-        },
-      } as OpenAcmeUIMessage["parts"][number]);
-    }
-    const userMsg: OpenAcmeUIMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      parts,
-    };
-    const history = [...messages, userMsg];
-    setMessages(history);
-    setInput("");
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (isNew) await withTimeout(live.whenConnected(), 2000);
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: acme.id, sessionId: sid, messages: history }),
-      });
-      if (!res.ok) {
-        const b = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(b.error || res.statusText);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [input, acme, sessionId, messages, live]);
-
-  const stop = useCallback(() => {
-    if (!sessionId) return;
-    void fetch(`${API_BASE}/api/sessions/${sessionId}/active-turn`, {
-      method: "DELETE",
-    }).catch(() => {});
-  }, [sessionId]);
-
-  // Opened from the sidebar's "Ask Acme" trigger or the ⌘⇧K hotkey.
   if (!open) return null;
 
   return (
     <aside
       className={cn(
         "fixed z-40 flex flex-col bg-paper-sunk border border-ink/15 shadow-2xl",
-        // Floats over the page (no app-shift). A distinct surface (paper-sunk
-        // + a stronger border + shadow) so it reads as a separate panel, not a
-        // continuation of the page behind it. Mobile near-full; desktop a
-        // docked floating card on the right.
+        // Floats over the page (no app-shift). A distinct surface (paper-sunk +
+        // a stronger border + shadow) so it reads as a separate panel. Mobile
+        // near-full; desktop a docked floating card on the right.
         "inset-x-2 bottom-2 top-2 rounded-lg",
         "md:inset-x-auto md:right-3 md:inset-y-3 md:w-[440px]"
       )}
@@ -223,7 +169,7 @@ export function AcmePanel() {
           <span
             className={cn(
               "status-dot",
-              isStreaming ? "bg-plot-red pulse-live" : "bg-ink"
+              chat.isStreaming ? "bg-plot-red pulse-live" : "bg-ink"
             )}
             aria-hidden
           />
@@ -256,7 +202,7 @@ export function AcmePanel() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {messages.length === 0 ? (
+        {chat.messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-faint">
               Ask Acme
@@ -268,20 +214,22 @@ export function AcmePanel() {
             </p>
           </div>
         ) : (
-          messages.map((m, i) => (
+          chat.messages.map((m, i) => (
             <MessageBubble
               key={m.id}
               message={m}
               agent={acme ?? undefined}
               isStreaming={
-                isStreaming && m.role === "assistant" && i === messages.length - 1
+                chat.isStreaming &&
+                m.role === "assistant" &&
+                i === chat.messages.length - 1
               }
             />
           ))
         )}
-        {error && (
+        {chat.error && (
           <div role="alert" className="mt-3 border border-destructive bg-paper-sunk px-3 py-2 font-mono text-[12px] text-destructive">
-            {error}
+            {chat.error.message}
           </div>
         )}
         <div ref={endRef} />
@@ -289,14 +237,73 @@ export function AcmePanel() {
 
       <div className="shrink-0 border-t border-paper-rule p-3">
         <ChatComposer
-          value={input}
-          onChange={setInput}
-          onSend={() => void send()}
-          onStop={stop}
-          isStreaming={isStreaming}
+          value={chat.input}
+          onChange={chat.setInput}
+          onSend={() => void chat.send()}
+          onStop={() => void chat.stop()}
+          isStreaming={chat.isStreaming}
           disabled={!acme}
           placeholder={acme ? `Message ${acme.name}` : "…"}
-          sendDisabled={!input.trim() || !acme}
+          sendDisabled={
+            (!chat.input.trim() && chat.pendingAttachments.length === 0) ||
+            !acme ||
+            chat.pendingAttachments.some((p) => p.status === "uploading")
+          }
+          sendLabel={chat.isStreaming ? "Queue message" : "Send message"}
+          textareaRef={chat.inputRef}
+          isDragging={chat.isDragging}
+          onDragOver={chat.onDragOver}
+          onDragLeave={chat.onDragLeave}
+          onDrop={chat.onDrop}
+          attachmentsBar={
+            chat.pendingAttachments.length > 0 ? (
+              <div className="flex flex-nowrap gap-1.5 overflow-x-auto border-b border-paper-rule bg-paper-sunk px-3 py-2">
+                {chat.pendingAttachments.map((p) => (
+                  <AttachmentChip
+                    key={p.localId}
+                    kind={
+                      p.kind ?? (p.mediaType.startsWith("image/") ? "image" : "file")
+                    }
+                    mediaType={p.mediaType}
+                    size={p.size}
+                    name={p.filename}
+                    status={p.status}
+                    error={p.error}
+                    removable
+                    onRemove={() => chat.removePending(p.localId)}
+                  />
+                ))}
+              </div>
+            ) : null
+          }
+          attachButton={
+            <>
+              <input
+                ref={chat.fileInputRef}
+                type="file"
+                multiple
+                accept={ALLOWED_UPLOAD_MIMES.join(",")}
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files ? Array.from(e.target.files) : [];
+                  void chat.uploadFiles(files);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => chat.fileInputRef.current?.click()}
+                disabled={!acme}
+                className="shrink-0"
+                aria-label="Attach files"
+                title="Attach files (images, PDFs)"
+              >
+                <Paperclip className="size-4" />
+              </Button>
+            </>
+          }
         />
       </div>
     </aside>
