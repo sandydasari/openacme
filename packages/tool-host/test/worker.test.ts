@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -24,6 +24,10 @@ function policyFor(dir: string) {
 }
 
 describe("tool-host worker round-trips (real child process)", () => {
+  // Each test spawns a real worker (node + tsx transpile); cold spawns on slow
+  // CI runners exceed vitest's 5s default. The assertions already retry.
+  vi.setConfig({ testTimeout: 20000 });
+
   let dir: string;
   let manager: ToolHostManager;
   let ctx: ToolCallContext;
