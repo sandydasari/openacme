@@ -22,6 +22,7 @@ import { Logotype } from "@/app/components/Logotype";
 import { Logomark } from "@/app/components/Logomark";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { ActiveMarker } from "@/app/components/ui/active-marker";
+import { useAcmePanel } from "@/app/lib/AcmePanelContext";
 
 // no width transition: the lab-instrument register prefers an instant snap
 // over animating a layout property (DESIGN.md §6 "Don't animate layout").
@@ -52,6 +53,7 @@ const useIsomorphicLayoutEffect =
 
 export function Sidebar({ children }: { children?: React.ReactNode }) {
   const pathname = useLocation({ select: (l) => l.pathname });
+  const { open: acmeOpen, setOpen: setAcmeOpen } = useAcmePanel();
   const [version, setVersion] = useState<string | null>(null);
   // SSR + first client render both emit `collapsed=true` (same HTML, no
   // hydration warning). The layoutEffect flips it to the persisted value
@@ -198,21 +200,24 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
             (the platform helper, summonable from anywhere). */}
         <button
           type="button"
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("openacme:open-acme"))
-          }
+          onClick={() => setAcmeOpen(!acmeOpen)}
           title="Ask Acme — the platform helper (⌘⇧K)"
           aria-label="Ask Acme"
+          aria-expanded={acmeOpen}
           aria-keyshortcuts="Meta+Shift+K Control+Shift+K"
           className={cn(
             "group relative flex w-full items-center gap-3 border-t border-paper-rule text-sm font-medium transition-colors",
             "px-4 py-3 md:py-2.5",
             collapsed && "md:justify-center md:px-0",
             // Accent it: this isn't a page, it's the platform helper. plot-red
-            // icon + tinted hover so it reads as the one special action.
-            "text-ink hover:bg-plot-red/10 hover:text-plot-red"
+            // icon + tinted hover, and a held plot-red state while the panel
+            // is open so you can tell it's active.
+            acmeOpen
+              ? "bg-plot-red/10 text-plot-red"
+              : "text-ink hover:bg-plot-red/10 hover:text-plot-red"
           )}
         >
+          <ActiveMarker active={acmeOpen} />
           <Compass className="size-4 shrink-0 text-plot-red" />
           <span className={cn(collapsed ? "md:hidden" : "")}>Ask Acme</span>
           <span
