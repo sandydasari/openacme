@@ -34,6 +34,16 @@ export interface OpenAcmeDataParts {
     statusCode?: number;
     message: string;
   };
+  /** Ambient-Acme view context, attached to a user message by the panel.
+   *  `modelContent` is materialized into model input (latest user message
+   *  only) server-side; the small fields drive a context chip. */
+  "ui-context": {
+    page: string;
+    entityType: string | null;
+    entityId: string | null;
+    tab?: string | null;
+    modelContent: string;
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
