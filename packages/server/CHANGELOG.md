@@ -1,5 +1,35 @@
 # @openacme/server
 
+## 0.12.0
+
+### Minor Changes
+
+- Ambient Acme, per-agent email, /skill mentions, and live config reload.
+  - **Ambient Acme panel** — summon the platform helper from anywhere in the web UI; it floats instead of shifting layout, resumes the last session, and shows an active state in the sidebar. Chat engine extracted into a shared `useChatSession` so the panel reuses attachments + streaming. `CurrentViewContext` lets routes publish the focused entity, surfaced to Acme as a `data-ui-context` part (latest-only materialization) with a UI-context chip.
+  - **Per-agent email** — each agent gets its own identity and isolated mailbox, with global IMAP/SMTP connection defaults, a Settings → Email tab, live config, and an editable OAuth redirect-URI override.
+  - **/skill mentions** — reference skills inline in the composer via a `data-skill-ref` part with per-message materialization.
+  - **Live config reload** — on-disk edits to `config.yaml` / `AGENTS.md` / skills apply live by evicting cached agents; global settings (model/email) reload without a restart. Replaces the config watcher with an explicit Acme-only `reload_config` tool; effective rw-path grants let Acme edit platform surfaces. Only `server.host` / `server.port` still need a restart.
+  - **Fixes** — `web_search` no longer shows "0 results" for content-blob providers; no redirect to `/login` on a 401 while already on an auth page.
+  - Refreshed the shipped Acme platform agent; added blog + changelog to the docs site, community health files, and color brand logos.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @openacme/agent-catalog@0.12.0
+  - @openacme/agent-core@0.12.0
+  - @openacme/auth@0.12.0
+  - @openacme/browser@0.12.0
+  - @openacme/config@0.12.0
+  - @openacme/db@0.12.0
+  - @openacme/email@0.12.0
+  - @openacme/llm-provider@0.12.0
+  - @openacme/mcp-client@0.12.0
+  - @openacme/memory@0.12.0
+  - @openacme/skills@0.12.0
+  - @openacme/tasks@0.12.0
+  - @openacme/tools@0.12.0
+  - @openacme/tool-host@0.7.6
+
 ## 0.11.0
 
 ### Patch Changes
