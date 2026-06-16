@@ -381,7 +381,7 @@ The dispatcher is the **wake mechanism**, not a work-picker. `runAutonomous({ses
 - **No new docs** unless asked. Working notes belong in commit messages, not in `docs/`.
 - **Comments**: keep short or don't write them. See the **Comments** section below — this is enforced.
 - **No backwards-compat shims** for unreleased / unpublished surfaces — change the code.
-- **Trunk-based, no PRs.** Work commits directly to `main`. Don't open pull requests, don't create feature branches, don't reference a "PR-N" sequence in plans or commit messages — phrase staged work as "commit 1, commit 2…" instead. Each commit should pass type-check + lint on its own.
+- **Trunk-based for normal work; PR only for releases.** `main` is branch-protected on GitHub — direct pushes are rejected. For regular work, still *commit* directly to `main` locally (each commit passes type-check + lint on its own); don't reference a "PR-N" sequence in plans or commit messages — phrase staged work as "commit 1, commit 2…". The one exception is a **release**: the version-bump commit goes out on a `changeset-release/main` branch and merges via PR (this is how every prior release landed). Don't open PRs for anything else, and don't create ad-hoc feature branches.
 - **Comments**: only when the *why* is non-obvious. One-line target, two cap, no multi-line blocks. Don't name exact callers/files/lines — that rots; describe the invariant. Long *why* goes in the commit message.
 
 ---
