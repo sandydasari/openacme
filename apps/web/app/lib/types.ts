@@ -44,6 +44,13 @@ export interface OpenAcmeDataParts {
     tab?: string | null;
     modelContent: string;
   };
+  /** Skills referenced with `/name` in the composer, attached to the user
+   *  message. `modelContent` is materialized into model input per-message
+   *  server-side; `names` drives a chip in the user bubble. */
+  "skill-ref": {
+    names: string[];
+    modelContent: string;
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }

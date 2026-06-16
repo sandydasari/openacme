@@ -105,6 +105,15 @@ export interface OpenAcmeDataParts {
     tab?: string | null;
     modelContent: string;
   };
+  /** Skills the user referenced with `/name` in the composer. Lives on the USER
+   *  message. `modelContent` is a pre-rendered `<referenced-skills>` marker;
+   *  `materializeSkillRef` prepends it to each user message that carries one and
+   *  strips the part (the SDK drops `data-*` anyway). `names` drives a chip and
+   *  nudges the agent to load each via `skill_view`. */
+  "skill-ref": {
+    names: string[];
+    modelContent: string;
+  };
   // SDK-required index signature for unknown data-* keys.
   // `any` (not `unknown`) so named keys still narrow on a discriminated union.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
