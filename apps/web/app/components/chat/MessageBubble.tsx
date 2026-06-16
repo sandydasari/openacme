@@ -25,6 +25,38 @@ export type MessageAgent = {
   model: { model: string };
 };
 
+type UiContextData = {
+  page?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  tab?: string | null;
+  modelContent?: string;
+};
+
+/** Subtle marker on a user message: the ambient panel attached the live view as
+ *  a hidden part that fed the model. Shows page · entity · tab; the full
+ *  materialized block is the hover title. */
+function UiContextChip({ data }: { data: UiContextData }) {
+  const bits = [
+    data.page,
+    data.entityId
+      ? `${data.entityType ?? "entity"} ${data.entityId}`
+      : data.entityType ?? null,
+    data.tab ? `tab ${data.tab}` : null,
+  ].filter(Boolean);
+  return (
+    <div
+      className="mb-2 inline-flex max-w-full items-center gap-1.5 border border-paper-rule bg-paper-sunk px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint"
+      title={data.modelContent ?? undefined}
+    >
+      <span className="text-plot-red">context</span>
+      <span className="truncate normal-case tracking-normal text-ink-soft">
+        {bits.join(" · ")}
+      </span>
+    </div>
+  );
+}
+
 function isToolPart(p: Part): boolean {
   return (
     typeof (p as { type?: unknown }).type === "string" &&
@@ -215,12 +247,20 @@ export const MessageBubble = memo(function MessageBubble({
       const mt = (f as { mediaType: string }).mediaType;
       return !mt.startsWith("image/") && mt !== "application/pdf";
     });
+    // The ambient Acme panel attaches the live view as a hidden data part that
+    // never renders as text but IS materialized into the model input. Surface a
+    // chip so the user can see what context their message carried (full block
+    // on hover).
+    const uiCtx = message.parts.find(
+      (p) => (p as { type?: unknown }).type === "data-ui-context"
+    ) as { data?: UiContextData } | undefined;
     return (
       <section className="section-enter border-t border-paper-rule py-5 first:border-t-0 first:pt-0">
         <MessageHeader
           role="user"
           createdAt={(message as { createdAt?: number }).createdAt}
         />
+        {uiCtx?.data && <UiContextChip data={uiCtx.data} />}
         {text && (
           <div className="text-sm leading-relaxed text-ink break-words">
             <Markdown>{text}</Markdown>
