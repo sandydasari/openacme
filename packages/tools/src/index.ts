@@ -13,6 +13,10 @@ export {
   type SkillViewEntry,
 } from "./builtins/skill.js";
 export {
+  bindReloadConfig,
+  type ReloadConfigFn,
+} from "./builtins/reload-config.js";
+export {
   toolCallContext,
   getCurrentSessionId,
   getCurrentAgentId,
@@ -73,6 +77,7 @@ export {
 import "./builtins/shell.js";
 import "./builtins/file.js";
 import "./builtins/session-search.js";
+import "./builtins/reload-config.js";
 import "./builtins/edit.js";
 import "./builtins/apply-patch.js";
 import "./builtins/web-extract.js";

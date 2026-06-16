@@ -101,9 +101,10 @@ When you create a new agent, write the AGENT.md directly. The folder
 gets created on first read. Workspace and memory dirs are created
 on-demand by the platform.
 
-**Applies live.** The platform watches `AGENT.md` files — your edits (and
-creating or deleting an agent) take effect on the agent's next turn, no
-restart. MCP servers re-init only if you changed `mcpServers`/`mcpDisabled`.
+**Applying edits.** Nothing on disk applies automatically. After editing an
+`AGENT.md` (or creating/deleting an agent), call **`reload_config`** — your
+Acme-only tool — to make it take effect on the next turn (no restart). Batch
+your edits and reload once at the end.
 
 ## SKILL.md format
 
@@ -168,9 +169,11 @@ inherited env is filtered to drop credential-shaped vars like
 server actually needs them), `headers`, `timeout`, `connectTimeout`,
 `enabled`, `allowedTools`.
 
-**Applies live.** The platform watches `mcp.json` — after you edit it, the
-affected agents re-init their MCP connections on their next turn (bringing a
-slow/broken server up can take a few seconds). No restart.
+**Applying edits.** After editing `mcp.json`, call **`reload_config`** to
+reconnect MCP (it re-inits servers — bringing a slow/broken one up can take a
+few seconds). No restart. This reinit is deliberately explicit (it's
+expensive), which is why it only happens when you call `reload_config`, never
+automatically on a file change.
 
 Per-agent private servers go in `mcpServers` on AGENT.md (must not
 collide with global names). Per-agent exclusions go in `mcpDisabled`.
@@ -182,8 +185,8 @@ agent's system prompt below the persona. Use it for things ALL agents
 should know: shared conventions, the human team's working style, repo
 URLs, current initiatives.
 
-You can edit it freely. After editing, the platform evicts cached
-Agents automatically — no restart needed.
+You can edit it freely. After editing, call **`reload_config`** to apply it
+to every agent's prompt (no restart).
 
 ## Tasks
 
