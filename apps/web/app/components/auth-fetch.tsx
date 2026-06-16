@@ -2,6 +2,10 @@ import { useEffect } from "react";
 
 const AUTH_STORAGE_KEY = "openacme-auth";
 
+// Public auth pages — a 401 here must NOT trigger the /login redirect, or a
+// background API call nests `?next=/login?next=…` into an infinite loop.
+const AUTH_REDIRECT_SKIP = new Set(["/login", "/setup", "/enroll"]);
+
 /**
  * Wrap window.fetch once on mount so every API call:
  *   1. sends the session cookie (credentials: "include")
@@ -49,10 +53,16 @@ export function AuthFetch(): null {
           } catch {
             // ignore
           }
-          const next = encodeURIComponent(
-            window.location.pathname + window.location.search
-          );
-          window.location.href = `/login?next=${next}`;
+          // Already on a public auth page — never redirect (a background
+          // 401 there would nest `?next=/login?next=…` forever). Just clear
+          // the token above and let the page handle its own auth state.
+          const onAuthPage = AUTH_REDIRECT_SKIP.has(window.location.pathname);
+          if (!onAuthPage) {
+            const next = encodeURIComponent(
+              window.location.pathname + window.location.search
+            );
+            window.location.href = `/login?next=${next}`;
+          }
         }
       }
       return res;
