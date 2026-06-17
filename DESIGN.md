@@ -296,6 +296,14 @@ Pulse is reserved for the chat streaming cursor (above) and the equivalent in-fl
 
 This dot+label primitive is **standalone**. It is not nested inside Badge / chip components — those encode state via the badge chassis itself (variant fill or recessed mono), with the label as the encoding. The two primitives stay separate.
 
+### Inline Notice
+A low-frequency ambient signal that lives in the chrome — update available, degraded provider, quota near limit. A **ruled region** (hairline border, no fill), never a card, never a toast, never a prose paragraph. The trap it exists to prevent is the text-heavy notice: a sentence like "OpenAcme v0.13.0 is available (you have v0.12.0)" reads as marketing copy and fails the Read-Aloud Rule. Structure instead:
+- A status line: the dot-or-icon + Geist Mono UPPERCASE label primitive (a `plot-red` mark = needs attention), with the machine-truthful value (version, count) set in mono on the same line — the **delta is the message**, not a sentence about it.
+- An optional code-surface command, copy-on-click, when the resolution is a single shell line (`openacme update`).
+- At most two quiet actions, Geist Mono UPPERCASE, `ink-faint` → `ink-soft` on hover, each paired with its icon (changelog ↗, dismiss ✕).
+
+Dismissal is keyed to the specific signal (e.g. the version), so resolving one instance doesn't suppress the next. Read-Aloud test: the notice should scan as an instrument readout, not a sentence.
+
 ### Command Palette (signature component)
 - Centered, fixed-width modal. `paper-sunk` background, hairline border, 0 radius. No backdrop blur (forbidden by no-shadow / no-glass rules); the overlay dim is a flat 60% `ink` overlay.
 - Geist Mono UPPERCASE 11px labels for section groups (e.g. `AGENTS`, `SESSIONS`, `ACTIONS`). Geist Sans 14px for action labels. Mono 12px for keyboard shortcuts on the right edge.
