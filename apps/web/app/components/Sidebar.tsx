@@ -21,6 +21,7 @@ import { API_BASE } from "@/app/lib/api";
 import { Logotype } from "@/app/components/Logotype";
 import { Logomark } from "@/app/components/Logomark";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { UpdateBanner } from "@/app/components/UpdateBanner";
 import { ActiveMarker } from "@/app/components/ui/active-marker";
 import { useAcmePanel } from "@/app/lib/AcmePanelContext";
 
@@ -257,6 +258,8 @@ export function Sidebar({ children }: { children?: React.ReactNode }) {
             aria-hidden
           />
         </a>
+
+        <UpdateBanner collapsed={collapsed} />
 
         <div
           className={cn(

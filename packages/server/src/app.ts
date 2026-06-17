@@ -85,6 +85,44 @@ const PKG_VERSION: string = (() => {
   }
 })();
 
+// Cached npm-registry lookup backing the web "update available" banner. Cached
+// in-process ~1h so page loads don't hammer the registry; failures aren't
+// cached so a transient outage doesn't suppress checks for an hour.
+const VERSION_CHECK_TTL_MS = 60 * 60 * 1000;
+let versionCheckCache: { at: number; latest: string } | null = null;
+
+function isNewerVersion(latest: string, current: string): boolean {
+  const a = latest.split(".").map((n) => parseInt(n, 10));
+  const b = current.split(".").map((n) => parseInt(n, 10));
+  for (let i = 0; i < 3; i++) {
+    const ai = a[i] ?? 0;
+    const bi = b[i] ?? 0;
+    if (Number.isNaN(ai) || Number.isNaN(bi)) return false;
+    if (ai > bi) return true;
+    if (ai < bi) return false;
+  }
+  return false;
+}
+
+async function fetchLatestCliVersion(): Promise<string | null> {
+  if (versionCheckCache && Date.now() - versionCheckCache.at < VERSION_CHECK_TTL_MS) {
+    return versionCheckCache.latest;
+  }
+  try {
+    const res = await fetch("https://registry.npmjs.org/@openacme/cli/latest", {
+      signal: AbortSignal.timeout(4_000),
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { version?: string };
+    if (!body.version) return null;
+    versionCheckCache = { at: Date.now(), latest: body.version };
+    return body.version;
+  } catch {
+    return null;
+  }
+}
+
 // Wire shapes for `/api/config` + `PUT /api/config/model`. Derived from the
 // existing `ModelConfig` so there's no parallel definition to drift —
 // strip `apiKey` (lives in .env, never on the wire) and surface the two
@@ -230,6 +268,19 @@ export async function createApp(
       skills: manager.skillRegistry.size,
     })
   );
+
+  // Update check for the web banner. Offline/registry error → upToDate:true so
+  // the UI shows nothing. Applying happens in the user's shell (openacme update).
+  app.get("/api/version/check", async (c) => {
+    const latest = await fetchLatestCliVersion();
+    if (!latest) return c.json({ current: PKG_VERSION, upToDate: true });
+    return c.json({
+      current: PKG_VERSION,
+      latest,
+      upToDate: !isNewerVersion(latest, PKG_VERSION),
+      command: "openacme update",
+    });
+  });
 
   // ── Agents ──
   app.get("/api/agents", (c) => {

@@ -24,7 +24,17 @@ import { Crosshair, Section } from "@/components/landing/Section";
 import { Terminal, type TermLine } from "@/components/landing/Terminal";
 import { WorkforceMonitor } from "@/components/landing/WorkforceMonitor";
 
-const INSTALL = "npm install -g @openacme/cli && openacme setup";
+const INSTALL_CURL = "curl -fsSL https://openacme.pages.dev/install.sh | sh";
+const INSTALL_NPM = "npm install -g @openacme/cli && openacme setup";
+
+function InstallCommands() {
+  return (
+    <div className="flex flex-col gap-2">
+      <CopyCommand command={INSTALL_CURL} />
+      <CopyCommand command={INSTALL_NPM} />
+    </div>
+  );
+}
 
 const INDEX: IndexItem[] = [
   { n: "01", label: "Roster", href: "#roster", tone: "blue" },
@@ -147,7 +157,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="mt-4">
-                <CopyCommand command={INSTALL} />
+                <InstallCommands />
               </div>
             </div>
             <div className="flex min-w-0 items-center lg:col-span-6">
@@ -439,7 +449,7 @@ export default function HomePage() {
               Hire your first agent.
             </h2>
             <div className="mt-10 flex flex-col items-start gap-6">
-              <CopyCommand command={INSTALL} />
+              <InstallCommands />
               <div className="flex flex-wrap items-center gap-3">
                 <Link
                   href="/docs/quickstart"
