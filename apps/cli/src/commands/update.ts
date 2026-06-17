@@ -1,64 +1,24 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as clack from "@clack/prompts";
+import { loadConfig } from "@openacme/config";
+import { restartCommand } from "./restart.js";
+import { fetchLatestVersion, isNewer } from "./update/registry.js";
+import { detectInstallContext, installCommandFor } from "./update/detect-pm.js";
+import { applyUpdate } from "./update/apply.js";
 
-const REGISTRY_URL = "https://registry.npmjs.org/@openacme/cli/latest";
-const FETCH_TIMEOUT_MS = 5_000;
-
-/**
- * Best-effort package-manager detection. The bin symlink that
- * `openacme` resolves through usually contains a `/pnpm/`, `/.npm/`,
- * or `/.bun/` segment in its path; the `npm_config_user_agent` env
- * var is a fallback for invocations through `pnpm exec` / `npm exec`.
- */
-type PackageManager = "pnpm" | "npm" | "bun" | "unknown";
-
-interface InstallCommand {
-  pm: PackageManager;
-  command: string;
-}
-
-function detectPackageManager(): InstallCommand {
-  // 1. Resolve where `openacme` actually lives on disk.
-  let resolved = "";
-  try {
-    const bin = process.argv[1];
-    if (bin) resolved = realpathSync(bin);
-  } catch {
-    // ignore — fall through to env-var fallback
-  }
-
-  if (resolved) {
-    const haystack = resolved.toLowerCase();
-    if (haystack.includes("/pnpm/")) return { pm: "pnpm", command: "pnpm add -g @openacme/cli@latest" };
-    if (haystack.includes("/.bun/") || haystack.includes("/bun/install/"))
-      return { pm: "bun", command: "bun add -g @openacme/cli@latest" };
-    // `.npm/` or a system /usr/local/lib/node_modules/... layout — call it npm.
-    if (haystack.includes("/.npm/") || haystack.includes("/node_modules/"))
-      return { pm: "npm", command: "npm install -g @openacme/cli@latest" };
-  }
-
-  // 2. Fallback: registered-pm env var.
-  const ua = process.env["npm_config_user_agent"] ?? "";
-  if (ua.startsWith("pnpm")) return { pm: "pnpm", command: "pnpm add -g @openacme/cli@latest" };
-  if (ua.startsWith("bun")) return { pm: "bun", command: "bun add -g @openacme/cli@latest" };
-  if (ua.startsWith("npm")) return { pm: "npm", command: "npm install -g @openacme/cli@latest" };
-
-  return { pm: "unknown", command: "npm install -g @openacme/cli@latest" };
-}
-
-/** Simple semver `>` for `X.Y.Z` strings (no prerelease handling). */
-function isNewer(latest: string, current: string): boolean {
-  const a = latest.split(".").map((n) => parseInt(n, 10));
-  const b = current.split(".").map((n) => parseInt(n, 10));
-  for (let i = 0; i < 3; i++) {
-    const ai = a[i] ?? 0;
-    const bi = b[i] ?? 0;
-    if (Number.isNaN(ai) || Number.isNaN(bi)) return false;
-    if (ai > bi) return true;
-    if (ai < bi) return false;
-  }
-  return false;
+interface UpdateOpts {
+  json?: boolean;
+  /** Advisory only — never apply (the historical behavior). */
+  check?: boolean;
+  /** Apply without an interactive confirm. */
+  yes?: boolean;
+  /** Apply the install but skip the daemon restart. */
+  noRestart?: boolean;
+  /** Print what would happen without installing. */
+  dryRun?: boolean;
+  dataDir?: string;
 }
 
 function readCurrentVersion(): string {
@@ -69,27 +29,23 @@ function readCurrentVersion(): string {
   return pkg.version;
 }
 
-async function fetchLatestVersion(): Promise<string> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+/**
+ * After the daemon restarts, confirm the live process reports the new version.
+ * restartCommand already polled /api/health until it came up, so a single read
+ * suffices; a stale version means a wrapper relaunched the old code.
+ */
+async function restartedVersion(dataDir: string | undefined): Promise<string | null> {
   try {
-    const res = await fetch(REGISTRY_URL, {
-      signal: ctrl.signal,
-      headers: { accept: "application/json" },
+    const { server } = loadConfig(dataDir);
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/health`, {
+      signal: AbortSignal.timeout(2_000),
     });
-    if (!res.ok) {
-      throw new Error(`registry returned HTTP ${res.status}`);
-    }
+    if (!res.ok) return null;
     const body = (await res.json()) as { version?: string };
-    if (!body.version) throw new Error("registry response missing 'version'");
-    return body.version;
-  } finally {
-    clearTimeout(t);
+    return body.version ?? null;
+  } catch {
+    return null;
   }
-}
-
-interface UpdateOpts {
-  json?: boolean;
 }
 
 export async function updateCommand(opts: UpdateOpts): Promise<void> {
@@ -99,42 +55,88 @@ export async function updateCommand(opts: UpdateOpts): Promise<void> {
     latest = await fetchLatestVersion();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (opts.json) {
-      console.log(JSON.stringify({ error: msg, current }));
-    } else {
-      console.error(`Could not check for updates: ${msg}`);
-    }
+    if (opts.json) console.log(JSON.stringify({ error: msg, current }));
+    else console.error(`Could not check for updates: ${msg}`);
     process.exit(1);
   }
 
-  const { pm, command } = detectPackageManager();
+  const ctx = detectInstallContext();
+  const command = installCommandFor(ctx?.pm ?? null);
 
   if (!isNewer(latest, current)) {
-    if (opts.json) {
-      console.log(JSON.stringify({ current, latest, upToDate: true, pm, command }));
-    } else {
-      console.log(`OpenAcme is up to date (v${current}).`);
-    }
+    if (opts.json) console.log(JSON.stringify({ current, latest, upToDate: true, pm: ctx?.pm ?? null, command }));
+    else console.log(`OpenAcme is up to date (v${current}).`);
     return;
   }
 
-  if (opts.json) {
-    console.log(JSON.stringify({ current, latest, upToDate: false, pm, command }));
+  // A newer version exists. Decide whether to apply.
+  // - explicit --check, or a non-interactive shell without --yes → advisory.
+  // - --yes → apply without prompting.
+  // - interactive TTY → prompt, then apply.
+  const interactive = process.stdout.isTTY === true && process.stdin.isTTY === true;
+  const advisory = opts.check === true || (!opts.yes && !interactive);
+
+  if (opts.json && advisory) {
+    console.log(JSON.stringify({ current, latest, upToDate: false, pm: ctx?.pm ?? null, command }));
     return;
   }
 
-  console.log("");
-  console.log(`OpenAcme v${latest} is available (you have v${current}).`);
-  console.log("");
-  if (pm === "unknown") {
-    console.log("To update, run the install command for your package manager:");
-    console.log("  pnpm add -g @openacme/cli@latest");
-    console.log("  npm install -g @openacme/cli@latest");
-    console.log("  bun add -g @openacme/cli@latest");
-  } else {
+  if (advisory) {
+    console.log("");
+    console.log(`OpenAcme v${latest} is available (you have v${current}).`);
+    console.log("");
     console.log("To update, run:");
     console.log(`  ${command}`);
+    console.log("");
+    console.log("Or apply it now:  openacme update --yes");
+    return;
   }
-  console.log("");
-  console.log("The platform will refresh bundled agents and skills on the next start.");
+
+  // Apply path. Needs a real global install we can hand to a package manager.
+  if (!ctx) {
+    const note = "openacme is running from a source checkout — self-update doesn't apply. Use `git pull` + `pnpm build`.";
+    if (opts.json) console.log(JSON.stringify({ current, latest, applied: false, reason: "source-checkout" }));
+    else console.log(note);
+    return;
+  }
+
+  if (opts.dryRun) {
+    console.log(`Would update v${current} → v${latest} via:  ${command}`);
+    if (!opts.noRestart) console.log("Would then restart the daemon.");
+    return;
+  }
+
+  if (interactive && !opts.yes) {
+    const ok = await clack.confirm({ message: `Update OpenAcme v${current} → v${latest} now?` });
+    if (clack.isCancel(ok) || !ok) {
+      console.log(`Skipped. Run it later with:  ${command}`);
+      return;
+    }
+  }
+
+  console.log(`Updating OpenAcme v${current} → v${latest} ...`);
+  const result = await applyUpdate(ctx, latest);
+  if (!result.ok) {
+    console.error(`✗ update did not complete (${result.reason}${result.detail ? `: ${result.detail}` : ""}).`);
+    console.error(`  Run manually:  ${command}`);
+    process.exit(1);
+  }
+  console.log(`✓ installed v${latest}.`);
+
+  if (opts.noRestart) {
+    console.log("Skipped daemon restart (--no-restart). Run `openacme restart` to apply.");
+    return;
+  }
+
+  console.log("Restarting daemon ...");
+  await restartCommand({ dataDir: opts.dataDir, noBrowser: true });
+
+  const running = await restartedVersion(opts.dataDir);
+  if (running === latest) {
+    console.log(`✓ updated to v${latest} — daemon restarted.`);
+  } else if (running) {
+    console.log(`⚠ installed v${latest}, but the daemon reports v${running}. Run \`openacme restart\` if this persists.`);
+  } else {
+    console.log(`✓ installed v${latest}. Could not confirm the daemon version — check \`openacme status\`.`);
+  }
 }

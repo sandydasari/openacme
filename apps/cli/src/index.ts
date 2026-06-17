@@ -413,9 +413,23 @@ agents
 
 program
   .command("update")
-  .description("Check whether a newer @openacme/cli is on npm and print the install command")
+  .description("Update @openacme/cli to the latest version (installs + restarts the daemon)")
+  .option("--check", "Only report whether an update is available; never apply it")
+  .option("--yes", "Apply the update without an interactive confirm")
+  .option("--no-restart", "Apply the install but don't restart the daemon")
+  .option("--dry-run", "Show what would happen without installing")
   .option("--json", "Emit a machine-readable JSON line instead of human text")
-  .action((opts: { json?: boolean }) => updateCommand({ json: opts.json === true }));
+  .option("-d, --data-dir <path>", "Data directory (default: ~/.openacme)")
+  .action((opts: { check?: boolean; yes?: boolean; restart?: boolean; dryRun?: boolean; json?: boolean; dataDir?: string }) =>
+    updateCommand({
+      check: opts.check === true,
+      yes: opts.yes === true,
+      noRestart: opts.restart === false,
+      dryRun: opts.dryRun === true,
+      json: opts.json === true,
+      dataDir: opts.dataDir,
+    })
+  );
 
 // Resolve the data dir once so the LLM provider's OAuth path can find auth.json
 // without us threading the path through every call site.
