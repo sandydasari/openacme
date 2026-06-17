@@ -65,6 +65,9 @@ export function authMiddleware(opts: AuthOptions): MiddlewareHandler {
     // Health is unauthenticated — `pollHealth` (CLI) and external monitors
     // must reach it without a session, including in claim mode.
     if (path === "/api/health") return next();
+    // Version check is non-sensitive (current + npm latest) — same class as
+    // health, and the web banner reads it before any session on local installs.
+    if (path === "/api/version/check") return next();
     if (
       path === "/login" ||
       path === "/setup" ||
