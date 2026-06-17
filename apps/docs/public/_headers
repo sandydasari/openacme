@@ -13,3 +13,9 @@
 
 /api/search
   Cache-Control: public, max-age=3600
+
+# Install script — short TTL so fixes roll out fast; serve as plain text so
+# `curl | sh` doesn't get an HTML error page if the path is ever wrong.
+/install.sh
+  Content-Type: text/x-shellscript; charset=utf-8
+  Cache-Control: public, max-age=3600

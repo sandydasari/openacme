@@ -3,8 +3,16 @@ title: CLI reference
 description: Every openacme command
 ---
 
-The web UI and the CLI are two doors to the same workforce. Everything below
-is available after `npm install -g @openacme/cli`.
+The web UI and the CLI are two doors to the same workforce. Everything below is
+available after installing the CLI — `curl -fsSL https://openacme.pages.dev/install.sh | sh`,
+or `npm install -g @openacme/cli`.
+
+## Updating
+
+```sh
+openacme update          # check for a newer version and update + restart
+openacme update --check  # only report whether an update is available
+```
 
 ## Daemon
 
