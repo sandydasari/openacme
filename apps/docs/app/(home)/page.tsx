@@ -12,7 +12,7 @@ import {
   SkillsDemo,
   TeamRouteDemo,
 } from "@/components/landing/BentoDemos";
-import { CopyCommand } from "@/components/landing/CopyCommand";
+import { InstallTabs } from "@/components/landing/InstallTabs";
 import { DispatchBoard } from "@/components/landing/DispatchBoard";
 import { ImageFrame } from "@/components/landing/ImageFrame";
 import { IndexMarquee, type IndexItem } from "@/components/landing/MarqueeRow";
@@ -24,17 +24,6 @@ import { Crosshair, Section } from "@/components/landing/Section";
 import { Terminal, type TermLine } from "@/components/landing/Terminal";
 import { WorkforceMonitor } from "@/components/landing/WorkforceMonitor";
 
-const INSTALL_CURL = "curl -fsSL https://openacme.pages.dev/install.sh | sh";
-const INSTALL_NPM = "npm install -g @openacme/cli && openacme setup";
-
-function InstallCommands() {
-  return (
-    <div className="flex flex-col gap-2">
-      <CopyCommand command={INSTALL_CURL} />
-      <CopyCommand command={INSTALL_NPM} />
-    </div>
-  );
-}
 
 const INDEX: IndexItem[] = [
   { n: "01", label: "Roster", href: "#roster", tone: "blue" },
@@ -157,7 +146,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="mt-4">
-                <InstallCommands />
+                <InstallTabs />
               </div>
             </div>
             <div className="flex min-w-0 items-center lg:col-span-6">
@@ -449,7 +438,7 @@ export default function HomePage() {
               Hire your first agent.
             </h2>
             <div className="mt-10 flex flex-col items-start gap-6">
-              <InstallCommands />
+              <InstallTabs dark />
               <div className="flex flex-wrap items-center gap-3">
                 <Link
                   href="/docs/quickstart"
