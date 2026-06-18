@@ -2,7 +2,7 @@
 // sharp 0px corners, hairline rules, no shadows, signal color tokens.
 // Each card is color-coded by a light wash + matching rule, no flat grey.
 // Concept after Galileo's write-conflict diagram.
-//   node scripts/gen-write-cascade.mjs
+//   node content/blog/i-built-a-multi-agent-platform/scripts/gen-write-cascade.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 
 const c = {
@@ -82,6 +82,6 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">
 <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" fill="${c.paper}" stroke="${c.rule}"/>
 ${b}</svg>`;
 
-mkdirSync("public/media/i-built-a-multi-agent-platform", { recursive: true });
-writeFileSync("public/media/i-built-a-multi-agent-platform/write-conflict-cascade.svg", svg);
+mkdirSync(new URL("../figures/", import.meta.url), { recursive: true });
+writeFileSync(new URL("../figures/write-conflict-cascade.svg", import.meta.url), svg);
 console.log("wrote write-conflict-cascade.svg", svg.length, "bytes");

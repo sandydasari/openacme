@@ -1,8 +1,10 @@
 // 1200x630 social card for the multi-agent essay, rasterized to PNG so it
 // unfurls on X / Reddit / Slack (an SVG will not). Console aesthetic: paper,
 // hairline rule, the real OpenAcme logo lockup, a faint complete-graph motif
-// echoing the coordination figure.  node scripts/gen-og-cover.mjs
+// echoing the coordination figure.
+//   node content/blog/i-built-a-multi-agent-platform/scripts/gen-og-cover.mjs
 import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const W = 1200, H = 630;
@@ -66,6 +68,8 @@ ${title}
 <text x="80" y="562" font-family="${SANS}" font-size="23" fill="${c.inkSoft}">Why almost everyone is better off with a single agent.</text>
 </svg>`;
 
-mkdirSync("public/media/i-built-a-multi-agent-platform", { recursive: true });
-await sharp(Buffer.from(svg)).png().toFile("public/media/i-built-a-multi-agent-platform/cover.png");
+// OG raster must live under public/ to unfurl as an absolute URL — kept out of the co-located figures/.
+const coverDir = new URL("../../../../public/media/i-built-a-multi-agent-platform/", import.meta.url);
+mkdirSync(coverDir, { recursive: true });
+await sharp(Buffer.from(svg)).png().toFile(fileURLToPath(new URL("cover.png", coverDir)));
 console.log("wrote cover.png 1200x630");

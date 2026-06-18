@@ -4,7 +4,7 @@
 // changing go the same way, through the agent's own identity); colored pulses
 // flow along them. Square corners, hairline rules, signal washes, real logos.
 // SMIL so it plays via <img>; t=0 is a clean static frame.
-//   node scripts/gen-safe-collaboration.mjs
+//   node content/blog/i-built-a-multi-agent-platform/scripts/gen-safe-collaboration.mjs
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 
 const c = {
@@ -19,10 +19,10 @@ const esc = (s) => s.replace(/&/g, "&amp;");
 const T = (x, y, font, size, fill, str, o = {}) =>
   `<text x="${x}" y="${y}" font-family="${font === "mono" ? MONO : SANS}" font-size="${size}" fill="${fill}"${o.w ? ` font-weight="${o.w}"` : ""}${o.a ? ` text-anchor="${o.a}"` : ""}${o.ls ? ` letter-spacing="${o.ls}"` : ""}>${esc(str)}</text>`;
 
-const pathOf = (file) => readFileSync(`scripts/${file}`, "utf8").match(/ d="([^"]+)"/)[1];
-const GH = pathOf("github-icon.svg");
-const SF = pathOf("logo-salesforce.svg");
-const PG = pathOf("logo-postgresql.svg");
+const pathOf = (file) => readFileSync(new URL(`./logos/${file}`, import.meta.url), "utf8").match(/ d="([^"]+)"/)[1];
+const GH = pathOf("github.svg");
+const SF = pathOf("salesforce.svg");
+const PG = pathOf("postgres.svg");
 const logo = (d, x, y, s, fill) => `<g transform="translate(${x},${y}) scale(${s / 24})"><path d="${d}" fill="${fill}"/></g>`;
 const envelope = (x, y, w, h, col) =>
   `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${col}" stroke-width="1.1"/>` +
@@ -105,6 +105,6 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.
 <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" fill="${c.paper}" stroke="${c.rule}"/>
 ${lines}${b}${pulses}</svg>`;
 
-mkdirSync("public/media/i-built-a-multi-agent-platform", { recursive: true });
-writeFileSync("public/media/i-built-a-multi-agent-platform/safe-collaboration.svg", svg);
+mkdirSync(new URL("../figures/", import.meta.url), { recursive: true });
+writeFileSync(new URL("../figures/safe-collaboration.svg", import.meta.url), svg);
 console.log("wrote safe-collaboration.svg", svg.length, "bytes");

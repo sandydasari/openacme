@@ -3,7 +3,7 @@
 // the final settled state, so prefers-reduced-motion just disables animation
 // and the reader still gets the full graph, final counts, and the punchline.
 //
-//   node scripts/gen-coordination-explosion.mjs
+//   node content/blog/i-built-a-multi-agent-platform/scripts/gen-coordination-explosion.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 
 const MAX = 8;
@@ -113,6 +113,6 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360">
 <line x1="402" y1="44" x2="402" y2="316" stroke="${c.border}" stroke-dasharray="2 6"/>
 ${body}${panel}</svg>`;
 
-mkdirSync("public/media/i-built-a-multi-agent-platform", { recursive: true });
-writeFileSync("public/media/i-built-a-multi-agent-platform/coordination-explosion.svg", svg);
+mkdirSync(new URL("../figures/", import.meta.url), { recursive: true });
+writeFileSync(new URL("../figures/coordination-explosion.svg", import.meta.url), svg);
 console.log("wrote coordination-explosion.svg", svg.length, "bytes");
