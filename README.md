@@ -14,6 +14,8 @@
 
 Not a single assistant. Not a fixed team of four. A *workforce* — named agents with roles, models, tools, and memory — that scales the way you want it to and self-organizes through delegation. Hand the top of the org chart a goal; it breaks the work down and assigns it. You steer.
 
+OpenAcme is an open-source, local-first, self-hosted **multi-agent AI platform** — a practical alternative to CrewAI, AutoGen, MetaGPT, Paperclip, and hosted services like Polsia. Built in TypeScript, MCP-native, multi-provider (Anthropic / OpenAI / Google / OpenRouter / Ollama), and able to run on the **Claude or ChatGPT subscription you already pay for** — no per-token API bill to experiment.
+
 ![demo](docs/images/demo.gif)
 
 <a href="https://github.com/sandydasari/openacme/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/sandydasari/openacme/actions/workflows/ci.yml/badge.svg"></a>
@@ -53,6 +55,22 @@ You hand the workforce a goal — at whatever altitude you want.
 **Low altitude.** *"Fix the flaky test in `task-scheduler.test.ts`."* Goes straight to your engineer. Done before lunch.
 
 Either way, you're not running the play-by-play. You set goals, you answer the few questions the workforce escalates, you read the results.
+
+---
+
+## Put it to work — real examples
+
+These aren't toy demos. Each is a workforce running on its own schedule, around the clock. Point the daemon at an always-on machine (a spare laptop, a $5 VPS) and it keeps going whether you're at the keyboard or not.
+
+**A LinkedIn ghostwriter that posts every morning.** A recurring task fires daily. Your marketing agent reads what shipped this week, drafts a post in your voice (it remembers your tone from past edits), opens its *own* browser session already logged into LinkedIn, and either publishes or queues it for one-tap approval. Set it once; it runs 24/7.
+
+**A YouTube content engine that never sleeps.** A video agent turns each release into a script, a thumbnail brief, and a description. It hands the script to a research agent to fact-check, then drops the finished package on the board for you to record. New changelog entry in, ready-to-shoot video package out — on a loop.
+
+**A content calendar that plans itself.** Hand a manager agent one goal — *"keep our channels active this week"* — and it plans a week of LinkedIn, YouTube, and X content, assigns each piece to the right specialist, and wires up the dependencies (research → draft → review → schedule). You wake up to a filled board, not a blank page.
+
+**A competitor watch that reports every Monday.** A research agent browses rivals' sites, changelogs, and socials over the weekend, diffs what changed, and posts a digest to the board before you're back. No prompt, no babysitting.
+
+The common thread: you describe the job once, set it to recur, and the scheduler wakes the right agent at the right time. The work happens while you're doing something else.
 
 ---
 
@@ -146,6 +164,32 @@ pnpm agent
 ```
 
 ---
+
+## How OpenAcme compares
+
+Looking at the multi-agent landscape? OpenAcme sits among both **self-hosted agent platforms** (Hermes Agent, Paperclip, Multica) and **agent frameworks** (CrewAI, AutoGen, MetaGPT, ChatDev), plus closed-source hosted services (Polsia). The short version:
+
+- **vs. frameworks (CrewAI, AutoGen, MetaGPT, ChatDev):** those are code libraries you program against. OpenAcme is a finished app — web UI, CLI, task board, scheduler — with no orchestration code to write.
+- **vs. platforms (Paperclip, Multica, Hermes):** OpenAcme is local-first and runs its own agent loop, with per-agent memory, browser, and model, and runs on your existing Claude/ChatGPT subscription.
+- **vs. closed-source SaaS (Polsia):** OpenAcme is MIT and free — your agents and data stay on your machine, with no platform fee or revenue share.
+
+Full, sourced breakdown: [**OpenAcme vs Hermes, Paperclip, Multica, Polsia, CrewAI & more →**](https://openacme.org/blog/openacme-vs-hermes-paperclip-multica-polsia)
+
+## FAQ
+
+**Is OpenAcme open source?** Yes — MIT licensed and free to self-host.
+
+**Is it a CrewAI alternative?** Yes — and a no-code one. CrewAI and similar frameworks are libraries you write code against to assemble agents; OpenAcme is a ready-to-run app. (AutoGen, another well-known framework, is now in maintenance mode after Microsoft folded it into the Microsoft Agent Framework — so if you're migrating off an older framework, OpenAcme is an actively developed, self-hosted place to land.)
+
+**Can I use my Claude Pro or ChatGPT subscription?** Yes — sign in via OAuth and that plan drives the workforce, so you don't pay per-token API rates to experiment. API keys also work.
+
+**Does my data leave my machine?** No, beyond the prompts you send to your chosen model provider. Sessions, tasks, memory, and tokens all live under `~/.openacme/`. No telemetry.
+
+**Which models are supported?** Anthropic, OpenAI, Google, OpenRouter, Ollama, and any OpenAI-compatible endpoint — configurable per agent.
+
+**Does it work offline / with local models?** Yes, via Ollama or any local OpenAI-compatible endpoint.
+
+**What platforms does it run on?** macOS and Linux, Node ≥ 18.
 
 ## More
 
