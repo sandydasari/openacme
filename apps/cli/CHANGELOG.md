@@ -1,5 +1,23 @@
 # @openacme/cli
 
+## 0.14.0
+
+### Patch Changes
+
+- Updated dependencies [[`42e1f2f`](https://github.com/sandydasari/openacme/commit/42e1f2fceae53d09c97d6e8fc5ef398182875ff2)]:
+  - @openacme/server@0.14.0
+  - @openacme/agent-core@0.14.0
+  - @openacme/auth@0.14.0
+  - @openacme/config@0.14.0
+  - @openacme/db@0.14.0
+  - @openacme/email@0.14.0
+  - @openacme/llm-provider@0.14.0
+  - @openacme/mcp-client@0.14.0
+  - @openacme/memory@0.14.0
+  - @openacme/skills@0.14.0
+  - @openacme/tasks@0.14.0
+  - @openacme/tools@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes
