@@ -1,5 +1,13 @@
 # @openacme/llm-provider
 
+## 0.14.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @openacme/auth@0.14.0
+  - @openacme/config@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes

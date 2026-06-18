@@ -1,0 +1,7 @@
+---
+title: v0.14.0
+version: "0.14.0"
+release: "https://github.com/sandydasari/openacme/releases/tag/%40openacme%2Fcli%400.14.0"
+---
+
+- [#56](https://github.com/sandydasari/openacme/pull/56) [`42e1f2f`](https://github.com/sandydasari/openacme/commit/42e1f2fceae53d09c97d6e8fc5ef398182875ff2) Thanks [@ukanwat](https://github.com/ukanwat)! - Unify MCP server management on a single JSON editor across the per-agent tab, global Settings, and the new-agent wizard — matching the raw-config UX of Claude Desktop / Cursor / Cline, replacing the bespoke form. Per-agent MCP status now aggregates stdio servers (previously invisible), per-server connect/disconnect/reconnect are transport-aware (no more 404 on stdio), and a new batch `PUT /api/agents/:id/mcp` saves validated config. Also fixes home-page agent-filter persistence.

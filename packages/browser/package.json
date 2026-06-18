@@ -1,6 +1,6 @@
 {
   "name": "@openacme/browser",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Per-agent browser sessions for OpenAcme — pluggable provider (local Chrome / Browserbase / Browser-Use / Firecrawl), per-agent profile dirs, transparent CDP reconnect.",
   "license": "MIT",
   "author": "sandydasari",

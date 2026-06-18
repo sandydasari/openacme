@@ -1,5 +1,13 @@
 # @openacme/db
 
+## 0.14.0
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @openacme/config@0.14.0
+  - @openacme/tasks@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes

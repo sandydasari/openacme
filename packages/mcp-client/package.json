@@ -1,6 +1,6 @@
 {
   "name": "@openacme/mcp-client",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Model Context Protocol client used by OpenAcme to talk to MCP servers.",
   "license": "MIT",
   "author": "sandydasari",
