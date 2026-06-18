@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360">
+<style>
+text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.a{animation-duration:11s;animation-iteration-count:infinite;animation-timing-function:linear;animation-fill-mode:both}
+line.a{opacity:.17;stroke-dashoffset:0;stroke-width:1}
+circle.a{transform-box:fill-box;transform-origin:center}
+.num{transform-box:fill-box;transform-origin:left center;opacity:0}
+text.fin{opacity:1}
+.punch{opacity:1}
+@media (prefers-reduced-motion: reduce){.a{animation:none!important}}
+@keyframes n0{0%{opacity:0;transform:scale(.3)}2.364%{opacity:1;transform:scale(1.3)}4.091%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n95{0%{opacity:0;transform:scale(.3)}8.636%{opacity:0;transform:scale(.3)}11%{opacity:1;transform:scale(1.3)}12.727%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n190{0%{opacity:0;transform:scale(.3)}17.273%{opacity:0;transform:scale(.3)}19.636%{opacity:1;transform:scale(1.3)}21.364%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n285{0%{opacity:0;transform:scale(.3)}25.909%{opacity:0;transform:scale(.3)}28.273%{opacity:1;transform:scale(1.3)}30%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n380{0%{opacity:0;transform:scale(.3)}34.545%{opacity:0;transform:scale(.3)}36.909%{opacity:1;transform:scale(1.3)}38.636%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n475{0%{opacity:0;transform:scale(.3)}43.182%{opacity:0;transform:scale(.3)}45.545%{opacity:1;transform:scale(1.3)}47.273%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes n570{0%{opacity:0;transform:scale(.3)}51.818%{opacity:0;transform:scale(.3)}54.182%{opacity:1;transform:scale(1.3)}55.909%{opacity:1;transform:scale(1)}87.273%{opacity:1;transform:scale(1)}95.455%{opacity:0;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes e0{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}4.545%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}7.091%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e95{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}8.636%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}13.182%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}15.727%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e190{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}17.273%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}21.818%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}24.364%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e285{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}25.909%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}30.455%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}33%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e380{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}34.545%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}39.091%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}41.636%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e475{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}43.182%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}47.727%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}50.273%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes e570{0%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}51.818%{opacity:0;stroke:#CB4632;stroke-dashoffset:300;stroke-width:1.7}56.364%{opacity:.95;stroke:#CB4632;stroke-dashoffset:0;stroke-width:1.7}58.909%{opacity:.17;stroke:#2A2A33;stroke-dashoffset:0;stroke-width:1}87.273%{opacity:.17;stroke:#2A2A33;stroke-width:1}95.455%{opacity:0}100%{opacity:0}}
+@keyframes m0{0%{opacity:0;transform:translateY(5px)}2%{opacity:1;transform:translateY(0)}8.636%{opacity:1;transform:translateY(0)}10.455%{opacity:0}100%{opacity:0}}
+@keyframes m1{0%{opacity:0;transform:translateY(5px)}8.636%{opacity:0;transform:translateY(5px)}10.636%{opacity:1;transform:translateY(0)}17.273%{opacity:1;transform:translateY(0)}19.091%{opacity:0}100%{opacity:0}}
+@keyframes m2{0%{opacity:0;transform:translateY(5px)}17.273%{opacity:0;transform:translateY(5px)}19.273%{opacity:1;transform:translateY(0)}25.909%{opacity:1;transform:translateY(0)}27.727%{opacity:0}100%{opacity:0}}
+@keyframes m3{0%{opacity:0;transform:translateY(5px)}25.909%{opacity:0;transform:translateY(5px)}27.909%{opacity:1;transform:translateY(0)}34.545%{opacity:1;transform:translateY(0)}36.364%{opacity:0}100%{opacity:0}}
+@keyframes m4{0%{opacity:0;transform:translateY(5px)}34.545%{opacity:0;transform:translateY(5px)}36.545%{opacity:1;transform:translateY(0)}43.182%{opacity:1;transform:translateY(0)}45%{opacity:0}100%{opacity:0}}
+@keyframes m5{0%{opacity:0;transform:translateY(5px)}43.182%{opacity:0;transform:translateY(5px)}45.182%{opacity:1;transform:translateY(0)}51.818%{opacity:1;transform:translateY(0)}53.636%{opacity:0}100%{opacity:0}}
+@keyframes m6{0%{opacity:0;transform:translateY(5px)}51.818%{opacity:0;transform:translateY(5px)}53.818%{opacity:1;transform:translateY(0)}87.273%{opacity:1;transform:translateY(0)}95.455%{opacity:0}100%{opacity:0}}
+@keyframes punch{0%{opacity:0;transform:translateY(6px)}61.818%{opacity:0;transform:translateY(6px)}65%{opacity:1;transform:translateY(0)}87.273%{opacity:1}95.455%{opacity:0}100%{opacity:0}}
+</style>
+<rect x="1" y="1" width="758" height="358" rx="10" fill="#FCFBFA" stroke="#D8D4CF"/>
+<line x1="402" y1="44" x2="402" y2="316" stroke="#D8D4CF" stroke-dasharray="2 6"/>
+<line class="a" x1="200.0" y1="68.0" x2="283.4" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e285"/>
+<line class="a" x1="200.0" y1="68.0" x2="318.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e95"/>
+<line class="a" x1="200.0" y1="68.0" x2="283.4" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="200.0" y1="68.0" x2="200.0" y2="304.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e0"/>
+<line class="a" x1="200.0" y1="68.0" x2="116.6" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e380"/>
+<line class="a" x1="200.0" y1="68.0" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e190"/>
+<line class="a" x1="200.0" y1="68.0" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="283.4" y1="102.6" x2="318.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e285"/>
+<line class="a" x1="283.4" y1="102.6" x2="283.4" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="283.4" y1="102.6" x2="200.0" y2="304.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e285"/>
+<line class="a" x1="283.4" y1="102.6" x2="116.6" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e380"/>
+<line class="a" x1="283.4" y1="102.6" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e285"/>
+<line class="a" x1="283.4" y1="102.6" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="318.0" y1="186.0" x2="283.4" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="318.0" y1="186.0" x2="200.0" y2="304.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e95"/>
+<line class="a" x1="318.0" y1="186.0" x2="116.6" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e380"/>
+<line class="a" x1="318.0" y1="186.0" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e190"/>
+<line class="a" x1="318.0" y1="186.0" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="283.4" y1="269.4" x2="200.0" y2="304.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="283.4" y1="269.4" x2="116.6" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="283.4" y1="269.4" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e475"/>
+<line class="a" x1="283.4" y1="269.4" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="200.0" y1="304.0" x2="116.6" y2="269.4" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e380"/>
+<line class="a" x1="200.0" y1="304.0" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e190"/>
+<line class="a" x1="200.0" y1="304.0" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="116.6" y1="269.4" x2="82.0" y2="186.0" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e380"/>
+<line class="a" x1="116.6" y1="269.4" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<line class="a" x1="82.0" y1="186.0" x2="116.6" y2="102.6" stroke="#2A2A33" stroke-linecap="round" stroke-dasharray="300" style="animation-name:e570"/>
+<circle class="a" cx="200.0" cy="68.0" r="6" fill="#2A2A33" style="opacity:1;animation-name:n0"/>
+<circle class="a" cx="283.4" cy="102.6" r="6" fill="#2A2A33" style="opacity:1;animation-name:n285"/>
+<circle class="a" cx="318.0" cy="186.0" r="6" fill="#2A2A33" style="opacity:1;animation-name:n95"/>
+<circle class="a" cx="283.4" cy="269.4" r="6" fill="#2A2A33" style="opacity:1;animation-name:n475"/>
+<circle class="a" cx="200.0" cy="304.0" r="6" fill="#2A2A33" style="opacity:1;animation-name:n0"/>
+<circle class="a" cx="116.6" cy="269.4" r="6" fill="#2A2A33" style="opacity:1;animation-name:n380"/>
+<circle class="a" cx="82.0" cy="186.0" r="6" fill="#2A2A33" style="opacity:1;animation-name:n190"/>
+<circle class="a" cx="116.6" cy="102.6" r="6" fill="#2A2A33" style="opacity:1;animation-name:n570"/>
+
+<text x="440" y="66" font-size="12" letter-spacing="1.4" fill="#5A5A64">AGENTS</text>
+<text x="648" y="66" font-size="12" fill="#6E6E78" text-anchor="end">grows by 1</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m0">2</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m1">3</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m2">4</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m3">5</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m4">6</text>
+<text class="a num" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m5">7</text>
+<text class="a num fin" x="440" y="112" font-size="42" font-weight="500" fill="#2A2A33" style="animation-name:m6">8</text>
+
+<text x="440" y="162" font-size="12" letter-spacing="1.4" fill="#CB4632">CONNECTIONS</text>
+<text x="648" y="162" font-size="12" fill="#6E6E78" text-anchor="end">n(n-1)/2</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m0">1</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m1">3</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m2">6</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m3">10</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m4">15</text>
+<text class="a num" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m5">21</text>
+<text class="a num fin" x="440" y="222" font-size="58" font-weight="600" fill="#CB4632" style="animation-name:m6">28</text>
+<line x1="440" y1="252" x2="712" y2="252" stroke="#D8D4CF"/>
+
+<g class="a punch" style="animation-name:punch">
+<text x="440" y="284" font-size="15" fill="#2A2A33">4&#215; the team.</text>
+<text x="440" y="308" font-size="15" font-weight="500" fill="#CB4632">28&#215; the coordination.</text>
+</g>
+</svg>

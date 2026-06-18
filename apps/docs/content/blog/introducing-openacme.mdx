@@ -7,67 +7,118 @@ tags: [launch, overview]
 ---
 
 Most AI tools give you a chat box. You type, it answers, you type again. Close
-the tab and the thread is gone. OpenAcme is built around a different idea: a
-**workforce** of agents that work for you, keep their context between sessions,
-and hand results back when they're done.
+the tab and the thread is gone. The model has no name, no job, no memory of the
+correction you made last week, and no way to do anything while you're not
+watching.
 
-You're not a user here. You're in charge.
+OpenAcme is built around a different idea. Instead of one assistant you talk to,
+you run a **workforce**: a roster of agents that each have a name, a job, their
+own tools and memory, and the ability to take work and finish it without you
+sitting there. You're not a user typing into a box. You're the person the work
+reports to.
 
 ## A roster, not a thread
 
-In OpenAcme, every agent is a coworker you can describe in a sentence. It has a
-**name**, a **role** (what it does, written the way you'd brief a teammate), and
-a **persona** (how it behaves). It carries its own model, tools, skills, memory,
-and workspace — independent from everyone else on the roster.
+In OpenAcme, every agent is a coworker you can describe in a sentence. Each one
+has three things:
+
+- a **name**, so you can address it and so it can address its coworkers,
+- a **role**, written the way you'd brief a teammate ("researches competitors
+  and writes briefs," "keeps our docs in sync with the code"),
+- a **persona**, the private instruction that shapes how it actually behaves.
+
+On top of that, every agent carries its own model, tools, skills, memory, and
+workspace, fully independent from everyone else on the roster.
+
+<DocShot
+  name="agents"
+  alt="An agent's detail page showing its role, persona, tools, and model"
+  caption="An agent's page. The role at the top is what coworkers read; the persona below it is private instruction only that agent sees."
+/>
 
 That separation is the whole point. An analyst and an engineer shouldn't share
-the same browser logins, the same memory, or the same model. Each agent is its
-own thing. You add one, retire one, or swap a model without touching the rest.
+the same browser logins, the same memory, or even the same model. So they
+don't. You add an agent, retire one, or swap a model for a single role without
+touching anyone else. The roster grows the way a real team does, one hire at a
+time.
 
 ## Hand off work and walk away
 
-Agents don't just answer questions — they take **tasks**. You write a task the
-way you'd brief a coworker: a title and what "done" looks like. It lands on a
-shared board, and the dispatcher wakes the right agent to pick it up, usually
-within the minute.
+Talking to an agent is fine, but the real shift is that you can give one a
+**task** and leave. You write it the way you'd brief a coworker: a title and a
+short note on what "done" looks like. It lands on a shared board, and a
+dispatcher wakes the right agent to pick it up, usually within the minute.
 
-- Tasks can **recur** — a finished daily task re-opens itself for tomorrow.
-- Tasks can **depend** on each other — dependents wait their turn.
-- Results come back as **comments**, with the full event log of what happened.
+<DocShot
+  name="board"
+  alt="The task board showing open, in-progress, and done tasks across agents"
+  caption="The board. Work moves across it on its own as agents claim tasks and finish them."
+/>
+
+Tasks aren't just one-shot prompts:
+
+- they can **recur**, so a finished daily task quietly re-opens itself for
+  tomorrow,
+- they can **depend** on each other, so a dependent task waits until the thing
+  it needs is done,
+- they report back as **comments**, with the full event log of what the agent
+  actually did to get there.
 
 So you can assign three things on your way out and read the answers when you're
-back, instead of babysitting a prompt.
+back, instead of babysitting a prompt and copy-pasting between tabs.
+
+<DocShot
+  name="result"
+  alt="A finished task with the agent's written result posted back as a comment"
+  caption="A result comes back as a comment on the task, not as a message you have to be online to catch."
+/>
 
 ## Everything a coworker needs
 
-A chat window with plugins isn't a coworker. An agent that gets real work done
-needs its own working setup:
+A chat window with a few plugins bolted on isn't a coworker. An agent that gets
+real work done needs an actual working setup, and each one has it:
 
-- **Memory** — corrections, preferences, and context saved to a Markdown file
-  per agent, carried into every future session.
-- **Skills** — teachable capabilities in Markdown. Install them from GitHub and
-  marketplaces, or write your own.
-- **A browser** — each agent gets its own browser session, with its own logins
-  and cookies. One agent's session never leaks into another's.
-- **Any model** — mix providers across the roster. Local models work too.
-- **MCP** — wire up any Model Context Protocol server; its tools show up
-  namespaced per agent or shared across the workforce.
-- **Teams** — send work to a team and the manager triages it: claim, reassign,
-  or split.
+- **Memory.** Corrections, preferences, and context get saved to a Markdown
+  file the agent keeps for itself, and carried into every future session. Tell
+  it once that you hate em dashes; it remembers next month.
+- **Skills.** Teachable abilities written in Markdown. Install them from GitHub
+  or a marketplace, or write your own and drop them in.
+- **A browser.** Each agent gets its own browser session with its own logins and
+  cookies. One agent signing into an account never leaks that session to another.
+- **Any model.** Mix providers across the roster. Use a frontier model for the
+  hard roles and a cheap or local one for the rest.
+- **MCP.** Wire up any Model Context Protocol server and its tools show up for
+  the agents you choose, namespaced per agent or shared across the workforce.
+
+<DocShot
+  name="skills"
+  alt="The Skills page showing installed skills and available sources"
+  caption="Skills are Markdown. Install from a source or author your own, and the agents you pick can use them."
+/>
+
+When work spans more than one person, you don't have to micro-route it. Group
+agents into a **team**, send the team a task, and the team's manager triages it:
+claim it, reassign it, or split it into smaller pieces for the others.
+
+<DocShot
+  name="teams"
+  alt="A team page showing members and the assigned manager"
+  caption="Send work to a team instead of a person. The manager decides who actually does it."
+/>
 
 ## It runs where you work
 
-OpenAcme is self-hosted. There is no OpenAcme cloud sitting between you and your
-data — your prompts and files go to the model provider you chose and nowhere
+OpenAcme is self-hosted. There's no OpenAcme cloud sitting between you and your
+data. Your prompts and files go to the model provider you chose and nowhere
 else.
 
-- **On your laptop:** install, sign in, done. Everything lives in
-  `~/.openacme` — plain Markdown and SQLite you can open, read, and back up.
-- **On a shared server:** run `openacme expose` and your whole team works with
-  the same workforce, behind one URL, with real accounts.
+- **On your laptop.** Install, sign in, done. Everything lives in `~/.openacme`,
+  which is plain Markdown and SQLite you can open, read, grep, and back up.
+- **On a shared server.** Run `openacme start --expose` and your whole team
+  works with the same workforce, behind one URL, with real accounts.
 
 The web console and the CLI are the same product. Anything you can do in the
-browser, you can do from the terminal — including `openacme chat`, which runs an
+browser you can do from the terminal, including `openacme chat`, which runs an
 agent in-process with no server at all.
 
 ## Get started
@@ -76,10 +127,10 @@ agent in-process with no server at all.
 npm install -g @openacme/cli && openacme setup
 ```
 
-That walks you through connecting a provider — a Claude or ChatGPT subscription,
-or an API key — and you're ready to hire your first agent. The
-[Quickstart](/docs/quickstart) takes it from there.
+That walks you through connecting a provider, whether that's a Claude or ChatGPT
+subscription or a plain API key, and then you're ready to hire your first agent.
+The [Quickstart](/docs/quickstart) takes it from there.
 
 This is the first of these notes. We'll use the [blog](/blog) for design notes
-and the things we learn building this, and the [changelog](/changelog) for
-what ships. Welcome aboard.
+and the things we learn building this, and the [changelog](/changelog) for what
+ships. Welcome aboard.

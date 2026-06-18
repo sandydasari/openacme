@@ -7,6 +7,7 @@ import { HelpOverlay } from "@/app/components/HelpOverlay";
 import { CommandPalette } from "@/app/components/CommandPalette";
 import { RegisterServiceWorker } from "@/app/components/RegisterServiceWorker";
 import { MobileTabBar } from "@/app/components/MobileTabBar";
+import { UpdateBanner } from "@/app/components/UpdateBanner";
 import { AcmePanel } from "@/app/components/AcmePanel";
 import { CurrentViewProvider } from "@/app/lib/CurrentViewContext";
 import { AcmePanelProvider } from "@/app/lib/AcmePanelContext";
@@ -100,6 +101,7 @@ function Shell() {
       <HelpOverlay />
       <CommandPalette />
       <AcmePanel />
+      <UpdateBanner />
       <Toaster />
       <MobileTabBar />
     </>

@@ -26,6 +26,7 @@ export default function BlogIndex() {
       dateLabel: formatDate(p.data.date),
       author: p.data.author,
       tags: p.data.tags ?? [],
+      image: p.data.image,
     }));
 
   return (
