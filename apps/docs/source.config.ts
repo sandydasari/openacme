@@ -17,6 +17,9 @@ export const blog = defineCollections({
     date: z.string(),
     author: z.string(),
     tags: z.array(z.string()).optional(),
+    // Social share + list thumbnail. A 1200x630 raster (PNG/JPG); SVG won't
+    // unfurl on X/Reddit. Falls back to the site default OG when absent.
+    image: z.string().optional(),
     draft: z.boolean().default(false),
   }),
 });

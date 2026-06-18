@@ -4,6 +4,7 @@ description: "I built the maximal version of a multi-agent system and run it for
 date: "2026-06-18"
 author: sandy
 tags: [essay, multi-agent, ai-agents]
+image: /media/i-built-a-multi-agent-platform/cover.png
 draft: true
 ---
 
@@ -63,9 +64,9 @@ The discipline is knowing which shape you are in, because almost everyone who be
 
 The one place it earned its keep was building the thing itself. OpenAcme is partly built and run by agents inside OpenAcme: one writes the code, one manages the releases, and a coordinating agent with its own memory tracks what is half-finished and what is waiting on what. The work never sits still, because a bug a user files turns into code, turns into a release, turns into the docs, turns into the reply to the person who filed it. I ran it first as one careful loop, and it failed in a way I did not expect. It was not too slow. A single mind holding all of it produced averaged judgment. The context that had just read a furious bug report wrote timid, defensive code; the one still deep in a refactor answered users like a compiler. Splitting the work into separate agents, each with its own memory and its own narrow job, was never about throughput. It was about keeping the engineering caution, the release discipline, and the user's voice from collapsing into one grey middle. And this is the version a bigger model does not dissolve: give one agent ten times the context and it still averages the roles it is holding. The separation has to be real, not just roomy. I could not partition the work either, because that one bug report moved through all of it, and the seams between the roles were exactly where the value lived. Each agent got its own identity, its own workspace, and its own memory, so the only state they shared was the code and the tracker, and they reached even that through the coordinating agent, one write at a time. That is the lesson I did not expect: the moment the work stops being read-only, a shared identity and a shared workspace are exactly where two writers collide.
 
-![A diagram of safe multi-agent collaboration: three agents, each with its own email and GitHub identity and its own workspace marked writable by itself and read-only to the others, all meeting on a shared repository where pull requests, reviews, and per-identity permissions keep them from colliding.](/media/i-built-a-multi-agent-platform/safe-collaboration.svg)
+![Animated diagram of safe multi-agent collaboration: three agents, each with its own identity and workspace, send writes through one coordinator that serializes them one at a time into shared state, while reads flow back to every agent in parallel.](/media/i-built-a-multi-agent-platform/safe-collaboration.svg)
 
-*How the write-heavy case actually works: each agent gets its own identity and its own workspace, writes only its own and reads the rest, and collaborates on real platforms as itself, where permissions rather than trust keep the writes from colliding.*
+*How the write-heavy case actually works: each agent keeps its own identity and workspace, writes only its own and reaches shared state as itself, one write at a time through the coordinator, while reads run in parallel. Permissions, not trust, keep the writes from colliding.*
 
 So the engineering forks, depending on which shape you are in. For almost every system, the best work you can do makes the agents behave like one careful actor: serialize the writes, shrink the shared state, let a single mind hold as much as it can and split only what it provably cannot. For the rare system that is genuinely the size of an organization, the work is the opposite and much harder: building the structure that lets many specialists stay coherent without one mind holding it all. That second problem is the real one, and it is why I build OpenAcme, a self-hosted platform in this category.
 

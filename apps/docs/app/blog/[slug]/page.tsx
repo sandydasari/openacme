@@ -6,6 +6,7 @@ import { getMDXComponents } from "@/mdx-components";
 import { AuthorBadge } from "@/components/author-badge";
 import { Comments } from "@/components/comments";
 import { formatDate } from "@/lib/format";
+import { SITE_NAME } from "@/lib/site";
 
 export default async function BlogPost(props: {
   params: Promise<{ slug: string }>;
@@ -79,8 +80,29 @@ export async function generateMetadata(props: {
   const { slug } = await props.params;
   const page = blogSource.getPage([slug]);
   if (!page) notFound();
+  const { title, description, image, date, tags } = page.data;
+  const url = `/blog/${slug}`;
+  // metadataBase (root layout) makes these absolute for X/Reddit/etc.
+  const ogImage = image ?? "/og/default.png";
   return {
-    title: page.data.title,
-    description: page.data.description,
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      siteName: SITE_NAME,
+      title,
+      description,
+      publishedTime: date,
+      tags,
+      images: [ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
