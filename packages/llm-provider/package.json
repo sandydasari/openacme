@@ -1,6 +1,6 @@
 {
   "name": "@openacme/llm-provider",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "LLM provider abstraction (OpenAI / Anthropic / Google / OpenAI-compatible) for OpenAcme.",
   "license": "MIT",
   "author": "sandydasari",

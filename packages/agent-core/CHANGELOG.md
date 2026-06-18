@@ -1,5 +1,21 @@
 # @openacme/agent-core
 
+## 0.13.0
+
+### Minor Changes
+
+- [#53](https://github.com/sandydasari/openacme/pull/53) [`ef9ec2b`](https://github.com/sandydasari/openacme/commit/ef9ec2b4f998a9f5e0acd950128b862f7c6501c9) Thanks [@ukanwat](https://github.com/ukanwat)! - Agent-readable data-file attachments. Users can now attach zip, csv, tsv, json, txt, md, xlsx, docx, parquet, svg, xml, and yaml files. These are committed to disk and read by the agent via its tools rather than sent to the model, so even text-only models accept them. Attachments render rich in-chat previews — a file tree for archives, real spreadsheet tables (via SheetJS), csv/json previews — using the Pierre file-tree icon set for consistency with the resource browser.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @openacme/config@0.13.0
+  - @openacme/db@0.13.0
+  - @openacme/llm-provider@0.13.0
+  - @openacme/memory@0.13.0
+  - @openacme/tasks@0.13.0
+  - @openacme/tools@0.13.0
+
 ## 0.12.0
 
 ### Patch Changes
