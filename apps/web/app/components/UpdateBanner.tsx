@@ -3,7 +3,7 @@ import { ArrowUp, Check, Copy, X } from "lucide-react";
 import { useVersionCheck } from "@/app/lib/useVersionCheck";
 
 const DISMISS_KEY = "openacme-update-dismissed";
-const CHANGELOG_URL = "https://openacme.pages.dev/changelog";
+const CHANGELOG_URL = "https://openacme.org/changelog";
 const HIDDEN_PATHS = new Set(["/login", "/setup", "/enroll"]);
 
 function dismissedVersion(): string | null {
