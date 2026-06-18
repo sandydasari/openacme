@@ -1,5 +1,6 @@
-// Cloudflare Pages default domain — project name "openacme".
-export const SITE_URL = "https://openacme.pages.dev";
+// Canonical production domain. The Cloudflare Pages default (openacme.pages.dev)
+// 301-redirects here so all link equity consolidates on one host.
+export const SITE_URL = "https://openacme.org";
 
 export const SITE_NAME = "OpenAcme";
 export const SITE_TAGLINE = "An AI workforce. You're in charge.";
