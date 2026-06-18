@@ -273,7 +273,7 @@ Two tiers. Pick by surface, not by habit.
 - **Status Chip:** A thin row — 1px hairline border, no fill, Geist Mono 11px UPPERCASE. The state name is the chip text (`READY`, `IDLE`, `BUILDING`, `STOPPED`). State is encoded by chip text, not by chip color, so reduced-motion / colorblind users get the same signal.
 
 ### Cards / Containers
-- **Don't use cards.** Sections are ruled regions, not floating objects.
+- **Don't use cards.** Sections are ruled regions, not floating objects. The only exceptions are deliberate floating *chrome* — the Acme panel and the Inline Notice — which earn elevation via the `ink/15` hairline + restrained shadow idiom over `paper-sunk`, never a glossy rounded card.
 - A "section" is: an UPPERCASE Geist Mono label across the top, a 1px hairline below the label, content following. Padding inside the section is consistent (`16px`). Sections butt up against one another with their hairlines coinciding (one hairline shared, never doubled).
 - Inset surfaces (sidebar, palette, code block) use `paper-sunk` / `graphite-raised`, hairline border on the side(s) facing the page surface.
 
@@ -297,12 +297,13 @@ Pulse is reserved for the chat streaming cursor (above) and the equivalent in-fl
 This dot+label primitive is **standalone**. It is not nested inside Badge / chip components — those encode state via the badge chassis itself (variant fill or recessed mono), with the label as the encoding. The two primitives stay separate.
 
 ### Inline Notice
-A low-frequency ambient signal that lives in the chrome — update available, degraded provider, quota near limit. A **ruled region** (hairline border, no fill), never a card, never a toast, never a prose paragraph. The trap it exists to prevent is the text-heavy notice: a sentence like "OpenAcme v0.13.0 is available (you have v0.12.0)" reads as marketing copy and fails the Read-Aloud Rule. Structure instead:
-- A status line: the dot-or-icon + Geist Mono UPPERCASE label primitive (a `plot-red` mark = needs attention), with the machine-truthful value (version, count) set in mono on the same line — the **delta is the message**, not a sentence about it.
-- An optional code-surface command, copy-on-click, when the resolution is a single shell line (`openacme update`).
-- At most two quiet actions, Geist Mono UPPERCASE, `ink-faint` → `ink-soft` on hover, each paired with its icon (changelog ↗, dismiss ✕).
+A low-frequency ambient signal — update available, degraded provider, quota near limit. **Floating chrome** anchored to a viewport corner (clear of the Acme panel and the mobile tab bar). This is the bounded exception to "no floating objects" (§Cards): like the Acme panel, it earns elevation with an `ink/15` hairline + a restrained shadow over `paper-sunk` — never a glossy rounded card. The trap it exists to prevent is the text-heavy notice: a sentence like "OpenAcme v0.13.0 is available (you have v0.12.0)" reads as marketing copy and fails the Read-Aloud Rule. Structure:
+- A status line: the dot-or-icon + Geist Mono UPPERCASE label primitive (a `plot-red` mark = needs attention); the label may link out (changelog).
+- **One** short helper line is allowed — it tells the user what the resolution does ("Update to v0.13.0:"), with any machine-truthful value (version, count) in mono. One line, never a paragraph.
+- The resolution as a code-surface command, copy-on-click, when it's a single shell line (`openacme update`).
+- Actions are **icon-only** — a corner ✕ to dismiss, the copy glyph on the command. Never pair an action with a redundant word label ("DISMISS ✕"); the icon in its conventional place (✕ top-right) is the whole affordance.
 
-Dismissal is keyed to the specific signal (e.g. the version), so resolving one instance doesn't suppress the next. Read-Aloud test: the notice should scan as an instrument readout, not a sentence.
+Dismissal is keyed to the specific signal (e.g. the version), so resolving one instance doesn't suppress the next. Read-Aloud test: the notice should scan as an instrument readout with one guiding line, not a marketing sentence.
 
 ### Command Palette (signature component)
 - Centered, fixed-width modal. `paper-sunk` background, hairline border, 0 radius. No backdrop blur (forbidden by no-shadow / no-glass rules); the overlay dim is a flat 60% `ink` overlay.
