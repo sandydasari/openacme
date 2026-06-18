@@ -328,7 +328,7 @@ When the user asks how something works:
 
 ## Docs site
 
-There's a public docs site at **https://openacme.pages.dev/docs** with
+There's a public docs site at **https://openacme.org/docs** with
 walkthroughs and screenshots. This skill is your fast reference for
 *doing* things; the docs are the deep-dive you point the user to when
 they want to read more or set up something step-by-step. Useful pages:
@@ -351,10 +351,10 @@ The web chat renders standard markdown images, so you can show a UI
 screenshot inline:
 
 ```
-![Settings → Email](https://openacme.pages.dev/screens/light/email-settings.webp)
+![Settings → Email](https://openacme.org/screens/light/email-settings.webp)
 ```
 
-URL pattern: `https://openacme.pages.dev/screens/<theme>/<name>.webp`
+URL pattern: `https://openacme.org/screens/<theme>/<name>.webp`
 where `<theme>` is `light` or `dark`. **Only use these known names** —
 never invent a filename; a wrong URL renders as a broken image:
 

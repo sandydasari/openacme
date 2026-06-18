@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenAcme installer for macOS and Linux.
-#   curl -fsSL https://openacme.pages.dev/install.sh | sh
+#   curl -fsSL https://openacme.org/install.sh | sh
 #
 # Bootstraps Node.js if needed, installs the @openacme/cli global package, then
 # starts the daemon. Idempotent — safe to re-run to upgrade or repair.

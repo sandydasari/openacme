@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CopyCommand } from "./CopyCommand";
 
 const TABS = [
-  { id: "curl", label: "curl", command: "curl -fsSL https://openacme.pages.dev/install.sh | sh" },
+  { id: "curl", label: "curl", command: "curl -fsSL https://openacme.org/install.sh | sh" },
   { id: "npm", label: "npm", command: "npm install -g @openacme/cli && openacme setup" },
 ] as const;
 
