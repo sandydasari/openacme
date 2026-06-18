@@ -503,7 +503,7 @@ export async function createApp(
       string,
       ReturnType<typeof uploads.commit>
     >();
-    const attachmentKinds: Array<"image" | "file"> = [];
+    const attachmentKinds: Array<"image" | "file" | "data"> = [];
     const committed = incoming.map((m) => {
       if (m.role !== "user") return m;
       const parts = m.parts.map((p) => {
@@ -532,6 +532,8 @@ export async function createApp(
     // Provider gating: reject file/image parts on text-only models. The
     // bundled registry's `inputModalities` is the source of truth; an
     // empty/missing list means "unknown" and we let the request through.
+    // "data" attachments are never sent to the provider (the agent reads them
+    // off disk), so they are intentionally not gated — any model accepts them.
     if (attachmentKinds.length > 0) {
       const meta = lookupModelMetadata(def.model);
       if (meta.inputModalities && meta.inputModalities.length > 0) {

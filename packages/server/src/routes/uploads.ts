@@ -3,17 +3,26 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createLogger } from "@openacme/config/logger";
+import {
+  previewDataAttachment,
+  listZipEntries,
+  readSpreadsheetPreview,
+} from "@openacme/agent-core";
 import type { AgentManager } from "../agent-manager.js";
 import { serveFileWithRange } from "./_serve-helpers.js";
 
 const log = createLogger("server.uploads");
 
+// Model-native media (image/pdf) is inlined to the provider, so it stays small.
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
-export const MAX_REQUEST_BYTES = 25 * 1024 * 1024;
+// "data" files (zip/csv/xlsx/…) never reach the provider — the agent reads them
+// off disk — so they get a roomier cap (a codebase.zip / dataset is bigger).
+export const MAX_DATA_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_REQUEST_BYTES = 30 * 1024 * 1024;
 export const MAX_FILES = 10;
 export const PENDING_TTL_MS = 30 * 60 * 1000;
 
-type AttachmentKind = "image" | "file";
+type AttachmentKind = "image" | "file" | "data";
 
 const ALLOWED_MIME: Record<string, AttachmentKind> = {
   "image/png": "image",
@@ -22,6 +31,42 @@ const ALLOWED_MIME: Record<string, AttachmentKind> = {
   "image/gif": "image",
   "application/pdf": "file",
 };
+
+// Agent-readable data files. Extension → label mediaType. Binary types
+// (zip-family, parquet) are confirmed by magic bytes; OOXML (xlsx/docx) shares
+// the zip signature, so the extension picks the label. Text types (csv/json/…)
+// have no signature — accepted via a UTF-8 check keyed on these extensions.
+const DATA_EXT_MIME: Record<string, string> = {
+  ".zip": "application/zip",
+  ".xlsx":
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".parquet": "application/vnd.apache.parquet",
+  ".csv": "text/csv",
+  ".tsv": "text/tab-separated-values",
+  ".json": "application/json",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  // SVG is XML text — providers don't accept it as vision input, so it's a
+  // data file the agent reads as markup (and the web renders inline).
+  ".svg": "image/svg+xml",
+  ".xml": "application/xml",
+  ".yaml": "text/yaml",
+  ".yml": "text/yaml",
+};
+
+const TEXT_DATA_EXTS = new Set([
+  ".csv",
+  ".tsv",
+  ".json",
+  ".txt",
+  ".md",
+  ".svg",
+  ".xml",
+  ".yaml",
+  ".yml",
+]);
 
 export interface PendingEntry {
   pendingId: string;
@@ -60,6 +105,83 @@ function sniffMime(head: Buffer): string | null {
   }
   return null;
 }
+
+// zip local-file/empty/spanned headers all start `PK` then 03/05/07 04/06/08.
+function isZipSig(h: Buffer): boolean {
+  return (
+    h.length >= 4 &&
+    h[0] === 0x50 &&
+    h[1] === 0x4b &&
+    (h[2] === 0x03 || h[2] === 0x05 || h[2] === 0x07) &&
+    (h[3] === 0x04 || h[3] === 0x06 || h[3] === 0x08)
+  );
+}
+
+function isParquetSig(h: Buffer): boolean {
+  // "PAR1" magic (present at both ends of a parquet file).
+  return (
+    h.length >= 4 &&
+    h[0] === 0x50 &&
+    h[1] === 0x41 &&
+    h[2] === 0x52 &&
+    h[3] === 0x31
+  );
+}
+
+// Text has no magic bytes — accept only if it decodes cleanly as UTF-8 and
+// carries no NUL (binaries do; text doesn't). Caps the sniff at 4KB.
+function looksLikeText(buf: Buffer): boolean {
+  const sample = buf.subarray(0, 4096);
+  if (sample.includes(0x00)) return false;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(sample);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve an upload to its kind + label mediaType, or null if unsupported.
+ * Trust comes from the bytes (sniff / UTF-8 check), never the filename — the
+ * extension only labels and policy-gates an already-validated file.
+ * Exported for unit tests.
+ */
+export function resolveUpload(
+  filename: string,
+  bytes: Buffer
+): { kind: AttachmentKind; mediaType: string } | null {
+  const head = bytes.subarray(0, 16);
+
+  // Model-native: image / pdf, confirmed by signature.
+  const sniffed = sniffMime(head);
+  if (sniffed && ALLOWED_MIME[sniffed]) {
+    return { kind: ALLOWED_MIME[sniffed]!, mediaType: sniffed };
+  }
+
+  const ext = path.extname(filename).toLowerCase();
+
+  // Data binary: zip-family (label by extension) + parquet.
+  if (isZipSig(head)) {
+    return { kind: "data", mediaType: DATA_EXT_MIME[ext] ?? "application/zip" };
+  }
+  if (isParquetSig(head)) {
+    return { kind: "data", mediaType: "application/vnd.apache.parquet" };
+  }
+
+  // Data text: UTF-8 + extension allowlist.
+  if (TEXT_DATA_EXTS.has(ext) && looksLikeText(bytes)) {
+    return { kind: "data", mediaType: DATA_EXT_MIME[ext]! };
+  }
+
+  return null;
+}
+
+/** Human-readable accepted-types list for reject messages + UI hints. */
+export const ACCEPTED_UPLOAD_TYPES = [
+  ...Object.keys(ALLOWED_MIME),
+  ...Object.keys(DATA_EXT_MIME),
+];
 
 function sanitizeBasename(name: string): string {
   const base = name.replace(/[\\/\x00]/g, "_").replace(/^\.+/, "");
@@ -151,23 +273,6 @@ export function registerUploadsRoutes(
       return c.json({ error: `Too many files (max ${MAX_FILES})` }, 400);
     }
 
-    let totalBytes = 0;
-    for (const f of files) {
-      if (f.size > MAX_FILE_BYTES) {
-        return c.json(
-          { error: `File '${f.name}' exceeds ${MAX_FILE_BYTES} bytes` },
-          413
-        );
-      }
-      totalBytes += f.size;
-      if (totalBytes > MAX_REQUEST_BYTES) {
-        return c.json(
-          { error: `Upload exceeds ${MAX_REQUEST_BYTES} bytes` },
-          413
-        );
-      }
-    }
-
     const created: Array<{
       pendingId: string;
       kind: AttachmentKind;
@@ -177,16 +282,32 @@ export function registerUploadsRoutes(
       url: string;
     }> = [];
 
+    let totalBytes = 0;
     for (const f of files) {
       const bytes = Buffer.from(await f.arrayBuffer());
-      const sniffed = sniffMime(bytes.subarray(0, 12));
-      if (!sniffed || !ALLOWED_MIME[sniffed]) {
+      const resolved = resolveUpload(f.name, bytes);
+      if (!resolved) {
         return c.json(
           {
-            error: `File '${f.name}' has unsupported type (sniffed: ${sniffed ?? "unknown"})`,
-            allowed: Object.keys(ALLOWED_MIME),
+            error: `File '${f.name}' has unsupported type`,
+            allowed: ACCEPTED_UPLOAD_TYPES,
           },
           400
+        );
+      }
+      const cap =
+        resolved.kind === "data" ? MAX_DATA_FILE_BYTES : MAX_FILE_BYTES;
+      if (f.size > cap) {
+        return c.json(
+          { error: `File '${f.name}' exceeds ${cap} bytes` },
+          413
+        );
+      }
+      totalBytes += f.size;
+      if (totalBytes > MAX_REQUEST_BYTES) {
+        return c.json(
+          { error: `Upload exceeds ${MAX_REQUEST_BYTES} bytes` },
+          413
         );
       }
       const pendingId = `pend_${randomUUID()}`;
@@ -210,8 +331,8 @@ export function registerUploadsRoutes(
         pendingId,
         absPath: abs,
         filename: safeName,
-        kind: ALLOWED_MIME[sniffed]!,
-        mediaType: sniffed,
+        kind: resolved.kind,
+        mediaType: resolved.mediaType,
         size: f.size,
         createdAt: Date.now(),
       };
@@ -247,6 +368,51 @@ export function registerUploadsRoutes(
       const abs = path.resolve(path.join(attachmentsRoot, rel));
       if (!abs.startsWith(path.resolve(attachmentsRoot) + path.sep)) {
         return c.json({ error: "Path escapes root" }, 400);
+      }
+      // `?preview=1` returns structured preview data (size + zip entries for a
+      // file tree, raw text head for csv/json/…, or a note for xlsx/parquet)
+      // instead of bytes — so the web renders a real preview for data files it
+      // can't parse itself. One request carries size too (file parts don't).
+      if (c.req.query("preview")) {
+        try {
+          const mediaType =
+            DATA_EXT_MIME[path.extname(filename).toLowerCase()] ?? null;
+          const size = fs.statSync(abs).size;
+          if (mediaType === "application/zip") {
+            return c.json({ size, mediaType, entries: listZipEntries(abs) });
+          }
+          if (
+            mediaType ===
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ) {
+            const { sheets, rows } = readSpreadsheetPreview(abs);
+            return c.json({ size, mediaType, sheets, rows });
+          }
+          if (mediaType && TEXT_DATA_EXTS.has(path.extname(filename).toLowerCase())) {
+            const fd = fs.openSync(abs, "r");
+            try {
+              const buf = Buffer.alloc(65536);
+              const read = fs.readSync(fd, buf, 0, buf.length, 0);
+              return c.json({
+                size,
+                mediaType,
+                text: buf.subarray(0, read).toString("utf-8"),
+              });
+            } finally {
+              fs.closeSync(fd);
+            }
+          }
+          return c.json({
+            size,
+            mediaType,
+            preview: previewDataAttachment(
+              abs,
+              mediaType ?? "application/octet-stream"
+            ),
+          });
+        } catch {
+          return c.json({ preview: null });
+        }
       }
       return serveFileWithRange(c, abs, filename);
     }

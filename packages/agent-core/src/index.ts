@@ -79,6 +79,9 @@ export type {
 export {
   inlineFileAttachments,
   parseAttachmentUrl,
+  previewDataAttachment,
+  listZipEntries,
+  readSpreadsheetPreview,
   uiToModelMessages,
   finalizeOrphanToolParts,
   ensureStepBoundaries,

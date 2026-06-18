@@ -2,13 +2,64 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import AdmZip from "adm-zip";
+import * as XLSX from "xlsx";
 import type { UIMessage } from "ai";
 import {
   ensureStepBoundaries,
   finalizeOrphanToolParts,
   inlineFileAttachments,
   parseAttachmentUrl,
+  listZipEntries,
+  readSpreadsheetPreview,
 } from "../src/messages.js";
+
+describe("listZipEntries", () => {
+  it("filters macOS Finder cruft and lists real files", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-zip-"));
+    const zipPath = path.join(tmp, "site.zip");
+    const zip = new AdmZip();
+    zip.addFile("site/app.js", Buffer.from("console.log(1)"));
+    zip.addFile("site/style.css", Buffer.from("body{}"));
+    zip.addFile("__MACOSX/site/._app.js", Buffer.from("x"));
+    zip.addFile("site/.DS_Store", Buffer.from("x"));
+    zip.writeZip(zipPath);
+
+    const entries = listZipEntries(zipPath).map((e) => e.path).sort();
+    expect(entries).toEqual(["site/app.js", "site/style.css"]);
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
+
+describe("readSpreadsheetPreview", () => {
+  it("returns sheet names and first cells via SheetJS", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-xlsx-"));
+    const xlsxPath = path.join(tmp, "people.xlsx");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ["name", "age"],
+        ["alice", 30],
+      ]),
+      "People"
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([["metric"]]),
+      "Totals"
+    );
+    fs.writeFileSync(xlsxPath, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+
+    const { sheets, rows } = readSpreadsheetPreview(xlsxPath);
+    expect(sheets).toEqual(["People", "Totals"]);
+    expect(rows[0]).toEqual(["name", "age"]);
+    expect(rows[1]).toEqual(["alice", "30"]);
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
 
 describe("parseAttachmentUrl", () => {
   it("parses /api/attachments/<session>/<id>/<file>", () => {
@@ -110,6 +161,101 @@ describe("inlineFileAttachments", () => {
     expect(part.type).toBe("text");
     expect(part.text).toContain("attachment unavailable");
     expect(part.text).toContain("missing.png");
+  });
+
+  it("replaces a data file with a path+preview descriptor (not inlined)", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-msg-"));
+    const root = path.join(tmp, "attachments");
+    const rel = "sess-1/att-1/rows.csv";
+    fs.mkdirSync(path.join(root, "sess-1/att-1"), { recursive: true });
+    const abs = path.join(root, rel);
+    fs.writeFileSync(abs, "name,age\nalice,30\nbob,40\n");
+
+    const input: UIMessage[] = [
+      {
+        id: "m1",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/attachments/${rel}`,
+            mediaType: "text/csv",
+            filename: "rows.csv",
+          },
+        ],
+      },
+    ];
+    const out = inlineFileAttachments(input, root);
+    const part = out[0]!.parts[0] as { type: string; text: string };
+    expect(part.type).toBe("text"); // not a file part — never sent to provider
+    expect(part.text).toContain("rows.csv");
+    expect(part.text).toContain(abs); // absolute on-disk path for the agent
+    expect(part.text).toContain("name,age"); // preview head
+    expect(part.text).not.toContain("data:"); // no base64 inlining
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("treats svg as a readable data file, not an inlined image", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-msg-"));
+    const root = path.join(tmp, "attachments");
+    const rel = "sess-1/att-1/logo.svg";
+    fs.mkdirSync(path.join(root, "sess-1/att-1"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, rel),
+      '<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>'
+    );
+
+    const input: UIMessage[] = [
+      {
+        id: "m1",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/attachments/${rel}`,
+            mediaType: "image/svg+xml",
+            filename: "logo.svg",
+          },
+        ],
+      },
+    ];
+    const out = inlineFileAttachments(input, root);
+    const part = out[0]!.parts[0] as { type: string; text?: string };
+    expect(part.type).toBe("text"); // not inlined as a data: image
+    expect(part.text).toContain("logo.svg");
+    expect(part.text).toContain("<svg"); // markup shown as preview
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("only previews data files in the most recent user message", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-msg-"));
+    const root = path.join(tmp, "attachments");
+    const rel = "sess-1/att-1/old.csv";
+    fs.mkdirSync(path.join(root, "sess-1/att-1"), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), "col\nval\n");
+
+    const fileParts = [
+      {
+        type: "file" as const,
+        url: `/api/attachments/${rel}`,
+        mediaType: "text/csv",
+        filename: "old.csv",
+      },
+    ];
+    const input: UIMessage[] = [
+      { id: "m1", role: "user", parts: [...fileParts] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "ok" }] },
+      { id: "m2", role: "user", parts: [{ type: "text", text: "again" }] },
+    ];
+    const out = inlineFileAttachments(input, root);
+    // m1 is no longer the latest user msg → lean reference, no preview head.
+    const part = out[0]!.parts[0] as { type: string; text: string };
+    expect(part.text).toContain("old.csv");
+    expect(part.text).not.toContain("col\nval");
+
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
 

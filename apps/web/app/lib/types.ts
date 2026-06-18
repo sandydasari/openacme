@@ -162,23 +162,61 @@ export interface ProviderInfo {
  *  resolves against `/api/attachments/:id`. */
 export interface AttachmentRow {
   id: string;
-  kind: "image" | "file";
+  kind: "image" | "file" | "data";
   mediaType: string;
   size: number;
   originalName: string | null;
 }
 
 export const ALLOWED_UPLOAD_MIMES = [
+  // model-native (inlined to the provider)
   "image/png",
   "image/jpeg",
   "image/webp",
   "image/gif",
   "application/pdf",
+  // data files (agent reads off disk; never sent to the provider)
+  "application/zip",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.apache.parquet",
+  "text/csv",
+  "text/tab-separated-values",
+  "application/json",
+  "text/plain",
+  "text/markdown",
+  "image/svg+xml",
+  "application/xml",
+  "text/yaml",
 ] as const;
+
+// Extensions for the file picker `accept` — text formats have unreliable
+// browser-reported MIME, so list extensions too. The server is the real gate.
+export const ALLOWED_UPLOAD_EXTS = [
+  ".zip",
+  ".xlsx",
+  ".docx",
+  ".parquet",
+  ".csv",
+  ".tsv",
+  ".json",
+  ".txt",
+  ".md",
+  ".svg",
+  ".xml",
+  ".yaml",
+  ".yml",
+] as const;
+
+export const UPLOAD_ACCEPT = [
+  ...ALLOWED_UPLOAD_MIMES,
+  ...ALLOWED_UPLOAD_EXTS,
+].join(",");
 
 export const UPLOAD_LIMITS = {
   perFileBytes: 5 * 1024 * 1024,
-  perRequestBytes: 25 * 1024 * 1024,
+  perDataFileBytes: 25 * 1024 * 1024,
+  perRequestBytes: 30 * 1024 * 1024,
   perRequestFiles: 10,
 } as const;
 

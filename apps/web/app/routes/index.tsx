@@ -47,6 +47,8 @@ import {
 import type { ProviderInfo } from "../lib/types";
 import {
   ALLOWED_UPLOAD_MIMES,
+  ALLOWED_UPLOAD_EXTS,
+  UPLOAD_ACCEPT,
   UPLOAD_LIMITS,
 } from "../lib/types";
 import { cn } from "@/app/lib/utils";
@@ -82,7 +84,7 @@ interface PendingAttachment {
    *  FileUIPart.url when sending. The server's chat handler rewrites it
    *  to the committed `<sessionId>/<attId>/<file>` form. */
   url?: string;
-  kind?: "image" | "file";
+  kind?: "image" | "file" | "data";
   mediaType: string;
   size: number;
   filename: string;
@@ -588,11 +590,15 @@ function ChatPage() {
     return provider.models.find((m) => m.id === activeAgent.model.model)
       ?.inputModalities;
   })();
-  const acceptsAttachments =
+  // Model-native media (image/pdf) needs provider support; data files
+  // (zip/csv/xlsx/…) are read off disk by the agent, so they're always
+  // allowed — the picker stays enabled regardless of model modality.
+  const acceptsMedia =
     !activeModalities ||
     activeModalities.includes("image") ||
     activeModalities.includes("pdf") ||
     activeModalities.includes("file");
+  const acceptsAttachments = true;
 
   // ── Attachments ───────────────────────────────────────────────────────
   const removePending = useCallback((localId: string) => {
@@ -619,22 +625,40 @@ function ChatPage() {
           );
           break;
         }
-        if (f.size > UPLOAD_LIMITS.perFileBytes) {
-          toast.error(`${f.name}: too large (max 5 MB)`);
+        const ext = `.${f.name.split(".").pop()?.toLowerCase() ?? ""}`;
+        const mimeOk = ALLOWED_UPLOAD_MIMES.includes(
+          f.type as (typeof ALLOWED_UPLOAD_MIMES)[number]
+        );
+        const extOk = (ALLOWED_UPLOAD_EXTS as readonly string[]).includes(ext);
+        if (!mimeOk && !extOk) {
+          toast.error(`${f.name}: unsupported type (${f.type || ext})`);
+          continue;
+        }
+        const isMedia =
+          (f.type.startsWith("image/") && f.type !== "image/svg+xml") ||
+          f.type === "application/pdf" ||
+          /\.(png|jpe?g|webp|gif|pdf)$/i.test(f.name);
+        if (isMedia && !acceptsMedia) {
+          toast.error(`${f.name}: this model accepts text + data files only`);
+          continue;
+        }
+        const cap = isMedia
+          ? UPLOAD_LIMITS.perFileBytes
+          : UPLOAD_LIMITS.perDataFileBytes;
+        if (f.size > cap) {
+          toast.error(
+            `${f.name}: too large (max ${Math.round(cap / 1024 / 1024)} MB)`
+          );
           continue;
         }
         totalBytes += f.size;
         if (totalBytes > UPLOAD_LIMITS.perRequestBytes) {
-          toast.error("Upload would exceed 25 MB total");
+          toast.error(
+            `Upload would exceed ${Math.round(
+              UPLOAD_LIMITS.perRequestBytes / 1024 / 1024
+            )} MB total`
+          );
           break;
-        }
-        if (
-          !ALLOWED_UPLOAD_MIMES.includes(
-            f.type as (typeof ALLOWED_UPLOAD_MIMES)[number]
-          )
-        ) {
-          toast.error(`${f.name}: unsupported type (${f.type || "unknown"})`);
-          continue;
         }
         accepted.push(f);
       }
@@ -670,7 +694,7 @@ function ChatPage() {
         const data = (await res.json()) as {
           attachments: Array<{
             pendingId: string;
-            kind: "image" | "file";
+            kind: "image" | "file" | "data";
             mediaType: string;
             size: number;
             filename: string;
@@ -714,7 +738,7 @@ function ChatPage() {
         });
       }
     },
-    [pendingAttachments]
+    [pendingAttachments, acceptsMedia]
   );
 
   // Drag-and-drop on the textarea container.
@@ -1093,6 +1117,7 @@ function ChatPage() {
                     .some((m) => m.role === "user")}
                   fileLinks={fileLinks}
                   onOpenFile={setPreviewTarget}
+                  skills={orderedSkills}
                 />
               ))}
               {error && (
@@ -1234,7 +1259,7 @@ function ChatPage() {
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept={ALLOWED_UPLOAD_MIMES.join(",")}
+                    accept={UPLOAD_ACCEPT}
                     className="hidden"
                     onChange={(e) => {
                       const files = e.target.files ? Array.from(e.target.files) : [];
@@ -1247,14 +1272,20 @@ function ChatPage() {
                     size="icon"
                     variant="ghost"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={!activeAgentId || !acceptsAttachments}
+                    disabled={!activeAgentId}
                     className="shrink-0"
                     aria-label="Attach files"
-                    title={
-                      acceptsAttachments
-                        ? "Attach files (images, PDFs)"
-                        : "Active model accepts text only — switch with the model picker"
-                    }
+                    title={`Attach files. ${
+                      acceptsMedia ? "Images & PDF up to 5 MB, " : ""
+                    }data files (zip, csv, xlsx, json…) up to ${Math.round(
+                      UPLOAD_LIMITS.perDataFileBytes / 1024 / 1024
+                    )} MB — ${UPLOAD_LIMITS.perRequestFiles} files / ${Math.round(
+                      UPLOAD_LIMITS.perRequestBytes / 1024 / 1024
+                    )} MB per message.${
+                      acceptsMedia
+                        ? ""
+                        : " (Active model is text-only — images/PDF disabled.)"
+                    }`}
                   >
                     <Paperclip className="size-4" />
                   </Button>

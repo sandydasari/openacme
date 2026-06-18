@@ -43,11 +43,14 @@
     "@openacme/memory": "workspace:*",
     "@openacme/tasks": "workspace:*",
     "@openacme/tools": "workspace:*",
+    "adm-zip": "^0.5.17",
     "ai": "^6.0.177",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.8"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.15.3",
     "typescript": "5.9.2",
     "vitest": "^2.1.9"

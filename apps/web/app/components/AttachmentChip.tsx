@@ -1,5 +1,6 @@
-import { FileText, Image as ImageIcon, X, AlertCircle } from "lucide-react";
+import { X, AlertCircle } from "lucide-react";
 import { cn } from "@/app/lib/utils";
+import { PierreFileIcon } from "@/app/components/chat/PierreFileIcon";
 import { LoadingHairline } from "@/app/components/ui/loading-hairline";
 
 function formatSize(bytes: number): string {
@@ -9,7 +10,7 @@ function formatSize(bytes: number): string {
 }
 
 export interface AttachmentChipProps {
-  kind: "image" | "file";
+  kind: "image" | "file" | "data";
   mediaType: string;
   size: number;
   name: string;
@@ -23,7 +24,6 @@ export interface AttachmentChipProps {
 }
 
 export function AttachmentChip({
-  kind,
   mediaType,
   size,
   name,
@@ -33,7 +33,6 @@ export function AttachmentChip({
   onRemove,
   href,
 }: AttachmentChipProps) {
-  const Icon = kind === "image" ? ImageIcon : FileText;
   const inner = (
     <span className="flex items-center gap-2 min-w-0">
       {status === "uploading" ? (
@@ -41,7 +40,7 @@ export function AttachmentChip({
       ) : status === "error" ? (
         <AlertCircle className="size-3 shrink-0 text-destructive" />
       ) : (
-        <Icon className="size-3 shrink-0 text-ink-soft" />
+        <PierreFileIcon name={name} mediaType={mediaType} className="size-3.5" />
       )}
       <span className="truncate text-[12px] text-ink">{name}</span>
       <span className="font-mono text-[11px] text-ink-faint shrink-0 tabular-nums">

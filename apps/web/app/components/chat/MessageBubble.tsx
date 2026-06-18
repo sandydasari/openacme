@@ -1,10 +1,15 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import type { UIMessage } from "ai";
+import {
+  highlightSegments,
+  type SkillIndexEntry,
+} from "@/app/lib/skill-mentions";
 import type { MessageMetadata } from "@/app/lib/types";
 import { cn } from "@/app/lib/utils";
 import { Markdown } from "@/app/components/Markdown";
-import { AttachmentChip } from "@/app/components/AttachmentChip";
+import { DataAttachmentPreview } from "@/app/components/chat/DataAttachmentPreview";
 import { MediaPreview } from "@/app/components/MediaPreview";
 import {
   ToolBlock,
@@ -30,22 +35,37 @@ type SkillRefData = {
   modelContent?: string;
 };
 
-/** Skills the user referenced with `/name` in the composer. The full marker
- *  fed to the model is the hover title. */
-function SkillRefChip({ data }: { data: SkillRefData }) {
-  const names = data.names ?? [];
-  if (names.length === 0) return null;
+/** User text with `/skill` tokens rendered as highlighted, navigable pills —
+ *  same treatment as the composer input (bg-plot-red/10 + text-plot-red).
+ *  Hover shows the skill description; click opens the Skills page. */
+function SkillHighlightedText({
+  text,
+  names,
+  skills,
+}: {
+  text: string;
+  names: Set<string>;
+  skills?: SkillIndexEntry[];
+}) {
+  const segments = highlightSegments(text, names);
+  const descOf = (token: string) =>
+    skills?.find((s) => s.name === token.replace(/^\//, ""))?.description;
   return (
-    <div
-      className="mb-2 inline-flex max-w-full flex-wrap items-center gap-1.5 border border-paper-rule bg-paper-sunk px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint"
-      title={data.modelContent ?? undefined}
-    >
-      <span className="text-plot-red">skill</span>
-      {names.map((n) => (
-        <span key={n} className="normal-case tracking-normal text-ink-soft">
-          /{n}
-        </span>
-      ))}
+    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">
+      {segments.map((seg, i) =>
+        seg.isSkill ? (
+          <Link
+            key={i}
+            to="/skills"
+            title={descOf(seg.text) ?? `Skill ${seg.text}`}
+            className="rounded-[3px] bg-plot-red/10 px-[2px] font-medium text-plot-red transition-colors hover:bg-plot-red/20"
+          >
+            {seg.text}
+          </Link>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        )
+      )}
     </div>
   );
 }
@@ -202,6 +222,7 @@ export const MessageBubble = memo(function MessageBubble({
   pingAnswered = false,
   fileLinks,
   onOpenFile,
+  skills,
 }: {
   message: UIMessage;
   agent?: MessageAgent;
@@ -210,6 +231,8 @@ export const MessageBubble = memo(function MessageBubble({
   pingAnswered?: boolean;
   fileLinks?: Map<string, FileLinkTarget>;
   onOpenFile?: (target: FileLinkTarget) => void;
+  /** Skill index — lets `/name` tokens render as highlighted, navigable refs. */
+  skills?: SkillIndexEntry[];
 }) {
   if (message.role === "system") return null;
 
@@ -246,18 +269,26 @@ export const MessageBubble = memo(function MessageBubble({
     const skillRef = message.parts.find(
       (p) => (p as { type?: unknown }).type === "data-skill-ref"
     ) as { data?: SkillRefData } | undefined;
+    const skillNames = new Set(skillRef?.data?.names ?? []);
     return (
       <section className="section-enter border-t border-paper-rule py-5 first:border-t-0 first:pt-0">
         <MessageHeader
           role="user"
           createdAt={(message as { createdAt?: number }).createdAt}
         />
-        {skillRef?.data && <SkillRefChip data={skillRef.data} />}
-        {text && (
-          <div className="text-sm leading-relaxed text-ink break-words">
-            <Markdown>{text}</Markdown>
-          </div>
-        )}
+        {text &&
+          (skillNames.size > 0 ? (
+            // Skill refs render inline as highlighted pills — no separate chip.
+            <SkillHighlightedText
+              text={text}
+              names={skillNames}
+              skills={skills}
+            />
+          ) : (
+            <div className="text-sm leading-relaxed text-ink break-words">
+              <Markdown>{text}</Markdown>
+            </div>
+          ))}
         {images.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {images.map((f, i) => {
@@ -299,7 +330,7 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {others.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-wrap gap-2">
             {others.map((f, i) => {
               const part = f as unknown as {
                 url: string;
@@ -307,13 +338,11 @@ export const MessageBubble = memo(function MessageBubble({
                 filename?: string;
               };
               return (
-                <AttachmentChip
+                <DataAttachmentPreview
                   key={i}
-                  kind="file"
+                  url={part.url}
                   mediaType={part.mediaType}
-                  size={0}
-                  name={part.filename ?? "file"}
-                  href={`${API_BASE}${part.url}`}
+                  filename={part.filename ?? "file"}
                 />
               );
             })}
