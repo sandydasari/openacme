@@ -230,7 +230,14 @@ function ChatPage() {
   // diverges from the URL AND it's a new session id we just minted.
   useEffect(() => {
     if (activeSessionId && activeSessionId !== sessionFromUrl) {
-      void navigate({ to: "/", search: { session: activeSessionId } });
+      // Keep the home-view agent filter; drop only `?agent` (session wins).
+      void navigate({
+        to: "/",
+        search: (prev) => ({
+          session: activeSessionId,
+          agentFilter: prev.agentFilter,
+        }),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
@@ -971,7 +978,12 @@ function ChatPage() {
           <div className="flex min-w-0 items-center gap-2 md:gap-4">
             <button
               type="button"
-              onClick={() => void navigate({ to: "/" })}
+              onClick={() =>
+                void navigate({
+                  to: "/",
+                  search: (prev) => ({ agentFilter: prev.agentFilter }),
+                })
+              }
               title="Back to home"
               aria-label="Back to home"
               className="flex size-11 items-center justify-center text-ink-soft hover:text-ink focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-plot-red md:hidden"

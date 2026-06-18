@@ -4,9 +4,7 @@ import {
   Trash2,
   Save,
   Check,
-  Pencil,
   Boxes,
-  ExternalLink,
   BookOpen,
   MessageSquarePlus,
 } from "lucide-react";
@@ -19,10 +17,10 @@ import { AgentEmailPanel } from "../components/AgentEmailPanel";
 import { EmptyState } from "@/app/components/ui/empty-state";
 import type { ToolInfo, ProviderInfo, ModelPreset } from "../lib/types";
 import {
-  MCPServerForm,
+  McpManager,
   type MCPServerConfigDto,
-  type MCPServerFormValue,
-} from "../components/MCPServerForm";
+} from "@/app/components/mcp/McpManager";
+import { McpCreateField } from "@/app/components/mcp/McpCreateField";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Textarea } from "@/app/components/ui/textarea";
@@ -386,9 +384,6 @@ function AgentsPage() {
       [selectedAgent, isCreating, editingForm, formData, detailDraft, detailTab]
     )
   );
-  const [mcpDialog, setMcpDialog] = useState<
-    { mode: "add" } | { mode: "edit"; initial: MCPServerFormValue } | null
-  >(null);
 
   // Catalog state — bundled agent templates the user can import. Two-step
   // creation modal: "choose" picks scratch vs catalog; "catalog" shows the
@@ -521,54 +516,6 @@ function AgentsPage() {
   };
 
   // ── MCP form helpers ────────────────────────────────────────────────────
-
-  const toggleGlobalMcpInherit = (name: string) => {
-    setFormData((prev) => {
-      const disabled = new Set(prev.mcpDisabled);
-      if (disabled.has(name)) disabled.delete(name);
-      else disabled.add(name);
-      return { ...prev, mcpDisabled: [...disabled] };
-    });
-  };
-
-  const handleMcpSave = (value: MCPServerFormValue) => {
-    if (Object.prototype.hasOwnProperty.call(globalMcp, value.name)) {
-      toast.error(
-        `'${value.name}' is already a global server. ` +
-          `Edit it in Settings → MCP, or pick a different name for the agent-private server.`,
-      );
-      return;
-    }
-    setFormData((prev) => ({
-      ...prev,
-      mcpServers: { ...prev.mcpServers, [value.name]: value.config },
-    }));
-    setMcpDialog(null);
-  };
-
-  const handleMcpRemove = (name: string) => {
-    setFormData((prev) => {
-      const next = { ...prev.mcpServers };
-      delete next[name];
-      return { ...prev, mcpServers: next };
-    });
-  };
-
-  const handleMcpTest = async (
-    value: MCPServerFormValue,
-  ): Promise<{
-    ok: boolean;
-    error?: string;
-    tools?: string[];
-    transport?: string;
-  }> => {
-    const res = await fetch(`${API_BASE}/api/mcp/test`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(value.config),
-    });
-    return await res.json();
-  };
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
@@ -996,7 +943,6 @@ function AgentsPage() {
               <AgentDetail
                 agent={selectedAgent}
                 providers={providers}
-                globalServers={globalMcp}
                 allSkills={allSkills}
                 toolGroups={toolsByToolset}
                 onAgentUpdated={(updated) => {
@@ -1132,19 +1078,16 @@ function AgentsPage() {
                         onSetGroup={setToolGroup}
                       />
 
-                      <McpSection
+                      <McpCreateField
                         globalServers={globalMcp}
-                        privateServers={formData.mcpServers}
+                        servers={formData.mcpServers}
                         disabled={formData.mcpDisabled}
-                        onToggleInherit={toggleGlobalMcpInherit}
-                        onAdd={() => setMcpDialog({ mode: "add" })}
-                        onEdit={(name, cfg) =>
-                          setMcpDialog({
-                            mode: "edit",
-                            initial: { name, config: cfg },
-                          })
+                        onServersChange={(next) =>
+                          setFormData((prev) => ({ ...prev, mcpServers: next }))
                         }
-                        onRemove={handleMcpRemove}
+                        onDisabledChange={(next) =>
+                          setFormData((prev) => ({ ...prev, mcpDisabled: next }))
+                        }
                       />
 
                       {/* The skills picker gates which workforce skills the
@@ -1232,44 +1175,6 @@ function AgentsPage() {
               Delete
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={mcpDialog !== null}
-        onOpenChange={(open) => !open && setMcpDialog(null)}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {mcpDialog?.mode === "edit"
-                ? `Edit '${mcpDialog.initial.name}'`
-                : "Add agent-private MCP server"}
-            </DialogTitle>
-            <DialogDescription>
-              Private to this agent only. Names cannot collide with the global
-              catalog in Settings → MCP.
-            </DialogDescription>
-          </DialogHeader>
-          {mcpDialog && (
-            <DialogBody>
-              <MCPServerForm
-                initial={
-                  mcpDialog.mode === "edit" ? mcpDialog.initial : undefined
-                }
-                lockName={mcpDialog.mode === "edit"}
-                reservedNames={[
-                  ...Object.keys(globalMcp),
-                  ...(mcpDialog.mode === "add"
-                    ? Object.keys(formData.mcpServers)
-                    : []),
-                ]}
-                onSubmit={handleMcpSave}
-                onCancel={() => setMcpDialog(null)}
-                onTest={handleMcpTest}
-              />
-            </DialogBody>
-          )}
         </DialogContent>
       </Dialog>
 
@@ -1416,161 +1321,6 @@ function AgentsPage() {
 }
 
 // ─── MCP section in the agent editor ─────────────────────────────────────────
-function McpSection({
-  globalServers,
-  privateServers,
-  disabled,
-  onToggleInherit,
-  onAdd,
-  onEdit,
-  onRemove,
-}: {
-  globalServers: Record<string, MCPServerConfigDto>;
-  privateServers: Record<string, MCPServerConfigDto>;
-  disabled: string[];
-  onToggleInherit: (name: string) => void;
-  onAdd: () => void;
-  onEdit: (name: string, cfg: MCPServerConfigDto) => void;
-  onRemove: (name: string) => void;
-}) {
-  const globalEntries = Object.entries(globalServers);
-  const privateEntries = Object.entries(privateServers);
-  const disabledSet = new Set(disabled);
-  return (
-    <div className="grid gap-5">
-      <div className="flex items-center gap-2">
-        <Boxes className="size-4 text-ink-soft" />
-        <Label className="m-0">MCP servers</Label>
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-            Inherited from global catalog
-          </span>
-          <Link
-            to="/settings"
-            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-soft hover:text-plot-red"
-          >
-            Edit catalog
-            <ExternalLink className="size-3" />
-          </Link>
-        </div>
-        {globalEntries.length === 0 ? (
-          <p className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
-            No global servers configured. Add some in Settings → MCP, or define
-            an agent-private server below.
-          </p>
-        ) : (
-          <ul className="grid">
-            {globalEntries.map(([name, cfg], idx) => {
-              const inherited = !disabledSet.has(name);
-              return (
-                <li key={name}>
-                  <button
-                    type="button"
-                    onClick={() => onToggleInherit(name)}
-                    aria-pressed={inherited}
-                    className={cn(
-                      "group relative flex w-full items-center gap-3 border-paper-rule px-3 py-2 text-left transition-colors",
-                      idx === 0 ? "border-t border-b" : "border-b",
-                      inherited ? "bg-paper" : "bg-paper-sunk",
-                    )}
-                  >
-                    <ActiveMarker active={inherited} />
-                    <div
-                      className={cn(
-                        "flex size-4 shrink-0 items-center justify-center border",
-                        inherited
-                          ? "border-plot-red bg-plot-red text-paper"
-                          : "border-paper-rule bg-paper",
-                      )}
-                    >
-                      {inherited && (
-                        <Check className="size-3" strokeWidth={3} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-mono text-[12px] text-ink">
-                        {name}
-                      </div>
-                      <div className="truncate font-mono text-[11px] text-ink-faint">
-                        {cfg.command
-                          ? `${cfg.command}${cfg.args && cfg.args.length > 0 ? " " + cfg.args.join(" ") : ""}`
-                          : (cfg.url ?? "")}
-                      </div>
-                    </div>
-                    {!inherited && <Badge variant="outline">Excluded</Badge>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-            Agent-private servers
-          </span>
-          <Button type="button" variant="ghost" size="sm" onClick={onAdd}>
-            <Plus className="size-3.5" />
-            Add private
-          </Button>
-        </div>
-        {privateEntries.length === 0 ? (
-          <p className="border border-paper-rule bg-paper-sunk px-3 py-2 font-mono text-[12px] text-ink-soft">
-            None. Add one only when you need a server scoped to this agent
-            (e.g., a Notion MCP only this agent should use).
-          </p>
-        ) : (
-          <ul className="grid">
-            {privateEntries.map(([name, cfg], idx) => (
-              <li
-                key={name}
-                className={cn(
-                  "flex items-center gap-2 border-paper-rule px-3 py-2",
-                  idx === 0 ? "border-t border-b" : "border-b",
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-mono text-[12px] text-ink">
-                    {name}
-                  </div>
-                  <div className="truncate font-mono text-[11px] text-ink-faint">
-                    {cfg.command
-                      ? `${cfg.command}${cfg.args && cfg.args.length > 0 ? " " + cfg.args.join(" ") : ""}`
-                      : (cfg.url ?? "")}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onEdit(name, cfg)}
-                  aria-label="Edit"
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onRemove(name)}
-                  aria-label="Remove"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Tool picker ─────────────────────────────────────────────────────────────
 function ToolPicker({
   groups,
@@ -1907,7 +1657,6 @@ function draftFromAgent(agent: Agent): AgentDraft {
 function AgentDetail({
   agent,
   providers,
-  globalServers,
   allSkills,
   toolGroups,
   tab,
@@ -1918,7 +1667,6 @@ function AgentDetail({
 }: {
   agent: Agent;
   providers: ProviderInfo[];
-  globalServers: Record<string, MCPServerConfigDto>;
   allSkills: SkillIndexEntry[];
   toolGroups: [string, ToolInfo[]][];
   tab: AgentTab;
@@ -2105,12 +1853,7 @@ function AgentDetail({
           />
         </TabsContent>
         <TabsContent value="mcp">
-          <AgentMcpTab
-            agent={agent}
-            globalServers={globalServers}
-            onSaved={onAgentUpdated}
-            onDraftChange={setTabSlice}
-          />
+          <AgentMcpTab agent={agent} />
         </TabsContent>
         <TabsContent value="workspace">
           <FileWorkbench
@@ -2663,65 +2406,7 @@ function AgentSkillsTab({
   );
 }
 
-function AgentMcpTab({
-  agent,
-  globalServers,
-  onSaved,
-  onDraftChange,
-}: {
-  agent: Agent;
-  globalServers: Record<string, MCPServerConfigDto>;
-  onSaved: (updated: Agent) => void;
-  onDraftChange?: (slice: Partial<Agent>) => void;
-}) {
-  const savedServers = useMemo(
-    () => agent.mcpServers ?? {},
-    [agent.mcpServers]
-  );
-  const savedDisabled = useMemo(
-    () => agent.mcpDisabled ?? [],
-    [agent.mcpDisabled]
-  );
-  const [servers, setServers] =
-    useState<Record<string, MCPServerConfigDto>>(savedServers);
-  const [disabled, setDisabled] = useState<string[]>(savedDisabled);
-  const [dialog, setDialog] = useState<
-    { mode: "add" } | { mode: "edit"; initial: MCPServerFormValue } | null
-  >(null);
-  useEffect(() => {
-    setServers(savedServers);
-    setDisabled(savedDisabled);
-  }, [agent.id, savedServers, savedDisabled]);
-  useEffect(() => {
-    onDraftChange?.({ mcpServers: servers, mcpDisabled: disabled });
-  }, [servers, disabled, onDraftChange]);
-  const { saving, save } = useSliceSave(agent, onSaved);
-
-  const dirty =
-    !sameStringSet(disabled, savedDisabled) ||
-    JSON.stringify(servers) !== JSON.stringify(savedServers);
-
-  const handleTest = async (
-    value: MCPServerFormValue
-  ): Promise<{
-    ok: boolean;
-    error?: string;
-    tools?: string[];
-    transport?: string;
-  }> => {
-    const res = await fetch(`${API_BASE}/api/mcp/test`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(value.config),
-    });
-    return (await res.json()) as {
-      ok: boolean;
-      error?: string;
-      tools?: string[];
-      transport?: string;
-    };
-  };
-
+function AgentMcpTab({ agent }: { agent: Agent }) {
   if (agent.managed) {
     return (
       <div className="py-2">
@@ -2734,80 +2419,7 @@ function AgentMcpTab({
 
   return (
     <div className="py-2">
-      <McpSection
-        globalServers={globalServers}
-        privateServers={servers}
-        disabled={disabled}
-        onToggleInherit={(name) =>
-          setDisabled((prev) =>
-            prev.includes(name)
-              ? prev.filter((n) => n !== name)
-              : [...prev, name]
-          )
-        }
-        onAdd={() => setDialog({ mode: "add" })}
-        onEdit={(name, cfg) =>
-          setDialog({ mode: "edit", initial: { name, config: cfg } })
-        }
-        onRemove={(name) =>
-          setServers((prev) => {
-            const next = { ...prev };
-            delete next[name];
-            return next;
-          })
-        }
-      />
-      <ConfigSaveBar
-        dirty={dirty}
-        saving={saving}
-        onSave={() =>
-          void save({ mcpServers: servers, mcpDisabled: disabled }, "MCP")
-        }
-        onDiscard={() => {
-          setServers(savedServers);
-          setDisabled(savedDisabled);
-        }}
-      />
-
-      <Dialog
-        open={dialog !== null}
-        onOpenChange={(open) => !open && setDialog(null)}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {dialog?.mode === "edit"
-                ? `Edit '${dialog.initial.name}'`
-                : "Add agent-private MCP server"}
-            </DialogTitle>
-            <DialogDescription>
-              Private to this agent only. Names cannot collide with the global
-              catalog in Settings → MCP.
-            </DialogDescription>
-          </DialogHeader>
-          {dialog && (
-            <DialogBody>
-              <MCPServerForm
-                initial={dialog.mode === "edit" ? dialog.initial : undefined}
-                lockName={dialog.mode === "edit"}
-                reservedNames={[
-                  ...Object.keys(globalServers),
-                  ...(dialog.mode === "add" ? Object.keys(servers) : []),
-                ]}
-                onSubmit={(value) => {
-                  setServers((prev) => ({
-                    ...prev,
-                    [value.name]: value.config,
-                  }));
-                  setDialog(null);
-                }}
-                onCancel={() => setDialog(null)}
-                onTest={handleTest}
-              />
-            </DialogBody>
-          )}
-        </DialogContent>
-      </Dialog>
+      <McpManager scope={{ agentId: agent.id }} />
     </div>
   );
 }

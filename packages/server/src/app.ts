@@ -784,7 +784,9 @@ export async function createApp(
     const id = c.req.param("id");
     const def = manager.agentStore.get(id);
     if (!def) return c.json({ error: "Agent not found" }, 404);
-    const servers = manager.getMcpClient(id)?.getStatus() ?? [];
+    // getMcpStatus aggregates URL clients AND worker-run stdio servers;
+    // getMcpClient sees only the URL client, so stdio servers were invisible.
+    const servers = manager.getMcpStatus(id)[0]?.servers ?? [];
     return c.json({ agentId: id, servers });
   });
 
@@ -796,33 +798,71 @@ export async function createApp(
     const def = manager.agentStore.get(id);
     if (!def) return c.json({ error: "Agent not found" }, 404);
     await manager.queueMcpReinit(id);
-    const servers = manager.getMcpClient(id)?.getStatus() ?? [];
+    const servers = manager.getMcpStatus(id)[0]?.servers ?? [];
     return c.json({ agentId: id, servers });
   });
 
-  // Per-server connect/disconnect/reconnect for an agent.
+  // True for a server that runs over a URL transport (live daemon client);
+  // false for a stdio server, which is managed by the tool-host worker and
+  // has no daemon-side MCPClient. Lets the per-server routes dispatch by
+  // transport instead of 404-ing when there's no URL client.
+  const isUrlServer = (id: string, name: string): boolean => {
+    const def = manager.agentStore.get(id);
+    if (!def) return false;
+    return !!manager.serversForAgent(def)[name]?.url;
+  };
+
+  // Per-server connect/disconnect/reconnect for an agent. URL servers go
+  // through the live MCPClient; stdio servers re-init via the worker.
   app.post("/api/agents/:id/mcp/servers/:name/connect", async (c) => {
-    const client = manager.getMcpClient(c.req.param("id"));
-    if (!client) return c.json({ error: "Agent has no MCP client" }, 404);
-    return c.json(await client.connectServer(c.req.param("name")));
+    const id = c.req.param("id");
+    const name = c.req.param("name");
+    const client = manager.getMcpClient(id);
+    if (client && isUrlServer(id, name)) {
+      return c.json(await client.connectServer(name));
+    }
+    await manager.queueMcpReinit(id);
+    return c.json({ servers: manager.getMcpStatus(id)[0]?.servers ?? [] });
   });
 
   app.post("/api/agents/:id/mcp/servers/:name/disconnect", async (c) => {
-    const client = manager.getMcpClient(c.req.param("id"));
-    if (!client) return c.json({ error: "Agent has no MCP client" }, 404);
-    await client.disconnectServer(c.req.param("name"));
-    return c.json({ ok: true });
+    const id = c.req.param("id");
+    const name = c.req.param("name");
+    const client = manager.getMcpClient(id);
+    if (client && isUrlServer(id, name)) {
+      await client.disconnectServer(name);
+      return c.json({ ok: true });
+    }
+    // stdio is lazy + worker-run — the durable "off" is disabling the
+    // private server (inherited globals are turned off via mcpDisabled).
+    const def = manager.agentStore.get(id);
+    if (def?.mcpServers?.[name]) {
+      const next = {
+        ...def.mcpServers,
+        [name]: { ...def.mcpServers[name], enabled: false },
+      };
+      await manager.updateAgent(id, { mcpServers: next });
+      return c.json({ ok: true, disabled: true });
+    }
+    return c.json(
+      { error: "Inherited server — exclude it from this agent instead" },
+      400
+    );
   });
 
   app.post("/api/agents/:id/mcp/servers/:name/reconnect", async (c) => {
-    const client = manager.getMcpClient(c.req.param("id"));
-    if (!client) return c.json({ error: "Agent has no MCP client" }, 404);
-    return c.json(await client.reconnect(c.req.param("name")));
+    const id = c.req.param("id");
+    const name = c.req.param("name");
+    const client = manager.getMcpClient(id);
+    if (client && isUrlServer(id, name)) {
+      return c.json(await client.reconnect(name));
+    }
+    await manager.queueMcpReinit(id);
+    return c.json({ servers: manager.getMcpStatus(id)[0]?.servers ?? [] });
   });
 
   // Force a fresh OAuth flow — clears stored tokens for that server,
-  // then reconnects. Use when a token's been revoked server-side or
-  // when the user wants to switch accounts.
+  // then reconnects. OAuth is a URL-transport concept (stdio has none).
   app.post("/api/agents/:id/mcp/servers/:name/reauth", async (c) => {
     const client = manager.getMcpClient(c.req.param("id"));
     if (!client) return c.json({ error: "Agent has no MCP client" }, 404);
@@ -913,6 +953,74 @@ export async function createApp(
       manager.listAgents().map((def) => manager.queueMcpReinit(def.id))
     );
     return c.json({ mcpServers: validated });
+  });
+
+  // Batch replace an agent's private MCP catalog + inherited-exclusions —
+  // the JSON-editor save path, mirroring PUT /api/mcp/global. Body:
+  // { mcpServers?: {name: config}, mcpDisabled?: string[] }.
+  app.put("/api/agents/:id/mcp", async (c) => {
+    const id = c.req.param("id");
+    const def = manager.agentStore.get(id);
+    if (!def) return c.json({ error: "Agent not found" }, 404);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const body = (raw && typeof raw === "object" ? raw : {}) as {
+      mcpServers?: unknown;
+      mcpDisabled?: unknown;
+    };
+    if (
+      body.mcpServers !== undefined &&
+      (typeof body.mcpServers !== "object" || body.mcpServers === null)
+    ) {
+      return c.json({ error: "mcpServers must be an object" }, 400);
+    }
+    const patch: { mcpServers?: Record<string, MCPServerConfig>; mcpDisabled?: string[] } = {};
+    if (body.mcpServers !== undefined) {
+      const validated: Record<string, MCPServerConfig> = {};
+      for (const [name, cfg] of Object.entries(
+        body.mcpServers as Record<string, unknown>
+      )) {
+        const result = MCPServerConfigSchema.safeParse(cfg);
+        if (!result.success) {
+          return c.json(
+            {
+              error: `Invalid config for server '${name}'`,
+              details: result.error.issues.map(
+                (err: { path: PropertyKey[]; message: string }) =>
+                  `${err.path.join(".")}: ${err.message}`
+              ),
+            },
+            400
+          );
+        }
+        validated[name] = result.data;
+      }
+      patch.mcpServers = validated;
+    }
+    if (body.mcpDisabled !== undefined) {
+      if (
+        !Array.isArray(body.mcpDisabled) ||
+        body.mcpDisabled.some((x) => typeof x !== "string")
+      ) {
+        return c.json({ error: "mcpDisabled must be a string[]" }, 400);
+      }
+      patch.mcpDisabled = body.mcpDisabled as string[];
+    }
+    try {
+      await manager.updateAgent(id, patch);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    const next = manager.agentStore.get(id);
+    return c.json({
+      id,
+      mcpServers: next?.mcpServers ?? {},
+      mcpDisabled: next?.mcpDisabled ?? [],
+    });
   });
 
   // Per-agent private servers. The agent-store rejects writes whose names
