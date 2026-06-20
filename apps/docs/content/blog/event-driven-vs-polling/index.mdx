@@ -10,7 +10,7 @@ draft: false
 
 One of my agents slept through its own work, and I didn't notice for hours.
 
-Here's what that looked like. A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, no crash, it just never ran. The work sat there ready and nobody picked it up. The agent was fine, it just never woke up.
+A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, no crash, it just never ran. The work sat there ready and nobody picked it up. The agent was fine, it just never woke up.
 
 Those are the bugs I hate. Not the ones that page you. The ones that don't page you at all, the ones you only find because someone asks why nothing happened.
 
@@ -38,7 +38,7 @@ You've felt that last one even if you've never touched a scheduler. You ask a ch
 
 None of these is a bug in the logic. The rules were fine. Every one lived in the gap between a signal firing and a busy, expensive agent being ready for it. Races, dropped messages, stale assumptions. You don't get those from your business logic. You get them from reacting.
 
-So I fixed them, all of them. And then I wrote a watchdog: if an agent woke a few times in a row and found nothing to do, it would step in and calm it down, because the event system could fire an agent at nothing, over and over, burning money on calls that did nothing. I had written a program whose whole job was to babysit my scheduler and protect me from it. That's a confession, not a feature.
+So I fixed them, all of them. And then I wrote a watchdog: if an agent woke a few times in a row and found nothing to do, it would step in and calm it down, because the event system could fire an agent at nothing, over and over, burning money on calls that did nothing. I had written a program whose whole job was to babysit my scheduler and protect me from it. You don't write that for a system that works.
 
 ## What I did instead
 
@@ -76,7 +76,7 @@ And none of this is new. There's a name for it. Reacting the moment something ch
 
 I won't pretend the loop is free. It's slower: an agent can take up to a minute to notice new work, unless I nudge it for the rare thing that genuinely can't wait, which I kept as a small escape hatch instead of the whole design. So instant reaction isn't gone, it just stopped running the place. The loop also does a little pointless work, an idle agent waking once a minute to confirm there's nothing to do. For my work that's fine. For yours, maybe not, and that's your call.
 
-But look at the trade. I gave up instant reactions and a class of silent, unbounded, expensive failures, and got back failures that are loud, bounded, and cheap. A pointless wake costs nothing and shows up on a graph. A lost wake costs you the work and shows up nowhere. I'll take the first one every time.
+But look at the trade. I gave up instant reactions and a class of silent failures that could cost anything, and got back failures that are loud and cheap. A pointless wake costs nothing and shows up on a graph. A lost wake costs you the work and shows up nowhere. I'll take the first one every time.
 
 So, with my stuff stripped out: when you have to wake something expensive that holds state and isn't in a hurry, don't let events pull the trigger. Let them pile up. You pull the trigger, on a steady beat, by looking at how things actually are. Keep instant reaction for the few cases that truly can't wait.
 
