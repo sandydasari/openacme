@@ -26,6 +26,8 @@ And this isn't a case against event-driven in general. Polling is usually the wo
 
 *The usual version of this meme ends in something baroque and clever. Mine ends in a loop.*
 
+## Where it broke
+
 Reacting the moment something happens sounds simple. It isn't, because by the time you react, the world has usually moved out from under the event.
 
 The event-driven version grew the way these always grow, one reasonable patch at a time. Signals arrived in bursts, so I added something to squash a flurry into one wake instead of ten. An agent could get stuck waking itself, so I added a rate limit. An agent's own actions echoed back as new signals and woke it again, so I added a filter to ignore its own echo. Every one was a sensible fix to a real problem. And that's the trap: I was so busy patching symptoms I never asked whether the thing I kept patching was the problem. The pile of patches was the answer, and I stared at it for months.
@@ -37,6 +39,8 @@ You've felt that last one even if you've never touched a scheduler. You ask a ch
 None of these is a bug in the logic. The rules were fine. Every one lived in the gap between a signal firing and a busy, expensive agent being ready for it. Races, dropped messages, stale assumptions. You don't get those from your business logic. You get them from reacting.
 
 So I fixed them, all of them. And then I wrote a watchdog: if an agent woke a few times in a row and found nothing to do, it would step in and calm it down, because the event system could fire an agent at nothing, over and over, burning money on calls that did nothing. I had written a program whose whole job was to babysit my scheduler and protect me from it. That's a confession, not a feature.
+
+## What I did instead
 
 The fix wasn't another patch. It was to stop reacting.
 
@@ -52,6 +56,8 @@ The watchdog is the part I keep thinking about. The thing I'd been proud of just
 
 *All the complexity of the reacting design lives in the gap between the signal and the thing that has to act on it. The loop empties that gap. Signals become notes in a list, and one steady beat clears them.*
 
+## Why polling, not events
+
 So why does reacting instantly fall apart here when it works everywhere else? Because it was built for a different kind of work, and I dragged it somewhere it didn't belong.
 
 For a web server, reacting the instant a request lands is exactly right. A request is cheap, it brings its own context, there are thousands a second, and the whole game is to answer each one now, in parallel, in milliseconds. A wasted reaction costs nothing, so you optimize for never missing one. That is just not my world.
@@ -65,6 +71,8 @@ None of those four are about AI, which is the point. Wherever they line up, expe
 So when each reaction is expensive and a slow one is invisible, you want a few deliberate, well-timed reactions, not a thousand instant ones. The exact opposite of the web request that event-driven was built around. I'd grabbed the wrong tool and paid for it one bug at a time.
 
 And none of this is new. There's a name for it. Reacting the moment something changes is edge-triggered: you catch the instant of change, and if you miss it, it's gone, which is exactly the lost wake I opened with. Checking the current state on a beat is level-triggered: miss a beat and the state is still there next time. The most trusted infrastructure most of us run all day works the second way. Kubernetes doesn't subscribe to a "server died" firehose and panic. It wakes on a timer, looks at how things are versus how they should be, and nudges. It's a loop. It's a poll. The thing I was too clever to reach for is the thing the pros already trust.
+
+## The catch
 
 I won't pretend the loop is free. It's slower: an agent can take up to a minute to notice new work, unless I nudge it for the rare thing that genuinely can't wait, which I kept as a small escape hatch instead of the whole design. So instant reaction isn't gone, it just stopped running the place. The loop also does a little pointless work, an idle agent waking once a minute to confirm there's nothing to do. For my work that's fine. For yours, maybe not, and that's your call.
 
