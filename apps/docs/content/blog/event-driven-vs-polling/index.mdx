@@ -10,9 +10,9 @@ draft: false
 
 One of my agents slept through its own work, and I didn't notice for hours.
 
-Here's what that looked like. A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, nothing in the logs, no failed run. The dashboards were all green. The work just sat there ready and nobody picked it up. The agent was fine, it just never woke up.
+Here's what that looked like. A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, no crash, it just never ran. The work sat there ready and nobody picked it up. The agent was fine, it just never woke up.
 
-Those are the bugs I hate. Not the ones that page you at 2am. The ones that don't page you at all, the ones you only find because some user asks why nothing happened.
+Those are the bugs I hate. Not the ones that page you. The ones that don't page you at all, the ones you only find because someone asks why nothing happened.
 
 Quick context, because the lesson has nothing to do with what my agents actually do: I run a bunch of programs that mostly sit idle and now and then have to wake up and do something expensive. In my case each one is backed by an LLM, so a wake is a model call or two, real money and a few real seconds. But mentally swap "agent" for "any slow, costly job that touches state you care about" and nothing changes. A nightly export. A VM that takes a minute to boot. Some rate-limited API you can only poke so often. Same story.
 
@@ -80,4 +80,4 @@ But look at the trade. I gave up instant reactions and a whole class of silent, 
 
 So here's the rule, with my stuff stripped out: when you have to wake something that's expensive, holds state, and isn't in a hurry, don't let the events pull the trigger. Let them pile up. You pull the trigger, on a steady beat, by looking at how things actually are. Keep instant reaction for the handful of cases that truly can't wait, and make them earn it.
 
-The rewrite itself was easy. The hard part was admitting the primitive answer was the right one. A loop on a timer is the thing you write in your first week, and reaching for it after years of supposedly knowing better felt like losing. It wasn't. It's been boring ever since, no watchdog, no special cases, no silent 2am bug that turns out to be a week old. And in this job, boring is about the highest praise there is. I just had to outrun the smarter idea to get to it.
+The rewrite itself was easy. The hard part was admitting the primitive answer was the right one. A loop on a timer is the thing you write in your first week, and reaching for it after years of supposedly knowing better felt like losing. It wasn't. It's been boring ever since, no watchdog, no special cases, no silent bug I only find out about a week later. And in this job, boring is about the highest praise there is. I just had to outrun the smarter idea to get to it.
