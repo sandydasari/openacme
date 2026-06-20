@@ -10,7 +10,7 @@ draft: false
 
 One of my agents slept through its own work, and I didn't notice for hours.
 
-Here's what that looked like. A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, nothing in the logs, the dashboards all green and smug about it. The work sat there ready and nobody picked it up, like a doorbell with the wires snipped. The agent was fine. It just never woke up.
+Here's what that looked like. A message had come in for it. The thing it was waiting on had finished an hour before, so it was free to go. And it just... didn't. No error, nothing in the logs, no failed run. The dashboards were all green. The work just sat there ready and nobody picked it up. The agent was fine, it just never woke up.
 
 Those are the bugs I hate. Not the ones that page you at 2am. The ones that don't page you at all, the ones you only find because some user asks why nothing happened.
 
@@ -18,7 +18,9 @@ Quick context, because the lesson has nothing to do with what my agents actually
 
 Something has to decide when each of these wakes up. That's the whole post. And the punchline, which took me way too long and an embarrassing amount of deleted code to accept, is that the right answer is a dumb loop on a timer, and I only got there after building the clever version first and watching it fall over.
 
-Let me be straight about the order, because this is easy to read as "guy crawls back to where he started." Not quite. My first version did have a timer, a bad one, and I ripped it out on purpose, because reacting to events the moment they happen is obviously better, right? Message lands, handle it now. Dependency finishes, wake the thing now. No wasted work, every wake traceable to a cause. It's the design you'd sketch on a whiteboard and feel smart about. So the real path was: bad timer, then a clean event-driven thing I was proud of, then back to a timer with my tail between my legs. The tail-between-the-legs version is the one that works.
+Let me be straight about the order, because this is easy to read as "guy crawls back to where he started." Not quite. My first version did have a timer, a bad one, and I ripped it out on purpose, because reacting to events the moment they happen is obviously better, right? Message lands, handle it now. Dependency finishes, wake the thing now. No wasted work, every wake traceable to a cause. It's the design you'd sketch on a whiteboard and feel smart about. So the real path was: bad timer, then a clean event-driven thing I was proud of, then back to a timer. It felt like going backwards. It was right anyway.
+
+And to be clear up front, this isn't a case against event-driven in general. Polling is usually the worse option, wasteful, a bit laggy, the thing you're taught to grow out of. This is only about the narrow kind of work where that flips, and it's narrower than the title makes it sound.
 
 ![Expanding-brain meme. Four panels, the brain glowing brighter and more cosmic each step down: react to every event instantly, then add debounce and rate limits, then add a watchdog to babysit it, and finally, as the most enlightened stage of all, a 60-second loop.](./figures/expanding-brain-scheduler.jpg)
 
@@ -36,7 +38,7 @@ That last one you've felt, even if you've never touched a scheduler. You ask som
 
 And notice what none of these are: none of them is a bug in the actual logic. The rules were fine. Every single one lived in the gap between a signal firing and a busy, expensive agent being ready to deal with it. Races, dropped messages, stale assumptions. You don't get those from your business logic. You get them from reacting.
 
-So I fixed them. All of them. And then I did the thing that should've been a slap in the face: I wrote a watchdog. If an agent woke a few times in a row and found nothing to do, the watchdog would step in and calm it down, because my clever event system could fire an agent at literally nothing, over and over, setting money on fire for zero work. I had written a program whose entire job was to babysit my scheduler and protect me from it. That's not a feature you ship proudly. That's a confession.
+So I fixed them. All of them. And then I did the thing that should've been a slap in the face: I wrote a watchdog. If an agent woke a few times in a row and found nothing to do, the watchdog would step in and calm it down, because my clever event system could fire an agent at literally nothing, over and over, burning money on calls that did nothing. I had written a program whose entire job was to babysit my scheduler and protect me from it. That's not a feature you ship proudly. That's a confession.
 
 ## Sophistication ran backwards
 
@@ -46,11 +48,11 @@ I deleted the whole event-driven path and dropped in a loop. Every sixty seconds
 
 Here's the part that actually matters, so I'll spell it out: the events didn't go away. They stopped being triggers and became data. Before, a signal fired and something reacted right then. Now a signal gets written down in a list and waits, and next time the loop comes around it reads the list and handles whatever's there. Your second chatbot message doesn't race the first anymore, it gets in line and gets picked up in order. Same information. It just went from an alarm going off to a note left on your desk.
 
-And all that machinery? Gone. The burst-squasher, the rate limit, the echo filter, the watchdog, the special cases, the bookkeeping tracking who was owed a wake, all of it in the bin, because every piece of it only existed to survive reacting in real time, and I'd stopped reacting in real time. I deleted way more than I added. The thing went from something I couldn't keep in my head to a loop I can describe in one sentence.
+And all that machinery? Gone. The burst-squasher, the rate limit, the echo filter, the watchdog, the special cases, the bookkeeping tracking who was owed a wake, all of it deleted, because every piece of it only existed to survive reacting in real time, and I'd stopped reacting in real time. I deleted way more than I added. The thing went from something I couldn't keep in my head to a loop I can describe in one sentence.
 
 The watchdog is the bit I keep thinking about. The thing I'd been quietly proud of just wasn't needed anymore. A loop that runs once a minute physically cannot spin. An idle agent wakes, sees nothing, goes back to sleep, once a minute, harmless. The protection I'd carefully engineered fell out for free the second I stopped reacting.
 
-![Two ways to wake an agent, side by side. On the left, react-to-everything: signals (a message, a finished job, a timer) each fire through a stack of patches labeled collapse bursts, limit retries, ignore echoes, and catch stalls before they can reach the agent, and one signal is dropped at a patch in red, the silent lost wake-up. On the right, the loop: the same signals fall into a list and pile up, and a timer ticking every sixty seconds sweeps the whole list into the agent in one pass, with no patches at all.](./figures/trigger-vs-beat.svg)
+![Two ways to wake an agent, side by side. On the left, the event-driven design: signals (a message, a finished job, a timer) each fire through a stack of patches labeled collapse bursts, limit retries, ignore echoes, and catch stalls before they can reach the agent, and one signal is dropped at a patch in red, the silent lost wake-up. On the right, the loop: the same signals fall into a list and pile up, and a timer ticking every sixty seconds sweeps the whole list into the agent in one pass, with no patches at all.](./figures/trigger-vs-beat.svg)
 
 *All the complexity of the reacting design lives in the gap between the signal and the thing that has to act on it. The loop empties that gap. Signals become notes in a list, and one steady beat clears them.*
 
@@ -60,7 +62,7 @@ So why does the fashionable answer fall apart here when it's great everywhere el
 
 For a web server, reacting the instant a request lands is exactly right. A request is cheap, it brings its own context, there are thousands a second, and the whole game is to answer each one right now, in parallel, in milliseconds. A wasted reaction costs basically nothing, so you optimize for never missing one. Fine. That is just not my world.
 
-My work is the opposite on every axis that counts. It's expensive: a wake is a model call or two, real money and real seconds, so a wasted wake is a line item, not a rounding error. It's one-at-a-time: each agent has one running transcript that every wake writes onto, so fire two at once and you get two replies braided into one history that makes sense to nobody (that's the chatbot bug, again). And it's in no rush: nobody is watching a spinner for a background agent, so a minute of lag before it starts is invisible. I spent a stupid amount of effort shaving a delay to zero that not one person could perceive.
+My work is the opposite on every axis that counts. It's expensive: a wake is a model call or two, real money and real seconds, so a wasted wake is a line item, not a rounding error. It's one-at-a-time: each agent has one running transcript that every wake writes onto, so fire two at once and you get two replies tangled into one history that makes sense to nobody (that's the chatbot bug, again). And it's in no rush: nobody is watching a spinner for a background agent, so a minute of lag before it starts is invisible. I spent a stupid amount of effort shaving a delay to zero that not one person could perceive.
 
 There's a fourth one and it's the sharpest. Every big model provider caches the front of your prompt now, the standing instructions plus the conversation so far, and if your next call starts with the exact same text they charge you a fraction for that part. Big discount. But it only kicks in when the start of the request is identical to last time. A scheduler that reacts to every little change is constantly rebuilding and resending, so that cached prefix keeps shifting and the discount keeps evaporating. The calm loop leaves things alone between beats, so the prefix stays put and you keep the discount. You already know this shape from a database that's only fast once its cache is warm. Reacting to everything keeps it permanently cold.
 
