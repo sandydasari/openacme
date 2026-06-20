@@ -1,10 +1,10 @@
 ---
-title: "Event-driven was the bug. Polling was the fix."
-description: "Reacting to events the instant they fire is the design everyone reaches for. It kept failing in the same quiet way, and a dull polling loop fixed it."
+title: "You probably don't need event-driven architecture"
+description: "Event-driven is the reflex default, and for plenty of work it's the right one. But for expensive, stateful jobs that aren't in a hurry, a boring polling loop usually wins. This is where the line is."
 date: "2026-06-20"
 author: sandy
 tags: [engineering, distributed-systems, schedulers]
-image: /media/event-driven-vs-polling/cover.png
+image: /media/you-dont-need-event-driven/cover.png
 draft: false
 ---
 
@@ -20,7 +20,7 @@ Something has to decide when each of these wakes up. That's the whole post. And 
 
 I want to be exact about the order, because it's easy to hear this as crawling back to where I started. My first version did have a timer, a bad one, and I ripped it out on purpose, because reacting the moment something happens is obviously better, right? Message lands, handle it now. Dependency finishes, wake the thing now. No wasted work. So the order was: bad timer, then a clean event-driven version I was proud of, then back to a timer. It felt like going backwards. It was right anyway.
 
-And this isn't a case against event-driven in general. Polling is usually the worse option, wasteful, a bit laggy, the thing you're taught to grow out of. This is only about the narrow kind of work where that flips.
+To be clear, this isn't true for most things. Event-driven is the right call for plenty of work, anything cheap and latency-sensitive especially. But for the kind that's expensive to run, holds state, and isn't in a hurry, you usually don't need it, and that kind is more common than people admit. That's what this post is about.
 
 ![Expanding-brain meme. Four panels, the brain glowing brighter and more cosmic each step down: react to every event instantly, then add debounce and rate limits, then add a watchdog to babysit it, and finally, as the most enlightened stage of all, a 60-second loop.](./figures/expanding-brain-scheduler.jpg)
 
