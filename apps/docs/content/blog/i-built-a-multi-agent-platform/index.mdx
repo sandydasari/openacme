@@ -52,7 +52,7 @@ Take your system and rename every agent a "function." Strip the names, the roles
 
 The interesting case is the one where the rename breaks. Where `research()` and `write()` are both running at once, both reaching into the same shared state, neither waiting on the other's return value, each one's behavior depending on what the other did a second ago. That's when you've actually built a multi-agent system, and it's the only place all that coordination cost buys you anything. Everywhere else the costume is the only multi-agent thing about it, and that's good news that just looks like bad news. Programs are far easier to keep correct than negotiations.
 
-And it's not just my experience. When researchers at Berkeley hand-annotated 1,642 failures across seven multi-agent frameworks, the two biggest causes were bad system design and agents talking past each other, and not one of the fourteen failure modes they catalogued was the model reasoning poorly.[^6] The thing you reach for a smarter model to fix isn't even on the list.
+And it's not just my experience. When researchers at Berkeley hand-annotated more than 1,600 traces across seven multi-agent frameworks, the two biggest causes were bad system design and agents talking past each other, and not one of the fourteen failure modes they catalogued was the model reasoning poorly.[^6] The thing you reach for a smarter model to fix isn't even on the list.
 
 ## When you actually need them
 
@@ -82,6 +82,6 @@ And when the best version of your design keeps collapsing back toward a single w
 
 [^4]: Simon Willison, "OK, I'm sold on multi-agent LLM systems now," June 14 2025, with his endorsement scoped to breadth-first, heavily parallel, beyond-one-context work.
 
-[^5]: Walden Yan, "Multi-Agents: What's Actually Working," Cognition, April 22 2026. The original observations still hold for parallel-writer swarms; the approach works best when writes stay single-threaded and the additional agents contribute intelligence rather than actions. A refinement, not a retraction.
+[^5]: Walden Yan, "Multi-Agents: What's Actually Working," Cognition, April 22 2026. The original observations still hold for parallel-writer swarms; the approach works best when writes stay single-threaded and the additional agents contribute intelligence rather than actions. A refinement, not a retraction. [cognition.com/blog/multi-agents-working](https://cognition.com/blog/multi-agents-working).
 
-[^6]: Mert Cemri et al., "Why Do Multi-Agent LLM Systems Fail?", UC Berkeley, March 2025, the MAST taxonomy. 1,642 annotated traces across seven frameworks, with failures dominated by system design and inter-agent misalignment rather than single-agent capability. [arXiv:2503.13657](https://arxiv.org/abs/2503.13657).
+[^6]: Mert Cemri et al., "Why Do Multi-Agent LLM Systems Fail?", UC Berkeley, March 2025, the MAST taxonomy. More than 1,600 annotated traces across seven frameworks, fourteen failure modes in three categories, with failures dominated by system design and inter-agent misalignment rather than single-agent capability. [arXiv:2503.13657](https://arxiv.org/abs/2503.13657).
