@@ -165,32 +165,6 @@ pnpm agent
 
 ---
 
-## How OpenAcme compares
-
-Looking at the multi-agent landscape? OpenAcme sits among both **self-hosted agent platforms** (Hermes Agent, Paperclip, Multica) and **agent frameworks** (CrewAI, AutoGen, MetaGPT, ChatDev), plus closed-source hosted services (Polsia). The short version:
-
-- **vs. frameworks (CrewAI, AutoGen, MetaGPT, ChatDev):** those are code libraries you program against. OpenAcme is a finished app — web UI, CLI, task board, scheduler — with no orchestration code to write.
-- **vs. platforms (Paperclip, Multica, Hermes):** OpenAcme is local-first and runs its own agent loop, with per-agent memory, browser, and model, and runs on your existing Claude/ChatGPT subscription.
-- **vs. closed-source SaaS (Polsia):** OpenAcme is MIT and free — your agents and data stay on your machine, with no platform fee or revenue share.
-
-Full, sourced breakdown: [**OpenAcme vs Hermes, Paperclip, Multica, Polsia, CrewAI & more →**](https://openacme.org/blog/openacme-vs-hermes-paperclip-multica-polsia)
-
-## FAQ
-
-**Is OpenAcme open source?** Yes — MIT licensed and free to self-host.
-
-**Is it a CrewAI alternative?** Yes — and a no-code one. CrewAI and similar frameworks are libraries you write code against to assemble agents; OpenAcme is a ready-to-run app. (AutoGen, another well-known framework, is now in maintenance mode after Microsoft folded it into the Microsoft Agent Framework — so if you're migrating off an older framework, OpenAcme is an actively developed, self-hosted place to land.)
-
-**Can I use my Claude Pro or ChatGPT subscription?** Yes — sign in via OAuth and that plan drives the workforce, so you don't pay per-token API rates to experiment. API keys also work.
-
-**Does my data leave my machine?** No, beyond the prompts you send to your chosen model provider. Sessions, tasks, memory, and tokens all live under `~/.openacme/`. No telemetry.
-
-**Which models are supported?** Anthropic, OpenAI, Google, OpenRouter, Ollama, and any OpenAI-compatible endpoint — configurable per agent.
-
-**Does it work offline / with local models?** Yes, via Ollama or any local OpenAI-compatible endpoint.
-
-**What platforms does it run on?** macOS and Linux, Node ≥ 18.
-
 ## More
 
 - **Code map + gotchas** for AI assistants and contributors: [`CLAUDE.md`](./CLAUDE.md)
