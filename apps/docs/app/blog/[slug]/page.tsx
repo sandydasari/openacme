@@ -66,7 +66,7 @@ export default async function BlogPost(props: {
 
         <aside className="mt-16 border-t border-paper-rule pt-10">
           <p className="font-mono text-[11px] tracking-[0.14em] text-ink-faint uppercase">
-            Built with OpenAcme
+            The project behind this
           </p>
           <p className="mt-3 max-w-xl text-[17px] leading-relaxed text-ink-soft">
             OpenAcme is an open-source platform for running a self-hosted
@@ -87,7 +87,7 @@ export default async function BlogPost(props: {
               rel="noreferrer"
               className="border border-paper-rule px-4 py-2.5 font-mono text-[12px] tracking-[0.1em] text-ink-soft uppercase transition-colors hover:border-plot-red hover:text-plot-red focus-scribe"
             >
-              openacme.org
+              Explore OpenAcme
             </a>
           </div>
         </aside>
