@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 470" role="img">
+<defs>
+<marker id="arrowSoft" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" fill="#585860"/></marker>
+<marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" fill="#D94D42"/></marker>
+</defs>
+<style>
+text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.beat{transform-box:fill-box;transform-origin:center;animation:beat 4s ease-in-out infinite}
+.sweep{animation:sweep 4s ease-in-out infinite}
+.drop{animation:drop 4s ease-in-out infinite}
+.qrow{transform-box:fill-box;transform-origin:left center;animation:qrow 4s ease-in-out infinite}
+@keyframes beat{0%,55%{stroke-width:1.6;opacity:.85}62%{stroke-width:3;opacity:1}75%,100%{stroke-width:1.6;opacity:.85}}
+@keyframes sweep{0%,58%{opacity:.25}66%{opacity:1}90%,100%{opacity:.35}}
+@keyframes drop{0%,30%{opacity:1}48%{opacity:1}60%{opacity:.15}100%{opacity:.15}}
+@keyframes qrow{0%{opacity:.35}20%{opacity:1}60%{opacity:1}70%{opacity:.2}100%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.beat,.sweep,.drop,.qrow{animation:none!important}}
+</style>
+<rect x="1" y="1" width="938" height="468" fill="#FCFBFA" stroke="#DAD7D1" stroke-width="1"/>
+<line x1="470" y1="64" x2="470" y2="418" stroke="#DAD7D1" stroke-width="1" stroke-dasharray="2 6" stroke-linecap="round"/>
+<text x="36" y="40" font-size="15" fill="#28282F" text-anchor="start" font-weight="600" letter-spacing="1.5">EDGE-TRIGGERED</text>
+<text x="36" y="58" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">react the instant a signal fires</text>
+<text x="502" y="40" font-size="15" fill="#28282F" text-anchor="start" font-weight="600" letter-spacing="1.5">LEVEL-TRIGGERED</text>
+<text x="502" y="58" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">buffer the signals, drain them on a beat</text>
+<rect x="40" y="110" width="132" height="30" fill="#FCFBFA" stroke="#2E78C8" stroke-width="1"/>
+<rect x="40" y="110" width="4" height="30" fill="#2E78C8"/>
+<text x="56" y="129" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">message</text>
+<rect x="40" y="174" width="132" height="30" fill="#FCFBFA" stroke="#8A5AC5" stroke-width="1"/>
+<rect x="40" y="174" width="4" height="30" fill="#8A5AC5"/>
+<text x="56" y="193" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">job done</text>
+<rect x="40" y="238" width="132" height="30" fill="#FCFBFA" stroke="#2D9566" stroke-width="1"/>
+<rect x="40" y="238" width="4" height="30" fill="#2D9566"/>
+<text x="56" y="257" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">timer due</text>
+<rect x="296" y="110" width="150" height="38" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1"/>
+<text x="371" y="133" font-size="12" fill="#585860" text-anchor="middle" font-weight="400" letter-spacing="0">collapse bursts</text>
+<rect x="296" y="160" width="150" height="38" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1"/>
+<text x="371" y="183" font-size="12" fill="#585860" text-anchor="middle" font-weight="400" letter-spacing="0">limit retries</text>
+<rect x="296" y="210" width="150" height="38" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1"/>
+<text x="371" y="233" font-size="12" fill="#585860" text-anchor="middle" font-weight="400" letter-spacing="0">ignore echoes</text>
+<rect x="296" y="260" width="150" height="38" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1"/>
+<text x="371" y="283" font-size="12" fill="#585860" text-anchor="middle" font-weight="400" letter-spacing="0">catch stalls</text>
+<line x1="174" y1="125" x2="290" y2="170" stroke="#585860" stroke-width="1.3" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<line x1="174" y1="189" x2="290" y2="170" stroke="#585860" stroke-width="1.3" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<line x1="174" y1="253" x2="290" y2="170" stroke="#D94D42" stroke-width="1.8" stroke-linecap="round" class="drop"/>
+<g class="drop"><line x1="280" y1="162" x2="292" y2="174" stroke="#D94D42" stroke-width="2"/><line x1="292" y1="162" x2="280" y2="174" stroke="#D94D42" stroke-width="2"/></g>
+<text x="274" y="196" font-size="11" fill="#D94D42" text-anchor="end" font-weight="400" letter-spacing="0">lost</text>
+<line x1="371" y1="298" x2="371" y2="324" stroke="#585860" stroke-width="1.3" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<rect x="296" y="330" width="150" height="56" fill="#FCFBFA" stroke="#28282F" stroke-width="1"/>
+<text x="371" y="352" font-size="13" fill="#28282F" text-anchor="middle" font-weight="600" letter-spacing="0">agent</text>
+<text x="371" y="370" font-size="11" fill="#D94D42" text-anchor="middle" font-weight="400" letter-spacing="0">idle, work still waiting</text>
+<text x="40" y="440" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">every signal must clear the patches;</text>
+<text x="40" y="456" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">miss one and the wake is gone, silently.</text>
+<rect x="502" y="110" width="132" height="30" fill="#FCFBFA" stroke="#2E78C8" stroke-width="1"/>
+<rect x="502" y="110" width="4" height="30" fill="#2E78C8"/>
+<text x="518" y="129" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">message</text>
+<rect x="502" y="174" width="132" height="30" fill="#FCFBFA" stroke="#8A5AC5" stroke-width="1"/>
+<rect x="502" y="174" width="4" height="30" fill="#8A5AC5"/>
+<text x="518" y="193" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">job done</text>
+<rect x="502" y="238" width="132" height="30" fill="#FCFBFA" stroke="#2D9566" stroke-width="1"/>
+<rect x="502" y="238" width="4" height="30" fill="#2D9566"/>
+<text x="518" y="257" font-size="12" fill="#28282F" text-anchor="start" font-weight="400" letter-spacing="0">timer due</text>
+<text x="754" y="92" font-size="11" fill="#8A8A90" text-anchor="start" font-weight="400" letter-spacing="0.5">queue</text>
+<rect x="754" y="104" width="150" height="22" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1" class="qrow"/>
+<text x="766" y="120" font-size="11" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">message</text>
+<rect x="754" y="130" width="150" height="22" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1" class="qrow"/>
+<text x="766" y="146" font-size="11" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">job done</text>
+<rect x="754" y="156" width="150" height="22" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1" class="qrow"/>
+<text x="766" y="172" font-size="11" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">timer</text>
+<rect x="754" y="182" width="150" height="22" fill="#F2F0ED" stroke="#DAD7D1" stroke-width="1" class="qrow"/>
+<text x="766" y="198" font-size="11" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">message</text>
+<rect x="753" y="103" width="152" height="106" fill="none" stroke="#DAD7D1" stroke-width="1" stroke-dasharray="3 4"/>
+<line x1="636" y1="125" x2="748" y2="115" stroke="#585860" stroke-width="1.2" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<line x1="636" y1="189" x2="748" y2="141" stroke="#585860" stroke-width="1.2" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<line x1="636" y1="253" x2="748" y2="167" stroke="#585860" stroke-width="1.2" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<circle cx="602" cy="332" r="30" fill="#FCFBFA" stroke="#D94D42" stroke-width="1.6" class="beat"/>
+<text x="602" y="330" font-size="15" fill="#D94D42" text-anchor="middle" font-weight="600" letter-spacing="0">60s</text>
+<text x="602" y="348" font-size="10" fill="#585860" text-anchor="middle" font-weight="400" letter-spacing="0">tick</text>
+<line x1="829" y1="214" x2="829" y2="326" stroke="#D94D42" stroke-width="2.2" marker-end="url(#arrowRed)" stroke-linecap="round" class="sweep"/>
+<line x1="632" y1="332" x2="746" y2="332" stroke="#585860" stroke-width="1.2" stroke-dasharray="3 4" marker-end="url(#arrowSoft)" stroke-linecap="round"/>
+<rect x="754" y="332" width="150" height="56" fill="#FCFBFA" stroke="#28282F" stroke-width="1"/>
+<text x="829" y="354" font-size="13" fill="#28282F" text-anchor="middle" font-weight="600" letter-spacing="0">agent</text>
+<text x="829" y="372" font-size="11" fill="#2D9566" text-anchor="middle" font-weight="400" letter-spacing="0">handles them, one pass</text>
+<text x="502" y="440" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">signals wait as rows in a queue;</text>
+<text x="502" y="456" font-size="12" fill="#585860" text-anchor="start" font-weight="400" letter-spacing="0">the beat drains the world it actually finds.</text>
+</svg>

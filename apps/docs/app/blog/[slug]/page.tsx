@@ -64,6 +64,34 @@ export default async function BlogPost(props: {
           <MDX components={getMDXComponents()} />
         </div>
 
+        <aside className="mt-16 border-t border-paper-rule pt-10">
+          <p className="font-mono text-[11px] tracking-[0.14em] text-ink-faint uppercase">
+            Built with OpenAcme
+          </p>
+          <p className="mt-3 max-w-xl text-[17px] leading-relaxed text-ink-soft">
+            OpenAcme is an open-source platform for running a self-hosted
+            workforce of AI agents. This post is a note from building it.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <a
+              href="https://github.com/sandydasari/openacme"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-ink px-4 py-2.5 font-mono text-[12px] tracking-[0.1em] text-paper uppercase transition-colors hover:bg-plot-red focus-scribe"
+            >
+              Star on GitHub
+            </a>
+            <a
+              href="https://openacme.org"
+              target="_blank"
+              rel="noreferrer"
+              className="border border-paper-rule px-4 py-2.5 font-mono text-[12px] tracking-[0.1em] text-ink-soft uppercase transition-colors hover:border-plot-red hover:text-plot-red focus-scribe"
+            >
+              openacme.org
+            </a>
+          </div>
+        </aside>
+
         <Comments />
       </article>
     </main>

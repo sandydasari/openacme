@@ -1,0 +1,89 @@
+---
+title: "I replaced my event-driven scheduler with a dumb 60-second loop"
+description: "Reacting to events the instant they fire is the design everyone reaches for. It was quietly wrong in the same way over and over. A dull polling loop fixed it, and the fix runs backward from everything you are taught."
+date: "2026-06-20"
+author: sandy
+tags: [engineering, distributed-systems, schedulers]
+image: /media/event-driven-scheduler-to-polling/cover.png
+draft: false
+---
+
+One of my agents slept through its own work.
+
+A message had come in for it. The job it was waiting on had finished an hour earlier. By every record I had, the work was ready and the agent was free to do it. No error anywhere, no exception in the logs, no failed run, no retry storm. Everything was green. And the work just sat there, ready and untouched, like a doorbell wired to nothing, while the agent that should have answered it slept straight through.
+
+That is the worst kind of bug. Not the one that pages you. The one that doesn't.
+
+First, the thing to get out of the way: this is not really a story about AI. I happen to run AI agents, but the lesson is about waking any job that is slow, costs something each time you run it, and holds state you care about. A nightly export, a machine that takes a minute to boot, a call to a rate-limited API. Swap any of those in and every word still holds. The agent is just where I hit it.
+
+In my case an agent is a program backed by a large language model. It sits idle until something wakes it: a person's message, a job it was waiting on finishing, a timer coming due, a handoff from another agent. Then it makes a model call or two, which is slow and not free, and goes back to sleep. Something has to decide the exact moment each one wakes. That decision is the whole subject, and the fact that a wake is slow and costly is exactly what makes the obvious design the wrong one.
+
+Here is the thesis, flat: the signals that wake one of these jobs are wonderful as data and dangerous as triggers, and the right way to wake anything expensive is a dull loop that checks the world on a timer. The strange part, the part that took me a long time and an embarrassing amount of code to accept, is that this is the unfashionable answer, and it won by showing up last, after I had already built the sophisticated one and watched it fail.
+
+My first version did have a crude timer, and I tore it out on purpose. The upgrade I was proud of was to make the system react the instant anything happened. A message comes in, handle it now. A dependency finishes, wake the agent now. No waiting, no waste, every wake-up traceable to the exact event that caused it. That is the design you would draw on a whiteboard and feel good about, and it is the one nearly everyone reaches for. So the real order was a crude timer, then a clean react-to-everything design as the deliberate improvement, then a return to a timer as a retreat. The retreat was right.
+
+![Expanding-brain meme. Four panels, the brain glowing brighter and more cosmic each step down: react to every event instantly, then add debounce and rate limits, then add a watchdog to babysit it, and finally, as the most enlightened stage of all, a 60-second loop.](./figures/expanding-brain-scheduler.jpg)
+
+*The usual version of this meme ends in something baroque and clever. Mine ends in a loop.*
+
+## The instant-reaction trap
+
+Reacting to events the moment they happen sounds simple. It is not, and the reason is that the world the event describes has usually moved on by the time you react to it.
+
+The system grew the way these always grow, one patch at a time. Signals sometimes arrived in a flurry, so I added something to fold a burst into a single wake-up instead of ten. An agent could get into a state where it woke itself over and over, so I added a limit on how often any one agent could fire. An agent's own actions could come back around as fresh signals and wake it again, so I added a check that recognized and ignored its own echo. Each patch was reasonable. Each one went in the day after something broke without it. That pattern, a new patch for every new failure, is the tell, and I missed it for months.
+
+The lost wake-up I opened with was not a one-off. It was one of a series, and once I lined them up they all had the same shape. A signal arrived for an agent whose situation had quietly changed underneath it, so the signal was routed nowhere and silently dropped, and the work waited forever. A signal that genuinely mattered got mistaken for the agent's own echo and thrown away, so the one wake-up that counted was the one the system swallowed. A wake-up fired at an agent that was already busy answering a person, and now two things were writing to the same place at once, each clobbering the other.
+
+That last one deserves a beat, because it is the most relatable. You have done it yourself. You ask a chatbot something, then before it finishes you send a second message. Two replies are now being written into one conversation. Which one wins? In my system, nothing decided. They raced.
+
+Read those failures again and notice what they are not. Not one is a mistake in the actual logic of the work. Every single one lives in the narrow gap between a signal firing and a busy, expensive agent being ready to receive it. They are races, dropped messages, stale assumptions, the native wildlife of any system that reacts in real time. You do not get them from your rules. You get them from reacting.
+
+I fixed every one of them. And then I did the thing that should have stopped me cold. I added one more patch: a monitor that watched the agents and stepped in when one kept waking up without ever finding real work to do, because the react-to-everything design could fire an agent at nothing, again and again, burning money on wake-ups that did nothing. I had written a program whose only job was to watch my own scheduler and save me from it. That is not a feature. That is a confession.
+
+## Sophistication ran backwards
+
+The fix was not one more patch. The fix was to stop reacting.
+
+I deleted the whole react-to-everything path and replaced it with a loop. Every sixty seconds it wakes up, walks the agents, asks each one a plain question, is there anything here that needs doing, and if so, runs it. That is the entire scheduler.
+
+The signals did not go away, and this is the actual idea, so let me say it plainly. They stopped being triggers and became data. Before, a signal fired and something reacted at once. Now a signal just gets written down in a list and waits. The next time the loop comes around, it reads the list and acts on everything it finds. The second message you sent the chatbot does not race the first anymore. It sits in the list and gets picked up in order. Same information, demoted from an alarm to a note left on the desk.
+
+And the patches evaporated. The one that folded bursts together, the one that limited how often an agent could fire, the one that ignored an agent's own echo, the monitor that watched for stalls, the special cases, the bookkeeping that tracked who was still owed a wake-up, all of it went in the trash, because every one of them existed to compensate for reacting in real time, and I had stopped reacting in real time. I deleted far more than I wrote. The moving parts went from a tangle I could not hold in my head to a loop I can explain in one sentence.
+
+The monitor is the cleanest proof. The patch I had been quietly proud of turned out to be unnecessary in the most satisfying way. A loop that runs once a minute cannot spin. An agent with nothing to do wakes, sees nothing to do, and goes back to sleep, at most once a minute, harmless. The protection I had carefully engineered was a free side effect of the dull design.
+
+![Two ways to wake an agent, side by side. On the left, react-to-everything: signals (a message, a finished job, a timer) each fire through a stack of patches labeled collapse bursts, limit retries, ignore echoes, and catch stalls before they can reach the agent, and one signal is dropped at a patch in red, the silent lost wake-up. On the right, the loop: the same signals fall into a list and pile up, and a timer ticking every sixty seconds sweeps the whole list into the agent in one pass, with no patches at all.](./figures/trigger-vs-beat.svg)
+
+*All the complexity of the reacting design lives in the gap between the signal and the thing that has to act on it. The loop empties that gap. Signals become notes in a list, and one steady beat clears them.*
+
+## The workload was the whole argument
+
+So why does the fashionable answer fail here when it works so well everywhere else? Because reacting instantly was built for a different kind of work, and I had quietly brought it to the wrong one.
+
+Reacting the instant a request arrives is exactly right for a web server. A request is cheap, it carries its own context, and there are thousands a second. The whole job is to answer each one now, in parallel, in milliseconds. A wasted reaction there costs nothing, so you optimize for never missing one.
+
+My work is the opposite on every axis that matters, and the reasons are concrete.
+
+It is expensive. A single wake is one or more language-model calls, real money and real seconds. A wasted wake is not a rounding error, it is a line on the bill.
+
+It is one-at-a-time. Each agent has a single conversation, one running transcript that every wake appends to. A model call reads that transcript and writes its reply onto the end. Fire two wakes at the same agent at once and both write to the end of the same transcript, and you get two replies tangled into one history that now makes sense to nobody. That was the chatbot-second-message bug, exactly.
+
+It is in no hurry. Nobody is watching a spinner waiting on a background agent. A minute of delay before it starts is invisible. I had spent enormous effort shaving a delay to zero that no one could perceive.
+
+And then there is caching, the sharpest reason of all. Every major model provider now caches the front of your prompt, the standing instructions and the conversation so far. If your next call begins with the exact same text, they charge a small fraction for that part instead of full price. The discount is large, and it only applies when the start of the request is identical to last time. A scheduler that reacts to every little change keeps rebuilding and resending, so the cached front keeps shifting and the discount keeps slipping away. A loop that leaves an agent alone between beats keeps that text stable, and keeps the discount. Reacting instantly is the single most expensive thing you can do to a cached prompt. You already know the shape from a database that only flies once its cache is warm. Reacting to everything keeps the cache permanently cold.
+
+None of those four are unique to AI, which is the whole point. Wherever they line up, an event for every change is the wrong instinct, no matter what the work actually is.
+
+Put those together and the answer is forced. When each reaction is expensive and a slow reaction is invisible, you want few, deliberate, well-timed reactions, not many instant ones. That is the precise opposite of the web request the fashionable design was built for. I had matched my tool to the wrong job and then spent a long time paying for the mismatch one bug at a time.
+
+None of this is new, which is the part that stings. Engineers have names for the two designs. Reacting the moment something changes is edge-triggered: you catch the instant of change, and if you miss it, it is gone for good, which is exactly the lost wake-up I opened with. Checking the current state on a regular beat is level-triggered: miss a beat and the state is still sitting there for the next one to find. The most trusted infrastructure most of us lean on every day works the second way. Kubernetes, the thing that keeps the servers behind half the internet in the shape they are supposed to be in, does not subscribe to a feed of "a server died" alerts and scramble. It wakes on a timer, looks at how things actually are, compares that to how they should be, and nudges them closer. It is a loop. It is a poll. The thing I was too sophisticated to reach for is the thing the professionals already trust.
+
+## The loop has its own bills
+
+I will not pretend the loop is free. It is slower: an agent can take up to a minute to notice new work, unless I give it a nudge for the rare thing that genuinely cannot wait, which I kept as a small, deliberate exception rather than the whole design. So reacting instantly is not banished. It earned a narrow, explicit seat instead of running the show. The loop also does a little useless work: an idle agent wakes once a minute to confirm it has nothing to do, then sleeps. For my work that is completely fine. For yours it might not be, and that is the real decision you have to make.
+
+But look at the trade. I gave up instant reactions and a class of failures that were silent, unbounded, and expensive, and I got back a class of failures that are loud, bounded, and cheap. A useless wake-up costs nothing and shows up plainly on a graph. A lost wake-up costs you the work and shows up nowhere.
+
+Here is the rule, with my world stripped out of it entirely. When you have to wake something that is expensive to run, holds state, and is in no particular hurry, do not let incoming events pull the trigger. Let them pile up as a list. Pull the trigger yourself, on a calm regular beat, by looking at how things actually are. Save instant reaction for the few cases that truly cannot wait, and make those cases earn it.
+
+The rewrite was easy. The hard part was admitting that the primitive answer was the right one. A loop on a timer is what you build before you know better, and I had spent a long time knowing better. The good idea ran backward: the unfashionable poll arrived last, after the elegant design had been built, debugged, patched, and finally dragged to the curb. It has been boring ever since. No monitor, no special cases, no 2 a.m. wake-up that never came. In this line of work, boring is the highest praise there is, and I had to outrun the smarter idea to earn it.
