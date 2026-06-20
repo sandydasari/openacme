@@ -8,17 +8,17 @@ image: /media/you-dont-need-event-driven/cover.png
 draft: false
 ---
 
-One of my agents slept through its own work, and I didn't notice for hours.
+One of my agents slept through its own work, and I didnt notice for hours.
 
-A message had come in for it. The thing it was waiting on had finished an hour earlier, so it was free to run. It didn't, and nothing told me why. No error, no crash, nothing in the logs. The work sat there ready and nobody picked it up. The agent was up the whole time. It never woke up.
+A message had come in for it. The thing it was waiting on had finished an hour earlier, so it was free to run. It didnt, and nothing told me why. No error, no crash, nothing in the logs. The work sat there ready and nobody picked it up. The agent was up the whole time. It never woke up.
 
-Those are the bugs I hate, the ones that don't page you at all. You only find them when someone asks why nothing happened.
+Those are the bugs I hate, the ones that dont page you at all. You only find them when someone asks why nothing happened.
 
 Quick context, because the lesson has nothing to do with what my agents actually do: I run a bunch of programs that mostly sit idle and now and then wake up to do something expensive. Each one is backed by an LLM, so a wake is a model call or two, real money and a few real seconds. Swap "agent" for "any slow, costly job that touches state you care about" and nothing changes. A nightly export, a VM that takes a minute to boot, some rate-limited API you can only poke so often. Same story.
 
-Something has to decide when each of these wakes up. That's the whole post. And the answer that took me way too long and a lot of deleted code to accept is a dumb loop on a timer. I only got there after building the clever version first and watching it fall over.
+Something has to decide when each of these wakes up. Thats the whole post. And the answer that took me way too long and a lot of deleted code to accept is a dumb loop on a timer. I only got there after building the clever version first and watching it fall over.
 
-I want to be exact about the order, because it's easy to hear this as crawling back to where I started. My first version did have a timer, a bad one, and I ripped it out on purpose, because reacting the moment something happens is obviously better, right? Message lands, handle it now. Dependency finishes, wake the thing now. No wasted work. So the order went bad timer, then a clean event-driven version I was proud of, then back to a timer. It felt like going backwards. It was right anyway.
+I want to be exact about the order, because its easy to hear this as crawling back to where I started. My first version did have a timer, a bad one, and I ripped it out on purpose, because reacting the moment something happens is obviously better, right? Message lands, handle it now. Dependency finishes, wake the thing now. No wasted work. So the order went bad timer, then a clean event-driven version I was proud of, then back to a timer. It felt like going backwards. It was right anyway.
 
 To be clear, this isn't true for most things. Event-driven is the right call for plenty of work, anything cheap and latency-sensitive especially. But for the kind that's expensive to run, holds state, and isn't in a hurry, you usually don't need it, and that kind is more common than people admit. That's what this post is about.
 
@@ -34,7 +34,7 @@ The event-driven version grew the way these always grow, one reasonable patch at
 
 The silent failure I opened with wasn't a one-off. There were a handful, and they all rhyme. A signal shows up for an agent whose situation has quietly changed, gets routed nowhere, and vanishes. A signal that matters gets mistaken for the agent's own echo and dropped, so the one wake I needed is the one the system ate. A wake fires at an agent that's already mid-reply to a person, and now two things are writing to the same place and stomping each other.
 
-You've felt that last one even if you've never touched a scheduler. You ask a chatbot something, then send a second message before it's done. Now two answers are being written into one conversation. Which wins? In my system, nothing decided. They raced.
+You've felt that last one even if you've never touched a scheduler. You ask a chatbot something, then send a second message before its done. Now two answers are being written into one conversation. Which wins? In my system, nothing decided. They raced.
 
 None of these is a bug in the logic. The rules were fine. Every one lived in the gap between a signal firing and a busy, expensive agent being ready for it. Races, dropped messages, stale assumptions. You don't get those from your business logic. You get them from reacting.
 
