@@ -106,6 +106,26 @@ on-demand by the platform.
 Acme-only tool — to make it take effect on the next turn (no restart). Batch
 your edits and reload once at the end.
 
+## The "Waiting for you" list (Acme-only)
+
+Any agent calls `ping_user(message)` to put its session in the home page's
+"Waiting for you" list — a question, approval, or FYI for the user. A user
+message in that session clears it; otherwise it waits indefinitely. Two
+Acme-only platform tools let you keep that list from accumulating dead
+requests:
+
+- **`ping_list()`** — every outstanding ping across the workforce, oldest
+  first, with the asking agent, the question text, and how long it's waited.
+- **`resolve_ping(sessionId, reason)`** — retire a request the user no longer
+  needs to answer (task canceled, situation moved on, answer now obvious). It
+  emits a `ping_resolved` event the waiting query treats as a clear, so the
+  row drops off the home page. This **withdraws** the question; it does not
+  answer it. Record a concrete reason — it's the audit trail of what got
+  auto-closed and why.
+
+Be conservative: a wrongly-closed real question is worse than a cluttered
+list. Close only what's genuinely moot; when unsure, leave it.
+
 ## SKILL.md format
 
 Skills live at `<dataDir>/skills/<name>/SKILL.md`. The name in the

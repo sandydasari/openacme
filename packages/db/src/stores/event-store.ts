@@ -167,6 +167,11 @@ export function createEventStore(db: WasmDatabase) {
      * for the operator's inbox. A user message at any time clears the
      * ping — the operator's presence is the resolution signal, no
      * strict "is this an answer to the question" matching.
+     *
+     * A later `ping_resolved` event clears the ping too: that's the
+     * proactive-close path (Acme withdraws a stale request the user no
+     * longer needs to answer). Symmetric to the user-message anti-join —
+     * either signal, whichever lands later, retires the ping.
      */
     unresolvedPingsBySession(): Array<{
       sessionId: string;
@@ -190,12 +195,12 @@ export function createEventStore(db: WasmDatabase) {
       >(`
         WITH latest_pings AS (
           SELECT
-            id, session_id, agent_id, payload, created_at,
+            id, session_id, agent_id, payload, created_at, rowid,
             ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC, rowid DESC) AS rn
           FROM task_events
           WHERE kind = 'ping_user' AND session_id IS NOT NULL
         )
-        SELECT id, session_id, agent_id, payload, created_at
+        SELECT id, session_id, agent_id, payload, created_at, rowid
         FROM latest_pings p
         WHERE p.rn = 1
           AND NOT EXISTS (
@@ -203,6 +208,13 @@ export function createEventStore(db: WasmDatabase) {
             WHERE m.session_id = p.session_id
               AND m.role = 'user'
               AND m.created_at > p.created_at
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM task_events r
+            WHERE r.session_id = p.session_id
+              AND r.kind = 'ping_resolved'
+              AND (r.created_at > p.created_at
+                   OR (r.created_at = p.created_at AND r.rowid > p.rowid))
           )
       `);
       const rows = stmt.all();

@@ -56,6 +56,11 @@ export {
   type PingUserEventEmit,
 } from "./builtins/ping.js";
 export {
+  bindPingAdmin,
+  type PingAdminBindings,
+  type UnresolvedPing,
+} from "./builtins/ping-admin.js";
+export {
   bindDeferSession,
   type DeferSessionBindings,
 } from "./builtins/defer-session.js";
@@ -89,6 +94,7 @@ import "./builtins/memory.js";
 import "./builtins/tasks.js";
 import "./builtins/agent.js";
 import "./builtins/ping.js";
+import "./builtins/ping-admin.js";
 import "./builtins/defer-session.js";
 import "./builtins/browser/index.js";
 import "./builtins/email/index.js";

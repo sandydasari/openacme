@@ -59,6 +59,7 @@ import {
   bindEmail,
   bindAgentTool,
   bindPingUser,
+  bindPingAdmin,
   bindDeferSession,
   bindToolHost,
   closeAllShellSessions,
@@ -325,6 +326,41 @@ export class AgentManager {
           actor: agentId,
           payload: { message },
         });
+      },
+    });
+
+    // Acme-only ping administration over the workforce-wide "Waiting for
+    // you" list. `list` surfaces every outstanding ping with its age;
+    // `resolve` retires one the user no longer needs to answer by emitting
+    // a `ping_resolved` event the waiting query treats as a clear.
+    bindPingAdmin({
+      list: () => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        return this.eventStore.unresolvedPingsBySession().map((p) => ({
+          sessionId: p.sessionId,
+          agentId: p.agentId,
+          agentName: this.agentStore.get(p.agentId)?.name ?? p.agentId,
+          sessionTitle: this.sessionStore.get(p.sessionId)?.title ?? null,
+          message: p.message,
+          ageSeconds: Math.max(0, nowSec - p.createdAt),
+        }));
+      },
+      resolve: (sessionId, reason, resolvedBy) => {
+        const ping = this.eventStore
+          .unresolvedPingsBySession()
+          .find((p) => p.sessionId === sessionId);
+        if (!ping) return null;
+        // `actor` = the waiting agent (not the resolver): closing a ping
+        // must not wake anyone, and echo-suppression keys off the event's
+        // own session. Resolver is recorded in the payload for the trail.
+        this.eventStore.append({
+          sessionId,
+          agentId: ping.agentId,
+          actor: ping.agentId,
+          kind: "ping_resolved",
+          payload: { resolvedBy, reason, message: ping.message },
+        });
+        return { agentId: ping.agentId, message: ping.message };
       },
     });
 

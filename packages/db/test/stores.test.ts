@@ -328,4 +328,55 @@ describe("EventStore — unresolvedPingsBySession (inbox resolution rule)", () =
     expect(unresolved).toHaveLength(1);
     expect(unresolved[0]!.sessionId).toBe(s2.id);
   });
+
+  it("filters out pings retired by a later ping_resolved event (proactive close)", async () => {
+    const { createEventStore } = await import("../src/stores/event-store.js");
+    const events = createEventStore(db);
+    const s = sessions.create("a1");
+    events.append({
+      sessionId: s.id,
+      agentId: "a1",
+      kind: "ping_user",
+      payload: { message: "still relevant?" },
+    });
+    // Acme withdraws it — no user message ever arrives.
+    events.append({
+      sessionId: s.id,
+      agentId: "a1",
+      actor: "a1",
+      kind: "ping_resolved",
+      payload: { resolvedBy: "acme", reason: "task canceled" },
+    });
+    const unresolved = events.unresolvedPingsBySession();
+    expect(unresolved).toHaveLength(0);
+  });
+
+  it("a ping_resolved before a newer ping does not clear the newer ping", async () => {
+    const { createEventStore } = await import("../src/stores/event-store.js");
+    const events = createEventStore(db);
+    const s = sessions.create("a1");
+    events.append({
+      sessionId: s.id,
+      agentId: "a1",
+      kind: "ping_user",
+      payload: { message: "first" },
+    });
+    events.append({
+      sessionId: s.id,
+      agentId: "a1",
+      actor: "a1",
+      kind: "ping_resolved",
+      payload: { resolvedBy: "acme", reason: "stale" },
+    });
+    await new Promise((r) => setTimeout(r, 1100));
+    events.append({
+      sessionId: s.id,
+      agentId: "a1",
+      kind: "ping_user",
+      payload: { message: "second — new question" },
+    });
+    const unresolved = events.unresolvedPingsBySession();
+    expect(unresolved).toHaveLength(1);
+    expect(unresolved[0]!.message).toBe("second — new question");
+  });
 });

@@ -29,6 +29,8 @@ tools:
   - execute_code
   - process
   - reload_config
+  - ping_list
+  - resolve_ping
 mcpServers: {}
 mcpDisabled: []
 # Platform-admin filesystem grants (resolved under the data dir). These let
@@ -162,6 +164,14 @@ Workflow: make all your edits first, then `reload_config` last (one call, not af
 The **one** thing `reload_config` can't apply is changing the server **host or port** (`config.yaml` → `server:`) — that's a live socket bind. It returns that in `restartRequired`; tell the user to `openacme restart` only in that case.
 
 (Changes made through the web **Settings UI** apply on their own — those are separate, explicit save actions. `reload_config` is specifically for the files *you* edit.)
+
+## Keeping the "Waiting for you" list honest
+
+The home page's "Waiting for you" list is every agent's open `ping_user` — questions, approvals, and FYIs aimed at the user. Normally only the user's reply clears one. But requests go stale: the task got canceled, the situation moved on, the answer became obvious, or the logic changed so the question no longer applies. A stale ping sits there demanding attention it no longer needs.
+
+You can prune it. `ping_list` shows every outstanding request with the asking agent, the question, and how long it's been waiting. When one is clearly moot, `resolve_ping(sessionId, reason)` retires it — the row drops off the home page and the user never has to answer a dead question. This withdraws the ask; it does not answer it.
+
+Be conservative: close only what's genuinely no longer needed, and always record a concrete reason ("task X was canceled", "the deploy window passed", "this was superseded by Y"). When in doubt whether the user still needs to weigh in, leave it — a wrongly-closed real question is worse than a slightly cluttered list. Sweep when the user asks you to tidy the waiting list, or when you notice a request you have independent reason to know is dead. If the user wants this on a cadence, file a recurring `task_create` on yourself to review and prune.
 
 ## Docs
 
