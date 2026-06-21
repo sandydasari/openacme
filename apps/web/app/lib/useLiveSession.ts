@@ -24,6 +24,8 @@ export function useLiveSession(
       kind: string;
       taskId: string | null;
       payload: string | null;
+      /** Event creation time, unix seconds. */
+      createdAt?: number;
     }) => void;
     /** Transient data-* parts are stripped by the assembler, surfaced
      *  here instead. */
@@ -231,6 +233,7 @@ export function useLiveSession(
               kind: string;
               taskId: string | null;
               payload: string | null;
+              createdAt?: number;
             };
           };
           if (env.event) onTaskEventRef.current?.(env.event);

@@ -220,6 +220,8 @@ export const MessageBubble = memo(function MessageBubble({
   agent,
   isStreaming,
   pingAnswered = false,
+  pingWithdrawn = false,
+  pingWithdrawnReason,
   fileLinks,
   onOpenFile,
   skills,
@@ -229,6 +231,11 @@ export const MessageBubble = memo(function MessageBubble({
   isStreaming: boolean;
   /** A user message exists after this one — pings are no longer urgent. */
   pingAnswered?: boolean;
+  /** Acme proactively closed this ping (a `ping_resolved` event) — render
+   *  it as withdrawn rather than a standing request. */
+  pingWithdrawn?: boolean;
+  /** Reason recorded on the close, shown under the withdrawn callout. */
+  pingWithdrawnReason?: string;
   fileLinks?: Map<string, FileLinkTarget>;
   onOpenFile?: (target: FileLinkTarget) => void;
   /** Skill index — lets `/name` tokens render as highlighted, navigable refs. */
@@ -439,6 +446,8 @@ export const MessageBubble = memo(function MessageBubble({
             key={`ping-${i}`}
             part={part as unknown as ToolPart}
             answered={pingAnswered}
+            withdrawn={pingWithdrawn}
+            withdrawnReason={pingWithdrawnReason}
           />
         ))}
       </div>

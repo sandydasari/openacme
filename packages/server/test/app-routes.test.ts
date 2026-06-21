@@ -267,6 +267,40 @@ describe("sessions", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns session-scoped events (ping_resolved) for the chat badge", async () => {
+    await createAgent();
+    const session = manager.sessionStore.create("helper");
+    manager.eventStore.append({
+      sessionId: session.id,
+      agentId: "helper",
+      kind: "ping_user",
+      payload: { message: "deploy now?" },
+    });
+    manager.eventStore.append({
+      sessionId: session.id,
+      agentId: "helper",
+      actor: "helper",
+      kind: "ping_resolved",
+      payload: { resolvedBy: "acme", reason: "window passed" },
+    });
+
+    const res = await req(`/api/sessions/${session.id}/events`);
+    expect(res.status).toBe(200);
+    const { events } = (await res.json()) as {
+      events: Array<{ kind: string; payload: string | null; createdAt: number }>;
+    };
+    const resolved = events.find((e) => e.kind === "ping_resolved");
+    expect(resolved).toBeTruthy();
+    expect(typeof resolved!.createdAt).toBe("number");
+    expect(JSON.parse(resolved!.payload!).reason).toBe("window passed");
+  });
+
+  it("session events endpoint is lazy on unknown sessions (empty, not 404)", async () => {
+    const res = await req("/api/sessions/does-not-exist/events");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ events: [] });
+  });
+
   it("queued-message cancel 404s on unknown sessions and reports cancelled=0 on drained ones", async () => {
     const unknown = await req("/api/sessions/nope/queued/m1", {
       method: "DELETE",

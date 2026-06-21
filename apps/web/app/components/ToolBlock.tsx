@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowUpRight, ChevronRight, Bell, Clock } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Bell, BellOff, Clock } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/app/lib/utils";
 import { Markdown } from "./Markdown";
@@ -121,10 +121,17 @@ function KnownToolBlock({
 export function PingUserCallout({
   part,
   answered = false,
+  withdrawn = false,
+  withdrawnReason,
 }: {
   part: ToolPart;
   /** A user message followed this ping — drop the urgent treatment. */
   answered?: boolean;
+  /** Acme proactively closed this request (it went stale). Takes priority
+   *  over `answered`; renders as withdrawn, not a standing question. */
+  withdrawn?: boolean;
+  /** Reason recorded on the close, shown as a footer note. */
+  withdrawnReason?: string;
 }) {
   const msg = isObj(part.input) ? str(part.input.message) : undefined;
   if (!msg) return <ToolBlock part={part} />;
@@ -135,38 +142,52 @@ export function PingUserCallout({
       : out
         ? str(out.error)
         : undefined;
+  // Urgent (red) only while genuinely open. Both answered and withdrawn
+  // are settled states and get the muted treatment.
+  const settled = answered || withdrawn;
+  const Icon = withdrawn ? BellOff : Bell;
+  const label = withdrawn
+    ? "Closed by Acme"
+    : answered
+      ? "Asked for input"
+      : "Needs your input";
   return (
     <div
       className={cn(
         "section-enter border",
-        answered ? "border-paper-rule" : "border-plot-red"
+        settled ? "border-paper-rule" : "border-plot-red"
       )}
     >
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-1.5",
-          answered ? "bg-paper-sunk" : "bg-plot-red/[0.06]"
+          settled ? "bg-paper-sunk" : "bg-plot-red/[0.06]"
         )}
       >
-        <Bell
+        <Icon
           className={cn(
             "size-3.5 shrink-0",
-            answered ? "text-ink-faint" : "text-plot-red"
+            settled ? "text-ink-faint" : "text-plot-red"
           )}
           aria-hidden
         />
         <span
           className={cn(
             "font-mono text-[10px] uppercase tracking-[0.08em]",
-            answered ? "text-ink-faint" : "text-plot-red"
+            settled ? "text-ink-faint" : "text-plot-red"
           )}
         >
-          {answered ? "Asked for input" : "Needs your input"}
+          {label}
         </span>
       </div>
       <div className="border-t border-paper-rule px-3 py-2 text-sm leading-relaxed text-ink break-words">
         <Markdown>{msg}</Markdown>
       </div>
+      {withdrawn && withdrawnReason && (
+        <div className="border-t border-paper-rule px-3 py-2 font-mono text-[11px] leading-snug text-ink-faint break-words">
+          Closed: {withdrawnReason}
+        </div>
+      )}
       {err && (
         <div className="border-t border-paper-rule px-3 py-2 font-mono text-[11px] leading-snug text-destructive whitespace-pre-wrap break-words">
           {err}
