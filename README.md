@@ -25,6 +25,7 @@ OpenAcme is an open-source, local-first, self-hosted **multi-agent AI platform**
 <img alt="pnpm" src="https://img.shields.io/badge/pnpm-9-f69220?logo=pnpm&logoColor=white">
 <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white">
 <img alt="macOS / Linux" src="https://img.shields.io/badge/os-macOS%20%2F%20Linux-black?logo=apple&logoColor=white">
+<a href="https://codeguilds.dev/packages/openacme"><img alt="Available on CodeGuilds" src="https://img.shields.io/badge/Available_on-CodeGuilds-6366f1?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDIgN2wxMCA1IDEwLTV6TTIgMTdsMTAgNSAxMC01TTIgMTJsMTAgNSAxMC01Ii8+PC9zdmc+"></a>
 
 <sub>`Local-first` · `Bring-your-own-model` · `MCP-native` · `Multi-agent`</sub>
 
