@@ -44,6 +44,24 @@ export function bindPingUser(b: PingUserBindings): void {
   bindings = b;
 }
 
+export interface WithdrawPingBindings {
+  /** Retire the calling agent's own outstanding ping on `sessionId`.
+   *  AgentManager scopes this to `agentId`'s own pings — an agent can
+   *  only withdraw a request it made. Returns the cleared message, or
+   *  null when this agent has no open ping on that session. */
+  withdraw: (
+    sessionId: string,
+    agentId: string,
+    reason: string
+  ) => { message: string } | null;
+}
+
+let withdrawBindings: WithdrawPingBindings | null = null;
+
+export function bindWithdrawPing(b: WithdrawPingBindings): void {
+  withdrawBindings = b;
+}
+
 const DESCRIPTION =
   "Bring the user into the loop. Use when you (a) genuinely need their input " +
   "(stuck, missing context, blocked on a credential, asking for approval on a " +
@@ -92,6 +110,67 @@ registry.register({
     try {
       bindings.emit({ sessionId, agentId, message });
       return JSON.stringify({ acknowledged: true });
+    } catch (e) {
+      return JSON.stringify({
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  },
+});
+
+const WITHDRAW_DESCRIPTION =
+  "Withdraw a request you made to the user with `ping_user` when it no " +
+  "longer needs an answer — the task was canceled, the situation moved on, " +
+  "or you've since worked out the answer yourself. This clears the request " +
+  "from the user's 'Waiting for you' list without them having to reply. It " +
+  "only acts on YOUR own outstanding ping in this session; you can't " +
+  "withdraw another agent's request. If you're still genuinely waiting on " +
+  "the user, leave it. Pass a one-line reason for the audit trail.";
+
+registry.register({
+  name: "withdraw_ping",
+  toolset: "system",
+  description: WITHDRAW_DESCRIPTION,
+  parameters: z.object({
+    reason: z
+      .string()
+      .min(1)
+      .describe(
+        "Why the request no longer needs the user — recorded on the close " +
+          "event so there's a trail of what was withdrawn and why."
+      ),
+  }),
+  emoji: "✅",
+  parallelSafe: false,
+  handler: async (args) => {
+    const { reason } = args as { reason: string };
+    if (!withdrawBindings) {
+      return JSON.stringify({
+        error:
+          "withdraw_ping not initialized — AgentManager must call bindWithdrawPing().",
+      });
+    }
+    const sessionId = getCurrentSessionId();
+    const agentId = getCurrentAgentId();
+    if (!sessionId || !agentId) {
+      return JSON.stringify({
+        error:
+          "withdraw_ping requires an active session + agent context (use during a turn).",
+      });
+    }
+    try {
+      const cleared = withdrawBindings.withdraw(sessionId, agentId, reason);
+      if (!cleared) {
+        return JSON.stringify({
+          withdrawn: false,
+          note: "No outstanding request from you on this session — nothing to withdraw (the user may have already replied).",
+        });
+      }
+      return JSON.stringify({
+        withdrawn: true,
+        closedQuestion: cleared.message,
+        reason,
+      });
     } catch (e) {
       return JSON.stringify({
         error: e instanceof Error ? e.message : String(e),

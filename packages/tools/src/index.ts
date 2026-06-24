@@ -52,8 +52,10 @@ export {
 } from "./builtins/agent.js";
 export {
   bindPingUser,
+  bindWithdrawPing,
   type PingUserBindings,
   type PingUserEventEmit,
+  type WithdrawPingBindings,
 } from "./builtins/ping.js";
 export {
   bindPingAdmin,

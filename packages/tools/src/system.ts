@@ -20,6 +20,7 @@ export const SYSTEM_TOOLS = [
   "task_comments",
   "agent_list",
   "ping_user",
+  "withdraw_ping",
   "defer_session",
 ] as const;
 

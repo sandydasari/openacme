@@ -190,7 +190,12 @@ const PING_USER_GUIDANCE =
   "`ping_user(message)` with the same text — the chat shows the message via " +
   "your response, the inbox surfaces it via the tool. Two paths, same string. " +
   "After calling, end the turn — the user's reply lands as a regular message " +
-  "that wakes you on its own.";
+  "that wakes you on its own.\n" +
+  "If you're later woken (the task you asked about was canceled, the situation " +
+  "moved on, or you've since worked out the answer yourself) and a request you " +
+  "made with ping_user no longer needs answering, call `withdraw_ping(reason)` " +
+  "to clear it from the user's 'Waiting for you' list. Only withdraw when it's " +
+  "genuinely moot — if you still need the answer, leave it standing.";
 
 const SLEEP_GUIDANCE =
   "`sleep(duration)` sets when the scheduler next probes this session if " +

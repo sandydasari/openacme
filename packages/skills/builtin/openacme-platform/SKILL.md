@@ -110,9 +110,14 @@ your edits and reload once at the end.
 
 Any agent calls `ping_user(message)` to put its session in the home page's
 "Waiting for you" list — a question, approval, or FYI for the user. A user
-message in that session clears it; otherwise it waits indefinitely. Two
-Acme-only platform tools let you keep that list from accumulating dead
-requests:
+message in that session clears it; otherwise it waits indefinitely.
+
+The asking agent is the first line of defense: every agent has
+`withdraw_ping(reason)` and is told to clear its own request when it's woken
+and the question has gone moot. So most stale pings self-heal at the source,
+where the context is. You are the **backstop** for the long tail — pings whose
+asking agent never wakes to revisit them. Two Acme-only platform tools let you
+keep that list from accumulating dead requests:
 
 - **`ping_list()`** — every outstanding ping across the workforce, oldest
   first, with the asking agent, the question text, and how long it's waited.
