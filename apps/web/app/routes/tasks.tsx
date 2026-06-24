@@ -27,6 +27,13 @@ import { TasksBoard } from "../tasks/board";
 import { TaskDetailPanel, type AgentOption } from "../tasks/detail";
 import { TaskListRow } from "../tasks/row";
 import {
+  DateRangeFilter,
+  EMPTY_DATE_RANGE,
+  dateRangeActive,
+  taskInDateRange,
+  type DateRange,
+} from "../tasks/date-filter";
+import {
   STATUS_LABEL,
   STATUS_ORDER,
   formatRelativeFromIso,
@@ -74,6 +81,7 @@ function TasksPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange>(EMPTY_DATE_RANGE);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "board";
     const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
@@ -323,12 +331,14 @@ function TasksPage() {
   const filtersActive =
     teamFilter !== "all" ||
     assigneeFilter !== "all" ||
-    query.trim() !== "";
+    query.trim() !== "" ||
+    dateRangeActive(dateRange);
 
   const clearFilters = () => {
     setTeamFilter("all");
     setAssigneeFilter("all");
     setQuery("");
+    setDateRange((r) => ({ ...r, from: null, to: null }));
   };
 
   const visibleTasks = useMemo(() => {
@@ -337,6 +347,7 @@ function TasksPage() {
       if (teamFilter !== "all" && t.team !== teamFilter) return false;
       if (assigneeFilter !== "all" && t.assignee !== assigneeFilter)
         return false;
+      if (!taskInDateRange((field) => t[field], dateRange)) return false;
       if (q) {
         const hay = `${t.title} #${t.id} ${t.assignee} ${t.team ?? ""} ${
           t.body ?? ""
@@ -345,7 +356,7 @@ function TasksPage() {
       }
       return true;
     });
-  }, [tasks, teamFilter, assigneeFilter, query]);
+  }, [tasks, teamFilter, assigneeFilter, query, dateRange]);
 
   const grouped = useMemo(() => {
     const out = new Map<TaskStatus, Task[]>();
@@ -455,6 +466,8 @@ function TasksPage() {
                   options={teams.map((t) => ({ value: t, label: t }))}
                 />
               )}
+
+              <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
               {/* Eats the slack so the count + view toggle pin right while
                   the search caps at max-w-xs. */}
