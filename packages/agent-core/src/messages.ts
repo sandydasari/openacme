@@ -241,19 +241,28 @@ export function inlineFileAttachments(
  *
  * Rewrite it to `output-error` so `convertToModelMessages` emits the
  * matching tool-result with an interrupt marker the model can see.
+ *
+ * Also backstops a missing `input`: a tool call aborted mid input-stream
+ * (or persisted by an older path) can carry no `input` at all. Anthropic
+ * requires every `tool_use` block to have an `input` object, so an absent
+ * one yields `tool_use.input: Field required` 400s on replay. Default it
+ * to `{}` for any tool part regardless of state.
  */
 const INTERRUPT_MARKER = "[interrupted]";
 export function finalizeOrphanToolParts(
   parts: UIMessage["parts"]
 ): UIMessage["parts"] {
   return parts.map((p) => {
-    const tp = p as { type?: string; state?: string };
+    const tp = p as { type?: string; state?: string; input?: unknown };
     if (!tp.type?.startsWith("tool-")) return p;
-    if (tp.state !== "input-streaming" && tp.state !== "input-available") return p;
+    const needsInput = tp.input === undefined || tp.input === null;
+    const isOrphan =
+      tp.state === "input-streaming" || tp.state === "input-available";
+    if (!isOrphan && !needsInput) return p;
     return {
       ...(p as object),
-      state: "output-error",
-      errorText: INTERRUPT_MARKER,
+      ...(needsInput ? { input: {} } : {}),
+      ...(isOrphan ? { state: "output-error", errorText: INTERRUPT_MARKER } : {}),
     } as UIMessage["parts"][number];
   });
 }
