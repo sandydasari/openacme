@@ -10,6 +10,7 @@ import { MobileTabBar } from "@/app/components/MobileTabBar";
 import { UpdateBanner } from "@/app/components/UpdateBanner";
 import { AcmePanel } from "@/app/components/AcmePanel";
 import { CurrentViewProvider } from "@/app/lib/CurrentViewContext";
+import { usePingSound } from "@/app/lib/usePingSound";
 import { AcmePanelProvider } from "@/app/lib/AcmePanelContext";
 import { API_BASE } from "@/app/lib/api";
 
@@ -77,6 +78,7 @@ function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function RootLayout() {
+  usePingSound();
   return (
     <TooltipProvider delayDuration={200}>
       <AuthFetch />
