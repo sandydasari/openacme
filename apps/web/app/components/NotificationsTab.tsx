@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Bell, BellOff, Trash2, Smartphone } from "lucide-react";
+import { Bell, BellOff, Trash2, Smartphone, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import {
   Card,
@@ -17,6 +17,8 @@ import {
   deleteDevice,
   type PushDevice,
 } from "@/app/lib/push";
+import { usePingSoundEnabled } from "@/app/lib/pingSoundPref";
+import { playPing } from "@/app/lib/sound";
 
 function formatRelative(ts: number): string {
   const ms = Date.now() - ts * 1000;
@@ -41,6 +43,7 @@ export function NotificationsTab() {
   const standalone = useIsStandalone();
   const isIos = useIsIos();
   const push = usePushSubscription();
+  const [soundEnabled, setSoundEnabled] = usePingSoundEnabled();
   const [devices, setDevices] = useState<PushDevice[] | null>(null);
   const [loadingDevices, setLoadingDevices] = useState(false);
 
@@ -154,6 +157,51 @@ export function NotificationsTab() {
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sound</CardTitle>
+          <CardDescription>
+            Play a short chime in this browser whenever an agent calls{" "}
+            <code className="border border-paper-rule bg-paper-sunk px-1 py-0.5 font-mono text-[11px] text-ink">ping_user</code>
+            , on any page. Works without a push subscription, but only while a
+            tab is open. The first chime after a fresh page load may be silent
+            until you&apos;ve interacted with the page once (browser autoplay
+            policy).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft">
+              Chime
+            </span>
+            <Badge variant={soundEnabled ? "default" : "secondary"}>
+              {soundEnabled ? "On" : "Off"}
+            </Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {soundEnabled ? (
+              <Button variant="outline" onClick={() => setSoundEnabled(false)}>
+                <VolumeX className="size-4" />
+                Mute ping sound
+              </Button>
+            ) : (
+              <Button onClick={() => setSoundEnabled(true)}>
+                <Volume2 className="size-4" />
+                Enable ping sound
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              onClick={() => playPing()}
+              disabled={!soundEnabled}
+            >
+              <Volume2 className="size-4" />
+              Test sound
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
