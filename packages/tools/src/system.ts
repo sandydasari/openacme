@@ -15,6 +15,7 @@ export const SYSTEM_TOOLS = [
   "task_list",
   "task_view",
   "task_create",
+  "task_plan",
   "task_update",
   "task_comment",
   "task_comments",

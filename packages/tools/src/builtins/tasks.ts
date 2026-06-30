@@ -94,6 +94,11 @@ function requireBindings(): TaskStoreBindings | { error: string } {
   return bindings;
 }
 
+// Exposed so sibling task tools (e.g. task_plan) share the one binding.
+export function requireTaskBindings(): TaskStoreBindings | { error: string } {
+  return requireBindings();
+}
+
 function frontmatterOnly(t: Task) {
   const { body: _body, ...rest } = t;
   void _body;
