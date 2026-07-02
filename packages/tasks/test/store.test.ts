@@ -1246,3 +1246,102 @@ describe("TaskStore event emission", () => {
     expect(s.get(t.id)?.status).toBe("in_progress");
   });
 });
+
+describe("TaskStore park + failure escalation", () => {
+  it("park bumps the failures counter and blocks with a retry floor", async () => {
+    const t = await store.create({
+      title: "flaky",
+      assignee: "worker",
+      created_by: "worker",
+    });
+    const retryAt = new Date(Date.now() + 5 * 60_000);
+    const parked = await store.park({ id: t.id, retryAt, reason: "[error] boom" });
+    expect(parked.status).toBe("blocked");
+    expect(parked.failures).toBe(1);
+    expect(parked.assignee).toBe("worker");
+    expect(parked.start_at).toBe(retryAt.toISOString());
+
+    const again = await store.park({ id: t.id, retryAt, reason: "[error] boom" });
+    expect(again.failures).toBe(2);
+  });
+
+  it("marking done resets the failures counter", async () => {
+    const t = await store.create({
+      title: "x",
+      assignee: "worker",
+      created_by: "worker",
+    });
+    await store.park({
+      id: t.id,
+      retryAt: new Date(Date.now() + 60_000),
+      reason: "[timeout] slow",
+    });
+    const done = await store.update(t.id, { status: "done" });
+    expect(done.failures).toBe(0);
+  });
+
+  it("escalating park reassigns to the team manager as open work", async () => {
+    const routed = new TaskStore(dir, {
+      resolveTeamManager: (team) => (team === "eng" ? "lead" : null),
+    });
+    const t = await routed.create({
+      title: "mis-scoped",
+      assignee: "worker",
+      created_by: "founder",
+      team: "eng",
+    });
+    const retryAt = new Date(Date.now() + 30 * 60_000);
+    const escalated = await routed.park({
+      id: t.id,
+      retryAt,
+      reason: "[error] boom",
+      escalate: true,
+    });
+    expect(escalated.assignee).toBe("lead");
+    // Open + start_at floor, not blocked — the new owner has no bound
+    // session, so it must flow through the normal readiness path.
+    expect(escalated.status).toBe("open");
+    expect(escalated.start_at).toBe(retryAt.toISOString());
+    // Reassignment resets the counter and clears the session.
+    expect(escalated.failures).toBe(0);
+    expect(escalated.session_id).toBeNull();
+  });
+
+  it("escalation falls back to the creator when there is no team manager", async () => {
+    const t = await store.create({
+      title: "x",
+      assignee: "worker",
+      created_by: "founder",
+    });
+    const escalated = await store.park({
+      id: t.id,
+      retryAt: new Date(Date.now() + 60_000),
+      reason: "[error] boom",
+      escalate: true,
+    });
+    expect(escalated.assignee).toBe("founder");
+    expect(escalated.status).toBe("open");
+  });
+
+  it("escalation with no distinct target keeps the assignee and stays blocked", async () => {
+    const t = await store.create({
+      title: "self-created",
+      assignee: "worker",
+      created_by: "worker",
+    });
+    await store.park({
+      id: t.id,
+      retryAt: new Date(Date.now() + 60_000),
+      reason: "[error] a",
+    });
+    const escalated = await store.park({
+      id: t.id,
+      retryAt: new Date(Date.now() + 60_000),
+      reason: "[error] b",
+      escalate: true,
+    });
+    expect(escalated.assignee).toBe("worker");
+    expect(escalated.status).toBe("blocked");
+    expect(escalated.failures).toBe(2);
+  });
+});

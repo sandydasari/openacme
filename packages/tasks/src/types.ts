@@ -92,6 +92,9 @@ export const TaskFrontmatterSchema = z
     recurrence: RecurrenceSchema.nullable().default(null),
     runs: z.number().int().nonnegative().default(0),
     last_run_at: NullableIso.default(null),
+    // Consecutive failed autonomous turns. Store-managed like `runs`:
+    // park() increments; success or reassignment resets to 0.
+    failures: z.number().int().nonnegative().default(0),
     // Organizational tag — groups work under a team (UI grouping, team
     // workspace conventions). No dispatch semantics: assignment and
     // wake-up are driven by `assignee` + `session_id` only.

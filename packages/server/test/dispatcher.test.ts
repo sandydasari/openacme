@@ -338,3 +338,47 @@ describe("Dispatcher recurring wake floor", () => {
     expect(calls).toEqual([{ agentId: "a1", sessionId: session.id }]);
   });
 });
+
+describe("Dispatcher failure escalation", () => {
+  it("escalates to the creator after the consecutive-failure cap", async () => {
+    // Turn behavior mirrors a real agent: claim the task, then die.
+    const { manager, calls } = fakeManager(["a1"], async (sessionId) => {
+      const t = taskStore.list({ session_id: sessionId })[0];
+      if (t && t.status !== "in_progress") {
+        await taskStore.update(t.id, { status: "in_progress" });
+      }
+      throw new Error("boom");
+    });
+    const session = sessionStore.create("a1");
+    const created = await taskStore.create({
+      title: "doomed",
+      assignee: "a1",
+      created_by: "boss",
+    });
+    await taskStore.update(created.id, {
+      session_id: session.id,
+      status: "in_progress",
+    });
+
+    const d = makeDispatcher(manager);
+    await d.start();
+    await d.drain(5_000);
+    expect(taskStore.get(created.id)?.failures).toBe(1);
+    expect(taskStore.get(created.id)?.status).toBe("blocked");
+
+    await tick(d);
+    expect(taskStore.get(created.id)?.failures).toBe(2);
+
+    await tick(d);
+    const after = taskStore.get(created.id)!;
+    expect(after.assignee).toBe("boss");
+    expect(after.status).toBe("open");
+    // Counter resets for the new owner; session unbinds for rebinding.
+    expect(after.failures).toBe(0);
+    expect(after.session_id).toBeNull();
+    // Escalated back-off is 30 minutes, not the 5-minute park.
+    const retryAt = Date.parse(after.start_at!);
+    expect(retryAt).toBeGreaterThan(Date.now() + 25 * 60_000);
+    expect(calls).toHaveLength(3);
+  });
+});

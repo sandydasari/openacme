@@ -40,6 +40,10 @@ const log = createLogger("server.dispatcher");
 const DEFAULT_TICK_MS = 60_000;
 /** Park-on-failure backoff. Same value the old TaskScheduler used. */
 const PARK_BACKOFF_MS = 5 * 60_000;
+/** Consecutive failures before parking escalates instead of blind-retrying. */
+const MAX_TASK_FAILURES = 3;
+/** Escalated back-off — a re-scope needs a triage turn, not a hot loop. */
+const ESCALATED_BACKOFF_MS = 30 * 60_000;
 
 export interface DispatcherOptions {
   taskStore: TaskStore;
@@ -450,14 +454,27 @@ export class Dispatcher {
       session_id: sessionId,
       status: "in_progress",
     });
-    const retryAt = new Date(this.now().getTime() + PARK_BACKOFF_MS);
     for (const task of inProg) {
+      // The store bumps the counter on park; +1 here mirrors what this
+      // park will make it. At the cap, hand off instead of blind-retry.
+      const escalate = (task.failures ?? 0) + 1 >= MAX_TASK_FAILURES;
+      const retryAt = new Date(
+        this.now().getTime() +
+          (escalate ? ESCALATED_BACKOFF_MS : PARK_BACKOFF_MS)
+      );
       try {
         await this.taskStore.park({
           id: task.id,
           retryAt,
           reason: `[${note.action}] ${note.message}`,
+          escalate,
         });
+        if (escalate) {
+          log.warn(
+            { taskId: task.id, failures: (task.failures ?? 0) + 1 },
+            "task hit consecutive-failure cap; escalated"
+          );
+        }
       } catch (e) {
         log.warn({ err: e, taskId: task.id }, "parkInProgress failed");
       }

@@ -479,6 +479,7 @@ export class TaskStore {
         recurrence,
         runs: 0,
         last_run_at: null,
+        failures: 0,
         team: input.team ?? null,
         body: input.body ?? "",
       };
@@ -509,7 +510,8 @@ export class TaskStore {
   async update(
     id: string,
     patch: TaskUpdate,
-    opts?: { actor?: string | null }
+    // `setFailures` is internal (park); not a caller-patchable field.
+    opts?: { actor?: string | null; setFailures?: number }
   ): Promise<Task> {
     const parsed = TaskUpdateInputSchema.safeParse(patch);
     if (!parsed.success) {
@@ -623,6 +625,12 @@ export class TaskStore {
 
       const nowDate = new Date();
       const now = nowDate.toISOString();
+      // Failure counter: success and reassignment both mean a fresh
+      // start — a stale count would instantly re-escalate the new owner.
+      let nextFailures = opts?.setFailures ?? existing.failures ?? 0;
+      if ((isClosing && nextStatus === "done") || reassigning) {
+        nextFailures = 0;
+      }
       let next: Task = {
         ...existing,
         title: patch.title ?? existing.title,
@@ -642,6 +650,7 @@ export class TaskStore {
         recurrence: effectiveRecurrence,
         runs: existing.runs ?? 0,
         last_run_at: existing.last_run_at ?? null,
+        failures: nextFailures,
         team: patch.team !== undefined ? patch.team : existing.team,
       };
 
@@ -806,24 +815,66 @@ export class TaskStore {
    * for both failure attribution (`parkInProgress`) and watchdog stalls
    * (`watchdogPark`). Single helper means the "blocked + back-off +
    * system note" pattern lives in one place.
+   *
+   * Every park bumps the task's consecutive-`failures` counter. With
+   * `escalate` the task is also handed off — team manager first, then
+   * the creator — so a mis-scoped task stops retrying identically with
+   * the same assignee; reassignment resets the counter for the new
+   * owner while the system comment preserves the history.
    */
   async park(input: {
     id: string;
     retryAt: Date;
     reason: string;
-  }): Promise<void> {
+    escalate?: boolean;
+  }): Promise<Task> {
+    const existing = this.get(input.id);
+    if (!existing) {
+      throw new TaskStoreError("not_found", `Task ${input.id} not found`);
+    }
+    const failures = (existing.failures ?? 0) + 1;
     const retryAtIso = input.retryAt.toISOString();
-    await this.update(
+
+    let target: string | null = null;
+    if (input.escalate) {
+      const manager = existing.team
+        ? this.resolveTeamManager?.(existing.team) ?? null
+        : null;
+      if (manager && manager !== existing.assignee) {
+        target = manager;
+      } else if (
+        existing.created_by !== existing.assignee &&
+        !existing.created_by.startsWith("system:")
+      ) {
+        target = existing.created_by;
+      }
+    }
+
+    // Escalation hands off as `open` (+ start_at floor), not `blocked`:
+    // blocked only nudges an already-bound session, and reassignment
+    // clears the session — the new owner would never be woken. Open +
+    // due start_at flows through the normal readiness/binding path.
+    const updated = await this.update(
       input.id,
-      { status: "blocked", start_at: retryAtIso },
-      { actor: "system:scheduler" }
+      target
+        ? { status: "open", start_at: retryAtIso, assignee: target }
+        : { status: "blocked", start_at: retryAtIso },
+      { actor: "system:scheduler", setFailures: failures }
     );
+    const body = target
+      ? `${input.reason} — ${failures} consecutive failed turn(s); escalated to ${target} for triage. ` +
+        `Don't retry as-is: re-scope (split with task_plan), reassign, or cancel. Retry not before ${retryAtIso}`
+      : input.escalate
+        ? `${input.reason} — ${failures} consecutive failed turn(s), no distinct agent to escalate to. ` +
+          `Don't retry as-is: re-scope (split with task_plan) or cancel. Retry not before ${retryAtIso}`
+        : `${input.reason} — retry not before ${retryAtIso}`;
     await this.addComment({
       taskId: input.id,
       author: "system:scheduler",
       kind: "system",
-      body: `${input.reason} — retry not before ${retryAtIso}`,
+      body,
     });
+    return updated;
   }
 
   async sweepStale(now: Date = new Date()): Promise<string[]> {
