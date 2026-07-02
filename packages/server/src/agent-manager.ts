@@ -516,6 +516,9 @@ export class AgentManager {
           id: def.id,
           name: def.name,
           role: def.role ?? "",
+          tools: def.tools ?? [],
+          skills: def.skills ?? [],
+          mcp_servers: Object.keys(def.mcpServers ?? {}),
         })),
       peerNoteFor: (callerId, peerId) => {
         // Defense in depth — agent ids in the store are SAFE_ID-validated

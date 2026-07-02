@@ -12,6 +12,13 @@ export interface AgentSummary {
   id: string;
   name: string;
   role: string;
+  /** Configured environment-touching tools (system tools omitted — every
+   *  agent has those). What differentiates coworkers for triage. */
+  tools?: string[];
+  /** Per-agent skill filter. Empty means all shared skills are exposed. */
+  skills?: string[];
+  /** Names of the agent's private MCP servers. */
+  mcp_servers?: string[];
 }
 
 export interface PeerNote {
@@ -67,7 +74,10 @@ function matchesQuery(a: AgentSummary, q: string): boolean {
   return (
     a.name.toLowerCase().includes(needle) ||
     a.role.toLowerCase().includes(needle) ||
-    a.id.toLowerCase().includes(needle)
+    a.id.toLowerCase().includes(needle) ||
+    (a.tools ?? []).some((t) => t.toLowerCase().includes(needle)) ||
+    (a.skills ?? []).some((s) => s.toLowerCase().includes(needle)) ||
+    (a.mcp_servers ?? []).some((m) => m.toLowerCase().includes(needle))
   );
 }
 
@@ -79,9 +89,13 @@ const TOOL_DESCRIPTION =
   "peer note saved at `peers/<id>.md`, its body is returned " +
   "inline as `peer_note` — that's your lived experience with this " +
   "coworker (from prior delegations), distinct from the canonical role. " +
+  "Each result also lists the peer's capabilities — `tools` (their " +
+  "configured environment-touching tools), `skills`, and `mcp_servers` " +
+  "(their private integrations) — so you can match work to who can " +
+  "actually do it (e.g. browser work needs browser_* tools). " +
   "Use this tool when you're about to delegate a task and aren't sure " +
   "who the right assignee is. Pass `query` to narrow the result by " +
-  "substring match over role/name/id.";
+  "substring match over role/name/id/tools/skills/mcp servers.";
 
 registry.register({
   name: "agent_list",
@@ -127,13 +141,19 @@ registry.register({
     const limited = filtered.slice(0, a.limit ?? DEFAULT_LIMIT);
 
     const enriched = limited.map((p) => {
-      const note = bindings!.peerNoteFor(callerId, p.id);
-      if (!note) return { id: p.id, name: p.name, role: p.role };
-      const { content, truncated } = truncateNote(note.content, p.id);
-      return {
+      const base = {
         id: p.id,
         name: p.name,
         role: p.role,
+        ...(p.tools ? { tools: p.tools } : {}),
+        ...(p.skills ? { skills: p.skills } : {}),
+        ...(p.mcp_servers ? { mcp_servers: p.mcp_servers } : {}),
+      };
+      const note = bindings!.peerNoteFor(callerId, p.id);
+      if (!note) return base;
+      const { content, truncated } = truncateNote(note.content, p.id);
+      return {
+        ...base,
         peer_note: {
           content,
           mtime: new Date(note.mtimeMs).toISOString(),

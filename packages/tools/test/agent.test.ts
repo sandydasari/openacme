@@ -137,3 +137,42 @@ describe("agent_list", () => {
     expect(sketchy?.peer_note).toBeUndefined();
   });
 });
+
+describe("agent_list capabilities", () => {
+  beforeEach(() => {
+    bindAgentTool({
+      listAgents: () => [
+        { id: "caller", name: "Caller", role: "" },
+        {
+          id: "qa",
+          name: "QA",
+          role: "Tester",
+          tools: ["shell", "browser_navigate", "browser_click"],
+          skills: ["playwright-cli"],
+          mcp_servers: ["figma"],
+        },
+        { id: "writer", name: "Writer", role: "Docs", tools: ["read_file"] },
+      ],
+      peerNoteFor: () => null,
+    });
+  });
+
+  it("surfaces tools, skills, and mcp_servers per agent", async () => {
+    const res = await runList({}, "caller");
+    expect(res.ok).toBe(true);
+    const qa = res.agents.find((a) => a.id === "qa") as Record<
+      string,
+      unknown
+    >;
+    expect(qa.tools).toEqual(["shell", "browser_navigate", "browser_click"]);
+    expect(qa.skills).toEqual(["playwright-cli"]);
+    expect(qa.mcp_servers).toEqual(["figma"]);
+  });
+
+  it("query matches over capabilities, not just name/role/id", async () => {
+    const byTool = await runList({ query: "browser" }, "caller");
+    expect(byTool.agents.map((a) => a.id)).toEqual(["qa"]);
+    const byMcp = await runList({ query: "figma" }, "caller");
+    expect(byMcp.agents.map((a) => a.id)).toEqual(["qa"]);
+  });
+});
