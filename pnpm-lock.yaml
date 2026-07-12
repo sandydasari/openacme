@@ -816,6 +816,9 @@ importers:
       '@openacme/memory':
         specifier: workspace:*
         version: link:../memory
+      '@openacme/pi-harness':
+        specifier: workspace:*
+        version: link:../pi-harness
       '@openacme/skills':
         specifier: workspace:*
         version: link:../skills
@@ -982,6 +985,9 @@ importers:
       '@openacme/memory':
         specifier: workspace:*
         version: link:../memory
+      '@openacme/pi-harness':
+        specifier: workspace:*
+        version: link:../pi-harness
       '@openacme/tasks':
         specifier: workspace:*
         version: link:../tasks

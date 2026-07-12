@@ -41,6 +41,7 @@
     "@openacme/config": "workspace:*",
     "@openacme/db": "workspace:*",
     "@openacme/browser": "workspace:*",
+    "@openacme/pi-harness": "workspace:*",
     "@openacme/email": "workspace:*",
     "@openacme/memory": "workspace:*",
     "@openacme/tasks": "workspace:*",

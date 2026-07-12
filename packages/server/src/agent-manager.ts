@@ -56,6 +56,7 @@ import {
   bindMemory,
   bindTaskStore,
   bindBrowser,
+  bindPi,
   bindEmail,
   bindAgentTool,
   bindPingUser,
@@ -76,6 +77,7 @@ import {
   createBrowserProvider,
   type AgentBrowserOverrides,
 } from "@openacme/browser";
+import { PiManager } from "@openacme/pi-harness";
 import { EmailManager } from "@openacme/email";
 import { Dispatcher } from "./dispatcher.js";
 import { SessionBroadcaster } from "./broadcaster.js";
@@ -100,7 +102,12 @@ import {
   openBrowser,
   looksHeadless,
 } from "@openacme/auth";
-import { HubError, SkillHub, SkillRegistry, type SkillIndexEntry } from "@openacme/skills";
+import {
+  HubError,
+  SkillHub,
+  SkillRegistry,
+  type SkillIndexEntry,
+} from "@openacme/skills";
 import {
   AgentCatalog,
   buildAgentFromTemplate,
@@ -191,6 +198,7 @@ export class AgentManager {
    *  tools. Lazy: nothing spawns until the first such tool call. */
   readonly toolHostManager: ToolHostManager;
   readonly browserManager: BrowserManager;
+  readonly piManager: PiManager;
   emailManager: EmailManager;
   readonly agentCatalog: AgentCatalog;
   /** In-memory per-session pub/sub for SSE clients. Shared by scheduler,
@@ -224,7 +232,7 @@ export class AgentManager {
 
   constructor(
     config: Config,
-    opts?: { resolveModel?: ModelResolver; tickIntervalMs?: number }
+    opts?: { resolveModel?: ModelResolver; tickIntervalMs?: number },
   ) {
     this.config = config;
     this.modelResolver = opts?.resolveModel;
@@ -395,7 +403,7 @@ export class AgentManager {
         } catch (e) {
           log.warn(
             { err: e, eventId: event.id, agentId },
-            "inboxStore.deliver failed — signal lost for this agent"
+            "inboxStore.deliver failed — signal lost for this agent",
           );
         }
       }
@@ -423,8 +431,11 @@ export class AgentManager {
       // calls ping_user.
       if (event.kind === "ping_user") {
         const message = readPingMessage(event.payload);
-        const agentName = this.agentStore.get(event.agentId)?.name ?? event.agentId;
-        const url = sessionId ? `/?session=${encodeURIComponent(sessionId)}` : "/";
+        const agentName =
+          this.agentStore.get(event.agentId)?.name ?? event.agentId;
+        const url = sessionId
+          ? `/?session=${encodeURIComponent(sessionId)}`
+          : "/";
         void this.pushDispatcher
           .dispatch({
             // Title = agent name; body = the actual ping message text.
@@ -446,7 +457,6 @@ export class AgentManager {
     // any task state shift on its next pass — at worst a 60-second
     // delay for state changes that don't fire an event (rare).
 
-
     // Browser: per-agent session via a pluggable provider. Local provider
     // spawns one Chrome per agent under `<dataDir>/agents/<id>/browser-profile/`;
     // cloud providers (browserbase / browser-use / firecrawl) create one
@@ -466,6 +476,18 @@ export class AgentManager {
         this.ensureBrowserOverridesAtAcquire(id, current),
     });
     bindBrowser({ manager: this.browserManager });
+
+    // Per-agent pi coding delegate. Opt-in tool (`pi`); each `start` spawns
+    // one `pi --mode rpc` subprocess that survives the OpenAcme turn so the
+    // agent can poll it across turns. resolveConfig reads the live config so
+    // reloadConfig applies to the next `start` with no rebind. Bound via the
+    // same placeholder pattern so @openacme/tools stays free of a runtime
+    // dep on @openacme/pi-harness.
+    this.piManager = new PiManager({
+      resolveConfig: () => this.config.pi,
+      resolveOverrides: (id) => this.agentStore.get(id)?.pi,
+    });
+    bindPi({ manager: this.piManager });
 
     // Per-agent email. Each agent binds its own mailbox in AGENT.md
     // (`email:` block); secrets live in `<agentDir>/email.json` (0600).
@@ -527,7 +549,7 @@ export class AgentManager {
         const file = path.join(
           this.memoryStore.dirPath(callerId),
           "peers",
-          `${peerId}.md`
+          `${peerId}.md`,
         );
         try {
           const st = fs.statSync(file);
@@ -535,10 +557,7 @@ export class AgentManager {
           return { content, mtimeMs: st.mtimeMs };
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-          log.warn(
-            { err: e, callerId, peerId },
-            "peerNoteFor read failed"
-          );
+          log.warn({ err: e, callerId, peerId }, "peerNoteFor read failed");
           return null;
         }
       },
@@ -599,7 +618,7 @@ export class AgentManager {
       if (swept.removed > 0) {
         log.info(
           { removed: swept.removed, bytes: swept.bytes },
-          "removed stale tool-overflow spill files"
+          "removed stale tool-overflow spill files",
         );
       }
     } catch (e) {
@@ -616,7 +635,7 @@ export class AgentManager {
     const knownAgentIds = new Set(this.agentStore.list().map((a) => a.id));
     const allSessions = this.sessionStore.listAllActive();
     const orphanSessions = allSessions.filter(
-      (s) => !knownAgentIds.has(s.agentId)
+      (s) => !knownAgentIds.has(s.agentId),
     );
     const orphanTasks = this.taskStore
       .list()
@@ -626,7 +645,10 @@ export class AgentManager {
       try {
         this.sessionStore.delete(s.id);
       } catch (e) {
-        log.warn({ err: e, sessionId: s.id }, "purgeOrphans: failed to drop session");
+        log.warn(
+          { err: e, sessionId: s.id },
+          "purgeOrphans: failed to drop session",
+        );
       }
     }
     // Tasks: best-effort delete with force. TaskStore.delete is async
@@ -640,12 +662,15 @@ export class AgentManager {
             actor: "system:purge-orphans",
           });
         } catch (e) {
-          log.warn({ err: e, taskId: t.id }, "purgeOrphans: failed to drop task");
+          log.warn(
+            { err: e, taskId: t.id },
+            "purgeOrphans: failed to drop task",
+          );
         }
       }
     })();
     console.log(
-      `Workforce GC: cleaned ${orphanSessions.length} orphan session(s) and ${orphanTasks.length} orphan task(s) from deleted agents.`
+      `Workforce GC: cleaned ${orphanSessions.length} orphan session(s) and ${orphanTasks.length} orphan task(s) from deleted agents.`,
     );
   }
 
@@ -661,9 +686,7 @@ export class AgentManager {
     // independently, so there's no shared state to serialize on. Cuts boot
     // time roughly N× for N agents pointing at the same servers.
     await Promise.all(
-      this.agentStore
-        .list()
-        .map((def) => this.queueMcpReinit(def.id))
+      this.agentStore.list().map((def) => this.queueMcpReinit(def.id)),
     );
   }
 
@@ -680,7 +703,7 @@ export class AgentManager {
     const next = prev
       .then(() => this.reinitMCPForAgent(id))
       .catch((e) =>
-        log.warn({ err: e, agentId: id }, "background MCP reinit failed")
+        log.warn({ err: e, agentId: id }, "background MCP reinit failed"),
       );
     this.mcpReinitTail.set(id, next);
     return next;
@@ -788,7 +811,7 @@ export class AgentManager {
         this.mcpDiscoveryCacheDir(),
         agentId,
         entry.configHash,
-        discovery
+        discovery,
       );
       if (JSON.stringify(discovery) === JSON.stringify(entry.discovery)) {
         this.stdioMcp.set(agentId, { ...entry, discovery, fromCache: false });
@@ -806,12 +829,12 @@ export class AgentManager {
       this.agents.delete(agentId);
       log.info(
         { agentId },
-        "stdio MCP discovery refreshed after worker spawn; cached schemas were stale"
+        "stdio MCP discovery refreshed after worker spawn; cached schemas were stale",
       );
     } catch (e) {
       log.warn(
         { err: e, agentId },
-        "post-spawn stdio MCP discovery refresh failed; keeping cached schemas"
+        "post-spawn stdio MCP discovery refresh failed; keeping cached schemas",
       );
     }
   }
@@ -884,7 +907,7 @@ export class AgentManager {
         const cached = loadMcpDiscoveryCache(
           this.mcpDiscoveryCacheDir(),
           id,
-          configHash
+          configHash,
         );
         let discovery: McpServerDiscovery[];
         let fromCache = false;
@@ -897,7 +920,7 @@ export class AgentManager {
             this.mcpDiscoveryCacheDir(),
             id,
             configHash,
-            discovery
+            discovery,
           );
         }
         const toolNames = this.registerStdioMcpTools(discovery);
@@ -905,7 +928,7 @@ export class AgentManager {
       } catch (e) {
         log.warn(
           { err: e, agentId: id },
-          "stdio MCP discovery via tool-host failed; agent comes up without those tools"
+          "stdio MCP discovery via tool-host failed; agent comes up without those tools",
         );
       }
     }
@@ -920,7 +943,9 @@ export class AgentManager {
   /**
    * MCP server status, optionally scoped to one agent.
    */
-  getMcpStatus(agentId?: string): Array<{ agentId: string; servers: ServerStatus[] }> {
+  getMcpStatus(
+    agentId?: string,
+  ): Array<{ agentId: string; servers: ServerStatus[] }> {
     const ids = agentId
       ? [agentId]
       : [...new Set([...this.mcpClients.keys(), ...this.stdioMcp.keys()])];
@@ -977,7 +1002,7 @@ export class AgentManager {
    * file specified one. The returned type narrows `model` to non-optional.
    */
   private withResolvedModel(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): AgentDefinition & { model: ModelConfig } {
     return def.model
       ? (def as AgentDefinition & { model: ModelConfig })
@@ -1001,9 +1026,7 @@ export class AgentManager {
   /**
    * Get an agent definition with its effective model resolved.
    */
-  getAgentDef(
-    id: string
-  ): (AgentDefinition & { model: ModelConfig }) | null {
+  getAgentDef(id: string): (AgentDefinition & { model: ModelConfig }) | null {
     const def = this.agentStore.get(id);
     return def ? this.withResolvedModel(def) : null;
   }
@@ -1051,7 +1074,7 @@ export class AgentManager {
    * cookie-sync + AGENT.md edit).
    */
   private async ensureAgentBrowserProfile(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): Promise<AgentDefinition> {
     const provider = this.config.browser.provider;
     if (provider === "browser-use") {
@@ -1074,7 +1097,7 @@ export class AgentManager {
    * profile so sessions stay ephemeral until the user attaches one later.
    */
   private async ensureBrowserUseProfile(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): Promise<AgentDefinition> {
     if (def.browser?.browserUse?.profileId) return def;
     const apiKey = process.env.BROWSER_USE_API_KEY;
@@ -1086,10 +1109,9 @@ export class AgentManager {
     // BROWSER_USE_PROFILES_BASE_URL wins for internal/proxied deployments.
     const baseUrl = (
       process.env.BROWSER_USE_PROFILES_BASE_URL ??
-      (process.env.BROWSER_USE_BASE_URL ?? "https://api.browser-use.com/api/v3").replace(
-        /\/api\/v\d+\/?$/,
-        "/api/v2"
-      )
+      (
+        process.env.BROWSER_USE_BASE_URL ?? "https://api.browser-use.com/api/v3"
+      ).replace(/\/api\/v\d+\/?$/, "/api/v2")
     ).replace(/\/+$/, "");
     try {
       const res = await fetch(`${baseUrl}/profiles`, {
@@ -1106,7 +1128,7 @@ export class AgentManager {
       if (!res.ok) {
         log.warn(
           { status: res.status, agentId: def.id },
-          "browser-use profile auto-create failed; agent will use ephemeral sessions"
+          "browser-use profile auto-create failed; agent will use ephemeral sessions",
         );
         return def;
       }
@@ -1114,13 +1136,13 @@ export class AgentManager {
       if (!data.id) {
         log.warn(
           { agentId: def.id },
-          "browser-use profile auto-create response missing id"
+          "browser-use profile auto-create response missing id",
         );
         return def;
       }
       log.info(
         { agentId: def.id, profileId: data.id },
-        "browser-use profile auto-provisioned"
+        "browser-use profile auto-provisioned",
       );
       return {
         ...def,
@@ -1132,7 +1154,7 @@ export class AgentManager {
     } catch (e) {
       log.warn(
         { err: e, agentId: def.id },
-        "browser-use profile auto-create errored"
+        "browser-use profile auto-create errored",
       );
       return def;
     }
@@ -1145,7 +1167,7 @@ export class AgentManager {
    * can rename it later. Idempotent.
    */
   private async ensureFirecrawlProfile(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): Promise<AgentDefinition> {
     if (def.browser?.firecrawl?.profileName) return def;
     return {
@@ -1163,7 +1185,7 @@ export class AgentManager {
    * context at start and write deltas back on release. Failure-tolerant.
    */
   private async ensureBrowserbaseContext(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): Promise<AgentDefinition> {
     if (def.browser?.browserbase?.contextId) return def;
     const apiKey = process.env.BROWSERBASE_API_KEY;
@@ -1186,7 +1208,7 @@ export class AgentManager {
       if (!res.ok) {
         log.warn(
           { status: res.status, agentId: def.id },
-          "browserbase context auto-create failed; agent will use ephemeral sessions"
+          "browserbase context auto-create failed; agent will use ephemeral sessions",
         );
         return def;
       }
@@ -1194,13 +1216,13 @@ export class AgentManager {
       if (!data.id) {
         log.warn(
           { agentId: def.id },
-          "browserbase context auto-create response missing id"
+          "browserbase context auto-create response missing id",
         );
         return def;
       }
       log.info(
         { agentId: def.id, contextId: data.id },
-        "browserbase context auto-provisioned"
+        "browserbase context auto-provisioned",
       );
       return {
         ...def,
@@ -1212,7 +1234,7 @@ export class AgentManager {
     } catch (e) {
       log.warn(
         { err: e, agentId: def.id },
-        "browserbase context auto-create errored"
+        "browserbase context auto-create errored",
       );
       return def;
     }
@@ -1230,7 +1252,7 @@ export class AgentManager {
    * are server-managed; no explicit delete needed.
    */
   private async releaseAgentBrowserIdentity(
-    def: AgentDefinition
+    def: AgentDefinition,
   ): Promise<void> {
     const provider = this.config.browser.provider;
     if (provider === "browserbase" && def.browser?.browserbase?.contextId) {
@@ -1249,18 +1271,18 @@ export class AgentManager {
         if (!res.ok) {
           log.warn(
             { status: res.status, agentId: def.id, contextId },
-            "browserbase context delete failed; orphan left in dashboard"
+            "browserbase context delete failed; orphan left in dashboard",
           );
         } else {
           log.info(
             { agentId: def.id, contextId },
-            "browserbase context released"
+            "browserbase context released",
           );
         }
       } catch (e) {
         log.warn(
           { err: e, agentId: def.id, contextId },
-          "browserbase context delete errored; orphan left in dashboard"
+          "browserbase context delete errored; orphan left in dashboard",
         );
       }
     }
@@ -1275,7 +1297,7 @@ export class AgentManager {
    */
   private async ensureBrowserOverridesAtAcquire(
     agentId: string,
-    current: AgentBrowserOverrides | undefined
+    current: AgentBrowserOverrides | undefined,
   ): Promise<AgentBrowserOverrides | undefined> {
     const provider = this.config.browser.provider;
     // Already-set guards per provider — cheap shortcut to avoid a store read
@@ -1305,7 +1327,7 @@ export class AgentManager {
    */
   async updateAgent(
     id: string,
-    updates: Partial<AgentDefinition>
+    updates: Partial<AgentDefinition>,
   ): Promise<AgentDefinition> {
     const existing = this.agentStore.get(id);
     if (!existing) throw new Error(`Agent not found: ${id}`);
@@ -1381,7 +1403,7 @@ export class AgentManager {
         .filter((t) => t.status !== "done" && t.status !== "canceled");
       if (open.length > 0) {
         throw new Error(
-          `Cannot archive team '${id}': ${open.length} open task${open.length === 1 ? "" : "s"} still tagged to it (e.g. #${open[0]!.id} "${open[0]!.title}"). Close or cancel them first.`
+          `Cannot archive team '${id}': ${open.length} open task${open.length === 1 ? "" : "s"} still tagged to it (e.g. #${open[0]!.id} "${open[0]!.title}"). Close or cancel them first.`,
         );
       }
     }
@@ -1441,7 +1463,21 @@ export class AgentManager {
     try {
       await this.browserManager.closeAgent(id);
     } catch (e) {
-      log.warn({ err: e, agentId: id }, "deleteAgent: failed to close browser session");
+      log.warn(
+        { err: e, agentId: id },
+        "deleteAgent: failed to close browser session",
+      );
+    }
+
+    // Kill any pi delegations this agent still holds so their subprocesses
+    // don't outlive the agent (and don't block on-disk cleanup).
+    try {
+      await this.piManager.closeAgent(id);
+    } catch (e) {
+      log.warn(
+        { err: e, agentId: id },
+        "deleteAgent: failed to close pi delegations",
+      );
     }
 
     // Drop any per-agent email session. The agent's email.json (secrets)
@@ -1449,7 +1485,10 @@ export class AgentManager {
     try {
       await this.emailManager.closeAgent(id);
     } catch (e) {
-      log.warn({ err: e, agentId: id }, "deleteAgent: failed to close email session");
+      log.warn(
+        { err: e, agentId: id },
+        "deleteAgent: failed to close email session",
+      );
     }
 
     // Sessions: list cross-agent leaves then filter; SessionStore.list
@@ -1462,7 +1501,7 @@ export class AgentManager {
       } catch (e) {
         log.warn(
           { err: e, sessionId: s.id, agentId: id },
-          "deleteAgent: failed to drop session"
+          "deleteAgent: failed to drop session",
         );
       }
     }
@@ -1492,7 +1531,7 @@ export class AgentManager {
       } catch (e) {
         log.warn(
           { err: e, taskId: t.id, agentId: id },
-          "deleteAgent: failed to drop task"
+          "deleteAgent: failed to drop task",
         );
       }
     }
@@ -1540,7 +1579,11 @@ export class AgentManager {
    */
   async importAgentFromTemplate(
     templateId: string,
-    opts: { idOverride?: string; nameOverride?: string; overrides?: Partial<AgentDefinition> }
+    opts: {
+      idOverride?: string;
+      nameOverride?: string;
+      overrides?: Partial<AgentDefinition>;
+    },
   ): Promise<{ agent: AgentDefinition; manifest: ImportManifest }> {
     const template = this.agentCatalog.get(templateId);
     if (!template) {
@@ -1587,9 +1630,7 @@ export class AgentManager {
    * when the registry has a stale view (e.g. skill files removed by hand
    * since boot). Always call install and translate the outcome.
    */
-  private async installTemplateDependencies(
-    template: AgentTemplate
-  ): Promise<{
+  private async installTemplateDependencies(template: AgentTemplate): Promise<{
     skills: ImportManifest["workforce"]["skills"];
     mcpServers: ImportManifest["workforce"]["mcpServers"];
   }> {
@@ -1651,7 +1692,7 @@ export class AgentManager {
    */
   private copyTemplateResources(
     template: AgentTemplate,
-    agentId: string
+    agentId: string,
   ): Array<{ relPath: string; size: number }> {
     const dir = this.agentStore.agentDir(agentId);
     if (!dir) return [];
@@ -1665,7 +1706,7 @@ export class AgentManager {
       } catch (err) {
         log.warn(
           { err, relPath: r.relPath, dest },
-          "agent-catalog: copy resource failed"
+          "agent-catalog: copy resource failed",
         );
       }
     }
@@ -1732,7 +1773,7 @@ export class AgentManager {
         const fresh = buildAgentFromTemplate(
           template,
           { idOverride: targetId },
-          existingIds
+          existingIds,
         );
         this.agentStore.upsert(fresh);
         this.copyTemplateResources(template, fresh.id);
@@ -1766,9 +1807,12 @@ export class AgentManager {
     await Promise.all(
       builtinEntries.map((entry) =>
         hub.update(entry.name).catch((err) => {
-          log.warn({ err, skill: entry.name }, "failed to refresh bundled skill");
-        })
-      )
+          log.warn(
+            { err, skill: entry.name },
+            "failed to refresh bundled skill",
+          );
+        }),
+      ),
     );
   }
 
@@ -1861,7 +1905,7 @@ export class AgentManager {
           name: this.config.browser.provider,
           dataDir: this.config.dataDir,
           config: this.config.browser,
-        })
+        }),
       );
     }
 
@@ -1914,7 +1958,7 @@ export class AgentManager {
         skillsIndex = filtered
           .map(
             (e: SkillIndexEntry) =>
-              `- **${e.name}**: ${e.description}${e.tags.length > 0 ? ` [${e.tags.join(", ")}]` : ""}`
+              `- **${e.name}**: ${e.description}${e.tags.length > 0 ? ` [${e.tags.join(", ")}]` : ""}`,
           )
           .join("\n");
       }
@@ -1937,7 +1981,7 @@ export class AgentManager {
     // "model is required" deep in the stream path.
     if (!effectiveModel.provider || !effectiveModel.model) {
       throw new Error(
-        "No model configured. Add an API key or sign in via OAuth in Settings."
+        "No model configured. Add an API key or sign in via OAuth in Settings.",
       );
     }
     // Look up the agent's model in the bundled registry once at
@@ -1983,7 +2027,7 @@ export class AgentManager {
     // can't see the agent at tool-list build time.
     const emailTools = new Set<string>(EMAIL_TOOL_NAMES);
     const effectiveTools = Array.from(
-      new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS])
+      new Set([...def.tools, ...mcpToolNames, ...SYSTEM_TOOLS]),
     ).filter((t) => def.email || !emailTools.has(t));
 
     const agentConfig: AgentConfig = {
@@ -2120,7 +2164,7 @@ export class AgentManager {
   private mcpTokenStore(): MCPTokenStore {
     if (!this._mcpTokenStore) {
       this._mcpTokenStore = new FileMCPTokenStore(
-        path.join(this.config.dataDir, "mcp-tokens")
+        path.join(this.config.dataDir, "mcp-tokens"),
       );
     }
     return this._mcpTokenStore;
@@ -2189,6 +2233,7 @@ export class AgentManager {
     closeAllShellSessions();
     await this.toolHostManager.close();
     await this.browserManager.close();
+    await this.piManager.close();
     await this.emailManager.close();
     this.db.close();
   }
@@ -2199,10 +2244,13 @@ function hasOwn<T extends object>(obj: T, key: PropertyKey): boolean {
 }
 
 /** Error thrown when a caller attempts to mutate a platform-managed agent. */
-export function managedAgentError(id: string, action: "edited" | "deleted"): Error {
+export function managedAgentError(
+  id: string,
+  action: "edited" | "deleted",
+): Error {
   return new Error(
     `Agent '${id}' is platform-managed and cannot be ${action}. ` +
-      `Set managed: false in AGENT.md if you want to take ownership.`
+      `Set managed: false in AGENT.md if you want to take ownership.`,
   );
 }
 

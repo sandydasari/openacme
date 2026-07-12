@@ -1,5 +1,10 @@
 export { ToolRegistry, registry } from "./registry.js";
-export type { ToolEntry, ToolSchema, ToolDefinition, ToolInfo } from "./types.js";
+export type {
+  ToolEntry,
+  ToolSchema,
+  ToolDefinition,
+  ToolInfo,
+} from "./types.js";
 export {
   bindSessionSearch,
   type SessionSearchBindings,
@@ -27,18 +32,13 @@ export {
   closeShellSession,
   closeAllShellSessions,
 } from "./internal/shell-session.js";
-export {
-  bindMemory,
-  type MemoryBindings,
-} from "./builtins/memory.js";
-export {
-  bindTaskStore,
-  type TaskStoreBindings,
-} from "./builtins/tasks.js";
+export { bindMemory, type MemoryBindings } from "./builtins/memory.js";
+export { bindTaskStore, type TaskStoreBindings } from "./builtins/tasks.js";
 export {
   bindBrowser,
   type BrowserBindings,
 } from "./builtins/browser/bindings.js";
+export { bindPi, type PiBindings } from "./builtins/pi/bindings.js";
 export {
   bindEmail,
   EMAIL_TOOL_NAMES,
@@ -91,4 +91,5 @@ import "./builtins/agent.js";
 import "./builtins/ping.js";
 import "./builtins/defer-session.js";
 import "./builtins/browser/index.js";
+import "./builtins/pi/index.js";
 import "./builtins/email/index.js";

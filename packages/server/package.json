@@ -45,6 +45,7 @@
     "@openacme/agent-core": "workspace:*",
     "@openacme/auth": "workspace:*",
     "@openacme/browser": "workspace:*",
+    "@openacme/pi-harness": "workspace:*",
     "@openacme/config": "workspace:*",
     "@openacme/email": "workspace:*",
     "@openacme/db": "workspace:*",
