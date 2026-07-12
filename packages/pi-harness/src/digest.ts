@@ -94,7 +94,8 @@ export class PiDigest {
       case "agent_end": {
         this.endThinkingBurst();
         this.flushText();
-        if (ev.type === "agent_settled" || !this.settled) {
+        // pi emits both agent_end and agent_settled at quiescence — mark once.
+        if (!this.settled) {
           this.settled = true;
           this.appendLine(`[agent settled after ${this.turnCount} turn(s)]`);
         }
