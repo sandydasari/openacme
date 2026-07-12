@@ -16,7 +16,8 @@ export type SkillSourceId =
   | "lobehub"
   | "skills-sh"
   | "clawhub"
-  | "builtin";
+  | "builtin"
+  | "pi-package";
 
 export type TrustLevel = "trusted" | "community";
 
@@ -54,20 +55,24 @@ export interface SkillSource {
   readonly id: SkillSourceId;
   search(
     query: string,
-    opts?: { limit?: number; signal?: AbortSignal }
+    opts?: { limit?: number; signal?: AbortSignal },
   ): Promise<SkillMeta[]>;
   inspect(
     identifier: string,
-    opts?: { signal?: AbortSignal }
+    opts?: { signal?: AbortSignal },
   ): Promise<SkillMeta | null>;
   fetch(
     identifier: string,
-    opts?: { signal?: AbortSignal }
+    opts?: { signal?: AbortSignal },
   ): Promise<SkillBundle | null>;
   trustLevelFor(identifier: string): TrustLevel;
 }
 
-export type TapSource = "github" | "claude-marketplace" | "well-known" | "local";
+export type TapSource =
+  | "github"
+  | "claude-marketplace"
+  | "well-known"
+  | "local";
 
 export interface Tap {
   source: TapSource;

@@ -17,15 +17,12 @@ import { ClaudeMarketplaceSource } from "./sources/claude-marketplace.js";
 import { WellKnownSource } from "./sources/well-known.js";
 import { LocalSource } from "./sources/local.js";
 import { GitUrlSource } from "./sources/git-url.js";
+import { PiPackageSource } from "./sources/pi-package.js";
 import { LobeHubSource } from "./sources/lobehub.js";
 import { SkillsShSource } from "./sources/skills-sh.js";
 import { ClawHubSource } from "./sources/clawhub.js";
 import { BuiltinSource } from "./sources/builtin.js";
-import {
-  hubDir,
-  skillTargetDir,
-  stagingDir,
-} from "./paths.js";
+import { hubDir, skillTargetDir, stagingDir } from "./paths.js";
 import {
   InvalidBundlePathError,
   validateBundlePath,
@@ -48,7 +45,10 @@ const MAX_TOTAL_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 200;
 
 export class HubError extends Error {
-  constructor(message: string, public readonly code: string) {
+  constructor(
+    message: string,
+    public readonly code: string,
+  ) {
     super(message);
     this.name = "HubError";
   }
@@ -84,6 +84,7 @@ export class SkillHub {
   private readonly wellKnown: WellKnownSource;
   private readonly local: LocalSource;
   private readonly gitUrl: GitUrlSource;
+  private readonly piPackage: PiPackageSource;
   private readonly lobehub: LobeHubSource;
   private readonly skillsSh: SkillsShSource;
   private readonly clawhub: ClawHubSource;
@@ -91,23 +92,26 @@ export class SkillHub {
 
   constructor(
     private readonly skillsDir: string,
-    private readonly registry: SkillRegistry
+    private readonly registry: SkillRegistry,
   ) {
     this.lockfile = new HubLockFile(skillsDir);
     this.taps = new TapsManager(skillsDir);
     this.cache = new IndexCache(skillsDir);
     this.auth = new GitHubAuth();
-    this.github = new GitHubSource(this.auth, this.cache, () => this.taps.list());
+    this.github = new GitHubSource(this.auth, this.cache, () =>
+      this.taps.list(),
+    );
     this.url = new UrlSource();
     this.marketplace = new ClaudeMarketplaceSource(
       this.github,
       this.auth,
       this.cache,
-      () => this.taps.list()
+      () => this.taps.list(),
     );
     this.wellKnown = new WellKnownSource(this.cache, () => this.taps.list());
     this.local = new LocalSource(() => this.taps.list());
     this.gitUrl = new GitUrlSource();
+    this.piPackage = new PiPackageSource();
     this.lobehub = new LobeHubSource(this.cache);
     this.skillsSh = new SkillsShSource(this.github, this.cache, this.auth);
     this.clawhub = new ClawHubSource(this.cache);
@@ -137,7 +141,7 @@ export class SkillHub {
             return [] as SkillMeta[];
           })
           .finally(() => clearTimeout(timer));
-      })
+      }),
     );
 
     for (const part of parts) {
@@ -154,22 +158,30 @@ export class SkillHub {
 
   async inspect(
     identifier: string,
-    opts: { source?: SkillSourceId; signal?: AbortSignal } = {}
+    opts: { source?: SkillSourceId; signal?: AbortSignal } = {},
   ): Promise<SkillMeta | null> {
-    const source = await this.resolveSource(identifier, opts.source, opts.signal);
+    const source = await this.resolveSource(
+      identifier,
+      opts.source,
+      opts.signal,
+    );
     if (!source) return null;
     return source.inspect(identifier, { signal: opts.signal });
   }
 
   async install(
     identifier: string,
-    opts: InstallOptions = {}
+    opts: InstallOptions = {},
   ): Promise<InstallResult> {
-    const source = await this.resolveSource(identifier, opts.source, opts.signal);
+    const source = await this.resolveSource(
+      identifier,
+      opts.source,
+      opts.signal,
+    );
     if (!source) {
       throw new HubError(
         `no source could resolve identifier: ${identifier}`,
-        "NO_SOURCE"
+        "NO_SOURCE",
       );
     }
 
@@ -185,7 +197,7 @@ export class SkillHub {
       });
       throw new HubError(
         `fetch failed: ${err instanceof Error ? err.message : String(err)}`,
-        "FETCH_FAILED"
+        "FETCH_FAILED",
       );
     }
     if (!bundle) {
@@ -195,7 +207,10 @@ export class SkillHub {
         outcome: "error",
         reason: "source returned no bundle",
       });
-      throw new HubError(`source returned no bundle for: ${identifier}`, "EMPTY_BUNDLE");
+      throw new HubError(
+        `source returned no bundle for: ${identifier}`,
+        "EMPTY_BUNDLE",
+      );
     }
 
     // Validate bundle shape.
@@ -216,7 +231,7 @@ export class SkillHub {
       });
       throw new HubError(
         `SKILL.md frontmatter could not be parsed: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
-        "FRONTMATTER_INVALID"
+        "FRONTMATTER_INVALID",
       );
     }
     const fm = (fmRaw ?? {}) as Record<string, unknown>;
@@ -240,7 +255,7 @@ export class SkillHub {
     if (existing && !fs.existsSync(target)) {
       log.warn(
         { skill: candidateName },
-        "healing stale lockfile entry — target dir missing"
+        "healing stale lockfile entry — target dir missing",
       );
       this.lockfile.remove(candidateName);
       existing = undefined;
@@ -248,7 +263,7 @@ export class SkillHub {
     if (existing && !opts.force) {
       throw new HubError(
         `skill '${candidateName}' is already installed (use force to overwrite)`,
-        "ALREADY_INSTALLED"
+        "ALREADY_INSTALLED",
       );
     }
     if (!existing && fs.existsSync(target)) {
@@ -258,7 +273,7 @@ export class SkillHub {
       // there. Operator must remove the local skill first.
       throw new HubError(
         `skill '${candidateName}' exists locally (not hub-managed) — remove it first with 'skills remove ${candidateName}'`,
-        "LOCAL_SKILL_EXISTS"
+        "LOCAL_SKILL_EXISTS",
       );
     }
 
@@ -266,7 +281,7 @@ export class SkillHub {
     fs.mkdirSync(stagingRoot, { recursive: true });
     const staging = path.join(
       stagingRoot,
-      `${candidateName}.${process.pid}.${Date.now()}.${crypto.randomUUID().slice(0, 8)}`
+      `${candidateName}.${process.pid}.${Date.now()}.${crypto.randomUUID().slice(0, 8)}`,
     );
     fs.mkdirSync(staging, { recursive: true });
 
@@ -281,7 +296,9 @@ export class SkillHub {
           !destReal.startsWith(path.resolve(staging) + path.sep) &&
           destReal !== path.resolve(staging)
         ) {
-          throw new InvalidBundlePathError(`path escapes staging: ${f.relPath}`);
+          throw new InvalidBundlePathError(
+            `path escapes staging: ${f.relPath}`,
+          );
         }
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.writeFileSync(dest, Buffer.from(f.bytes));
@@ -293,7 +310,7 @@ export class SkillHub {
           // Shouldn't happen — caught above, but guard anyway.
           throw new HubError(
             `target exists: ${candidateName}`,
-            "ALREADY_INSTALLED"
+            "ALREADY_INSTALLED",
           );
         }
         fs.rmSync(target, { recursive: true, force: true });
@@ -342,13 +359,21 @@ export class SkillHub {
     });
     this.registry.loadFromDirectory(this.skillsDir);
 
-    return { name: candidateName, contentHash: bundle.contentHash, lockEntry: entry };
+    return {
+      name: candidateName,
+      contentHash: bundle.contentHash,
+      lockEntry: entry,
+    };
   }
 
   async update(
     name: string | undefined,
-    opts: { signal?: AbortSignal } = {}
-  ): Promise<{ updated: string[]; unchanged: string[]; failed: Array<{ name: string; reason: string }> }> {
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<{
+    updated: string[];
+    unchanged: string[];
+    failed: Array<{ name: string; reason: string }>;
+  }> {
     const targets = name ? [name] : this.lockfile.list().map((e) => e.name);
     const updated: string[] = [];
     const unchanged: string[] = [];
@@ -365,7 +390,9 @@ export class SkillHub {
         }
         try {
           const source = this.sourceById(entry.source);
-          const bundle = await source.fetch(entry.identifier, { signal: opts.signal });
+          const bundle = await source.fetch(entry.identifier, {
+            signal: opts.signal,
+          });
           if (!bundle) return { n, kind: "empty" as const, entry };
           return { n, kind: "fetched" as const, entry, bundle };
         } catch (err) {
@@ -376,7 +403,7 @@ export class SkillHub {
             reason: err instanceof Error ? err.message : String(err),
           };
         }
-      })
+      }),
     );
 
     for (const r of checks) {
@@ -509,28 +536,43 @@ export class SkillHub {
 
   private sourceById(id: SkillSourceId): SkillSource {
     switch (id) {
-      case "github": return this.github;
-      case "url": return this.url;
-      case "claude-marketplace": return this.marketplace;
-      case "well-known": return this.wellKnown;
-      case "local": return this.local;
-      case "git-url": return this.gitUrl;
-      case "lobehub": return this.lobehub;
-      case "skills-sh": return this.skillsSh;
-      case "clawhub": return this.clawhub;
-      case "builtin": return this.builtin;
+      case "github":
+        return this.github;
+      case "url":
+        return this.url;
+      case "claude-marketplace":
+        return this.marketplace;
+      case "well-known":
+        return this.wellKnown;
+      case "local":
+        return this.local;
+      case "git-url":
+        return this.gitUrl;
+      case "lobehub":
+        return this.lobehub;
+      case "skills-sh":
+        return this.skillsSh;
+      case "clawhub":
+        return this.clawhub;
+      case "builtin":
+        return this.builtin;
+      case "pi-package":
+        return this.piPackage;
     }
   }
 
   private async resolveSource(
     identifier: string,
     explicit?: SkillSourceId,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<SkillSource | null> {
     if (explicit) return this.sourceById(explicit);
     // Explicit prefixes win before any URL/path heuristic.
     if (identifier.startsWith("well-known:")) return this.wellKnown;
     if (identifier.startsWith("lobehub/")) return this.lobehub;
+    // pi packages are opt-in via the `pi:` prefix so a bare owner/repo still
+    // routes to GitHub; the prefix disambiguates "install this as a pi pkg".
+    if (identifier.startsWith("pi:")) return this.piPackage;
     if (this.gitUrl.looksLikeGitUrl(identifier)) return this.gitUrl;
     // Absolute local-fs path → LocalSource (used by import endpoints).
     if (identifier.startsWith("/") || /^[A-Za-z]:[\\/]/.test(identifier)) {
@@ -559,7 +601,7 @@ export class SkillHub {
     if (bundle.files.length > MAX_FILES) {
       throw new HubError(
         `bundle has too many files (${bundle.files.length} > ${MAX_FILES})`,
-        "TOO_MANY_FILES"
+        "TOO_MANY_FILES",
       );
     }
     let total = 0;
@@ -570,7 +612,7 @@ export class SkillHub {
     if (total > MAX_TOTAL_BYTES) {
       throw new HubError(
         `bundle exceeds ${MAX_TOTAL_BYTES} bytes (got ${total})`,
-        "TOO_LARGE"
+        "TOO_LARGE",
       );
     }
     if (!bundle.files.some((f) => f.relPath === "SKILL.md")) {

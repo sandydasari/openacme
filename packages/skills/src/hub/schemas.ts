@@ -11,6 +11,7 @@ const SkillSourceIdSchema = z.enum([
   "skills-sh",
   "clawhub",
   "builtin",
+  "pi-package",
 ]);
 const TrustLevelSchema = z.enum(["trusted", "community"]);
 
@@ -57,9 +58,21 @@ const TapBase = {
 
 export const TapSchema = z.discriminatedUnion("source", [
   z.object({ source: z.literal("github"), repo: RepoSchema, ...TapBase }),
-  z.object({ source: z.literal("claude-marketplace"), repo: RepoSchema, ...TapBase }),
-  z.object({ source: z.literal("well-known"), repo: HttpUrlSchema, ...TapBase }),
-  z.object({ source: z.literal("local"), repo: AbsolutePathSchema, ...TapBase }),
+  z.object({
+    source: z.literal("claude-marketplace"),
+    repo: RepoSchema,
+    ...TapBase,
+  }),
+  z.object({
+    source: z.literal("well-known"),
+    repo: HttpUrlSchema,
+    ...TapBase,
+  }),
+  z.object({
+    source: z.literal("local"),
+    repo: AbsolutePathSchema,
+    ...TapBase,
+  }),
 ]);
 
 export const TapsFileSchema = z.object({
