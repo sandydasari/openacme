@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -122,7 +122,8 @@ export const MCPServerConfigSchema = z
   // instead of at connect time — tighter feedback for both the API and
   // the YAML/JSON loaders.
   .refine((cfg) => Boolean(cfg.command) || Boolean(cfg.url), {
-    message: "MCP server must specify either 'command' (stdio) or 'url' (HTTP/SSE)",
+    message:
+      "MCP server must specify either 'command' (stdio) or 'url' (HTTP/SSE)",
   });
 export type MCPServerConfig = z.infer<typeof MCPServerConfigSchema>;
 
@@ -156,7 +157,7 @@ export const AgentBrowserOverridesSchema = z
           .string()
           .optional()
           .describe(
-            "Browser Use profile UUID for THIS agent. Sessions inherit the profile's cookies / saved logins. Auto-provisioned on agent creation when BROWSER_USE_API_KEY is set; lazily on first acquire otherwise."
+            "Browser Use profile UUID for THIS agent. Sessions inherit the profile's cookies / saved logins. Auto-provisioned on agent creation when BROWSER_USE_API_KEY is set; lazily on first acquire otherwise.",
           ),
       })
       .strict()
@@ -167,7 +168,7 @@ export const AgentBrowserOverridesSchema = z
           .string()
           .optional()
           .describe(
-            "Firecrawl profile name for THIS agent. Auto-creates on first session use. Defaults to the agent id when unset."
+            "Firecrawl profile name for THIS agent. Auto-creates on first session use. Defaults to the agent id when unset.",
           ),
       })
       .strict()
@@ -178,7 +179,7 @@ export const AgentBrowserOverridesSchema = z
           .string()
           .optional()
           .describe(
-            "Browserbase Context UUID for THIS agent. Sessions inherit the context's cookies / saved logins. Auto-provisioned on agent creation when BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID are set; lazily on first acquire otherwise."
+            "Browserbase Context UUID for THIS agent. Sessions inherit the context's cookies / saved logins. Auto-provisioned on agent creation when BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID are set; lazily on first acquire otherwise.",
           ),
       })
       .strict()
@@ -186,6 +187,27 @@ export const AgentBrowserOverridesSchema = z
   })
   .strict();
 export type AgentBrowserOverrides = z.infer<typeof AgentBrowserOverridesSchema>;
+
+/**
+ * Per-agent overrides for the pi coding-agent delegate. Provider + model
+ * default workforce-wide (config `pi:`); an agent that should delegate to a
+ * different model than the rest of the workforce sets it here.
+ */
+export const AgentPiOverridesSchema = z
+  .object({
+    provider: z
+      .string()
+      .optional()
+      .describe(
+        "pi provider id for this agent's delegations (passed as --provider).",
+      ),
+    model: z
+      .string()
+      .optional()
+      .describe("pi model for this agent's delegations (passed as --model)."),
+  })
+  .strict();
+export type AgentPiOverrides = z.infer<typeof AgentPiOverridesSchema>;
 
 /**
  * Per-agent email binding — the agent's own mailbox identity. Non-secret
@@ -215,7 +237,7 @@ export const AgentEmailSchema = z
       .boolean()
       .optional()
       .describe(
-        "IMAP only: implicit TLS (default true, port 993). Set false for a STARTTLS host (port 143) — the client still upgrades to TLS."
+        "IMAP only: implicit TLS (default true, port 993). Set false for a STARTTLS host (port 143) — the client still upgrades to TLS.",
       ),
   })
   .strict();
@@ -244,7 +266,7 @@ export const AgentDefinitionSchema = z.object({
       "Paragraph-length description of this agent for their coworkers (other agents " +
         "in the workforce). Recommended shape: what they own, what they handle well, " +
         "where to redirect work that isn't theirs. Distinct from `persona` (the " +
-        "agent's own system prompt body in second-person). Read in third-person."
+        "agent's own system prompt body in second-person). Read in third-person.",
     ),
   // Optional per-agent override. When absent, the root `config.yaml`'s
   // `model` is used at agent-manager resolution time. Don't prefault
@@ -323,6 +345,9 @@ export const AgentDefinitionSchema = z.object({
   // Same idea as `<agentDir>/browser-profiles/` for the local provider —
   // each agent gets its own remote profile on cloud providers.
   browser: AgentBrowserOverridesSchema.optional(),
+  // Per-agent pi coding-delegate overrides (provider/model). The `pi` tool
+  // is opt-in via `tools`; this only tunes which model pi runs when used.
+  pi: AgentPiOverridesSchema.optional(),
   // Per-agent email mailbox. Absent → the agent has no email and its
   // `email_*` tools are excluded from its tool set by AgentManager. Provider
   // + address are per-agent; secrets live in `<agentDir>/email.json` (0600).
@@ -339,7 +364,7 @@ export const AgentDefinitionSchema = z.object({
       z.object({
         path: z.string().min(1),
         access: z.enum(["ro", "rw"]),
-      })
+      }),
     )
     .default([]),
 });
@@ -571,34 +596,79 @@ export const BrowserConfigSchema = z.object({
     .enum(["local", "browserbase", "browser-use", "firecrawl"])
     .default("local")
     .describe(
-      "Which backend supplies each agent's browser. 'local' spawns Chrome per agent; the cloud providers create one remote session per agent."
+      "Which backend supplies each agent's browser. 'local' spawns Chrome per agent; the cloud providers create one remote session per agent.",
     ),
   localBrowser: z
     .enum(["chromium", "camoufox"])
     .default("chromium")
     .describe(
-      "Local provider only: which browser to run. 'chromium' prefers a system Chrome/Brave/Edge install and falls back to Playwright's auto-installed Chromium. 'camoufox' uses the Firefox-based stealth browser; the binary auto-downloads on first use."
+      "Local provider only: which browser to run. 'chromium' prefers a system Chrome/Brave/Edge install and falls back to Playwright's auto-installed Chromium. 'camoufox' uses the Firefox-based stealth browser; the binary auto-downloads on first use.",
     ),
   executablePath: z
     .string()
     .optional()
     .describe(
-      "Local provider only: explicit path to a Chromium-family binary. When set, overrides `localBrowser`. Useful for custom builds or pinning a specific version."
+      "Local provider only: explicit path to a Chromium-family binary. When set, overrides `localBrowser`. Useful for custom builds or pinning a specific version.",
     ),
   headless: z
     .boolean()
     .default(false)
     .describe(
-      "Local provider only: run each agent's Chrome without a visible window. Default false — the user typically needs to see the window to log in to sites the agent will operate on."
+      "Local provider only: run each agent's Chrome without a visible window. Default false — the user typically needs to see the window to log in to sites the agent will operate on.",
     ),
   noSandbox: z
     .boolean()
     .default(false)
     .describe(
-      "Local provider only: pass --no-sandbox to Chrome. Required when running as root in Docker / certain CI images."
+      "Local provider only: pass --no-sandbox to Chrome. Required when running as root in Docker / certain CI images.",
     ),
 });
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
+
+/**
+ * Workforce-wide config for the pi coding-agent delegate. When an agent has
+ * the (opt-in) `pi` tool, it can spawn a `pi --mode rpc` subprocess per
+ * coding task and poll its progress. pi runs unconfined on the daemon host
+ * and brings its own provider credentials (an API-key env var, or its own
+ * `pi auth login`) — OpenAcme OAuth subscription tokens are not reusable by
+ * it. Set `enabled: false` to hard-disable delegation workforce-wide.
+ */
+export const PiConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  executablePath: z
+    .string()
+    .default("pi")
+    .describe(
+      "Path to the pi binary. Defaults to `pi` on PATH; install with `npm install -g @earendil-works/pi-coding-agent`.",
+    ),
+  provider: z
+    .string()
+    .optional()
+    .describe("Default pi provider id for delegations (passed as --provider)."),
+  model: z
+    .string()
+    .optional()
+    .describe("Default pi model for delegations (passed as --model)."),
+  extraArgs: z
+    .array(z.string())
+    .default([])
+    .describe("Extra CLI args appended to every `pi --mode rpc` invocation."),
+  maxConcurrentPerAgent: z
+    .number()
+    .int()
+    .min(1)
+    .default(4)
+    .describe("Max simultaneously-running pi delegations one agent may hold."),
+  taskTimeoutMs: z
+    .number()
+    .int()
+    .min(60_000)
+    .default(30 * 60 * 1000)
+    .describe(
+      "Hard timeout per delegation; the subprocess is killed when it fires.",
+    ),
+});
+export type PiConfig = z.infer<typeof PiConfigSchema>;
 
 /**
  * Workforce-wide email config. Per-agent mailboxes are bound in each
@@ -628,7 +698,9 @@ export const EmailConfigSchema = z.object({
       clientSecret: z.string(),
     })
     .optional()
-    .describe("BYO Google OAuth app (Gmail API) — your own client credentials."),
+    .describe(
+      "BYO Google OAuth app (Gmail API) — your own client credentials.",
+    ),
   microsoft: z
     .object({
       clientId: z.string(),
@@ -662,6 +734,7 @@ export const ConfigSchema = z.object({
   skills: SkillsConfigSchema.prefault({}),
   web: WebConfigSchema.prefault({}),
   browser: BrowserConfigSchema.prefault({}),
+  pi: PiConfigSchema.prefault({}),
   email: EmailConfigSchema.prefault({}),
 });
 export type Config = z.infer<typeof ConfigSchema>;
