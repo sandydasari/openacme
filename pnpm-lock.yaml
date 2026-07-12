@@ -766,6 +766,21 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@22.15.3)(jsdom@25.0.1)(lightningcss@1.32.0)
 
+  packages/pi-harness:
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.15.3)(jsdom@25.0.1)(lightningcss@1.32.0)
+
   packages/server:
     dependencies:
       '@hono/node-server':

@@ -1,0 +1,44 @@
+{
+  "name": "@openacme/pi-harness",
+  "version": "0.14.0",
+  "description": "Per-agent pi coding-agent delegations for OpenAcme — spawns `pi --mode rpc` subprocesses, digests their JSONL event stream into pollable progress, and enforces per-agent isolation and lifecycle caps.",
+  "license": "MIT",
+  "author": "sandydasari",
+  "homepage": "https://github.com/sandydasari/openacme/tree/main/packages/pi-harness#readme",
+  "bugs": "https://github.com/sandydasari/openacme/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sandydasari/openacme.git",
+    "directory": "packages/pi-harness"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "check-types": "tsc --noEmit",
+    "dev": "tsc --watch",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "typescript": "5.9.2",
+    "vitest": "^2.1.9"
+  }
+}
