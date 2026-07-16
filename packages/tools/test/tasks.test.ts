@@ -498,6 +498,27 @@ describe("task_comment / task_comments", () => {
     expect((allowed as { comment: Comment }).comment.kind).toBe("result");
   });
 
+  it("maps mode comment/result to stored comment kind", async () => {
+    const { store: s } = makeWiredStore(dir);
+    const t = await s.create({ title: "x", assignee: "alice", created_by: "bob" });
+
+    const ordinary = await call(
+      "task_comment",
+      { id: t.id, body: "progress", mode: "comment" },
+      { agentId: "alice" }
+    );
+    expect(ordinary.ok).toBe(true);
+    expect((ordinary as { comment: Comment }).comment.kind).toBeNull();
+
+    const result = await call(
+      "task_comment",
+      { id: t.id, body: "the answer", mode: "result" },
+      { agentId: "alice" }
+    );
+    expect(result.ok).toBe(true);
+    expect((result as { comment: Comment }).comment.kind).toBe("result");
+  });
+
   it("system kind is not exposed via the tool schema", async () => {
     const { store: s } = makeWiredStore(dir);
     const t = await s.create({ title: "x", assignee: "a", created_by: "a" });

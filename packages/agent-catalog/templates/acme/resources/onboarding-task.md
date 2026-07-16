@@ -44,7 +44,7 @@ note anything that needs follow-up.
 
 ## Step 4 — mark done
 
-When you're done, leave a `task_comment` with `kind: "result"`
+When you're done, leave a `task_comment` with `mode: "result"`
 briefly summarizing what you learned (e.g., "Met 3 coworkers,
 saved peer notes for 2; AGENTS.md says we ship on Fridays"), then
 mark this task done.

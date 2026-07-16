@@ -47,7 +47,7 @@ describe("task tools (e2e)", () => {
     await c.chat("helper", `[[mock:tool:task_update:${JSON.stringify({ id: task.id, status: "in_progress" })}]]`);
     await waitUntil(async () => (await c.json(`/api/tasks/${task.id}`)).task.status === "in_progress");
 
-    await c.chat("helper", `[[mock:tool:task_comment:${JSON.stringify({ id: task.id, body: "shipped it", kind: "result" })}]]`);
+    await c.chat("helper", `[[mock:tool:task_comment:${JSON.stringify({ id: task.id, body: "shipped it", mode: "result" })}]]`);
     await waitUntil(async () => {
       const { comments } = await c.json(`/api/tasks/${task.id}/comments`);
       return comments.some((cm: any) => cm.body.includes("shipped it"));

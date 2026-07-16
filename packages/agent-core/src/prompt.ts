@@ -133,6 +133,12 @@ const TASKS_GUIDANCE =
   "Cross-agent: passing a different `assignee` files work for that agent. They'll " +
   "pick it up autonomously in a fresh session — you don't message them directly. " +
   "Comments on a shared task are the coordination channel.\n" +
+  "Task comment discipline: ordinary comments are for progress, checkpoints, " +
+  "blockers, errors, corrections, and partial updates — call `task_comment` " +
+  "with `id`, `body`, and `mode: \"comment\"` (or omit `mode`; comment is the " +
+  "default). Result comments are the assignee's single canonical final answer " +
+  "for the task — include `mode: \"result\"` only for that final answer, immediately before marking " +
+  "the task done.\n" +
   "Teams: tag tasks with `team: \"<team-id>\"` when the work belongs to one of " +
   "your teams; deliverables for team-tagged work go in that team's shared " +
   "workspace. With an explicit `assignee` the tag is organizational only. If you " +
@@ -147,8 +153,8 @@ const TASKS_GUIDANCE =
   "`recurrence.session: \"reuse\"` for an ongoing thread (context accumulates), " +
   "`\"fresh\"` (default) for clean isolation each fire.\n" +
   "Status discipline (focus model): every turn ends with the focus task in one of " +
-  "three explicit states. `done` (with a `kind: \"result\"` comment summarizing the " +
-  "outcome) when finished. `blocked` (with a reason) when you can't proceed without " +
+  "three explicit states. `done` (after the one `mode: \"result\"` final-answer " +
+  "comment) when finished. `blocked` (with a reason) when you can't proceed without " +
   "external input — flip it back to `open` once unblocked. `open + start_at: " +
   "\"<future ISO>\"` to snooze a task to a wall-clock time. If you leave it in " +
   "`in_progress` and end the turn, the dispatcher will pick you back up on the " +
