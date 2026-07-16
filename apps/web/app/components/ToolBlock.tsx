@@ -85,10 +85,9 @@ function KnownToolBlock({
   toolName: string;
 }) {
   const status = computeStatus(part);
-  const commandDisclosure = useMemo(
-    () => getCommandDisclosure(toolName, part.input),
-    [toolName, part.input]
-  );
+  // Live tool snapshots can fill in command input without replacing the input
+  // object, so derive this from the current render instead of object identity.
+  const commandDisclosure = getCommandDisclosure(toolName, part.input);
   const commandKey = commandDisclosure
     ? `${commandDisclosure.label}\u0000${commandDisclosure.command}`
     : null;
@@ -1206,7 +1205,11 @@ function CommandChip({
   toggle?: CommandToggle;
 }) {
   const codeRef = useRef<HTMLElement | null>(null);
-  const truncatedRef = useRef<boolean | null>(null);
+  const truncationRef = useRef<{
+    command: string;
+    onTruncationChange?: CommandToggle["onTruncationChange"];
+    truncated: boolean;
+  } | null>(null);
   const [isTruncated, setIsTruncated] = useState(false);
   const onTruncationChange = toggle?.onTruncationChange;
   const hasHiddenLines = useMemo(() => hasAdditionalNonEmptyLines(command), [command]);
@@ -1214,12 +1217,18 @@ function CommandChip({
   const updateTruncation = useCallback(
     (next: boolean) => {
       setIsTruncated((prev) => (prev === next ? prev : next));
-      if (truncatedRef.current !== next) {
-        truncatedRef.current = next;
+      const previous = truncationRef.current;
+      if (
+        !previous ||
+        previous.command !== command ||
+        previous.onTruncationChange !== onTruncationChange ||
+        previous.truncated !== next
+      ) {
+        truncationRef.current = { command, onTruncationChange, truncated: next };
         onTruncationChange?.(next);
       }
     },
-    [onTruncationChange]
+    [command, onTruncationChange]
   );
 
   const measureTruncation = useCallback(() => {
