@@ -87,7 +87,7 @@ function KnownToolBlock({
   const status = computeStatus(part);
   // Live tool snapshots can fill in command input without replacing the input
   // object, so derive this from the current render instead of object identity.
-  const commandDisclosure = getCommandDisclosure(toolName, part.input);
+  const commandDisclosure = getCommandDisclosure(toolName, part.input, part.output);
   const commandKey = commandDisclosure
     ? `${commandDisclosure.label}\u0000${commandDisclosure.command}`
     : null;
@@ -421,7 +421,8 @@ interface CommandDisclosure {
 
 function getCommandDisclosure(
   toolName: string,
-  input: unknown
+  input: unknown,
+  output?: unknown
 ): CommandDisclosure | null {
   if (!isObj(input)) return null;
   if (toolName === "shell") {
@@ -433,7 +434,7 @@ function getCommandDisclosure(
     return command ? { command, label: "Code" } : null;
   }
   if (toolName === "process") {
-    const command = str(input.command);
+    const command = str(input.command) ?? str(parseJsonish(output)?.command);
     return command ? { command, label: "Command" } : null;
   }
   return null;
@@ -646,7 +647,9 @@ function renderSummary(
     case "process": {
       const a = str(input.action);
       const id = str(input.id);
+      const out = parseJsonish(output);
       const cmd = str(input.command);
+      const recoveredCmd = cmd ? null : str(out?.command);
       return (
         <span className="flex min-w-0 items-center gap-2">
           {a && <span className="text-ink">{a}</span>}
@@ -654,6 +657,9 @@ function renderSummary(
             <code className="bg-paper px-1.5 py-px text-[11px] text-ink">{id}</code>
           )}
           {cmd && <CommandChip command={cmd} toggle={commandToggle} />}
+          {!cmd && recoveredCmd && commandToggle && (
+            <CommandRevealButton command={recoveredCmd} toggle={commandToggle} />
+          )}
         </span>
       );
     }
@@ -1293,6 +1299,46 @@ function CommandChip({
         </button>
       )}
     </span>
+  );
+}
+
+function CommandRevealButton({
+  command,
+  toggle,
+}: {
+  command: string;
+  toggle: CommandToggle;
+}) {
+  const canReveal = useMemo(
+    () => firstNonEmptyLine(command).length > 0,
+    [command]
+  );
+  const { expanded, onToggle, onTruncationChange } = toggle;
+
+  useEffect(() => {
+    onTruncationChange(canReveal);
+  }, [canReveal, onTruncationChange]);
+
+  if (!canReveal) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      aria-expanded={expanded}
+      aria-label={expanded ? "Hide full command" : "Show full command"}
+      title={expanded ? "Hide full command" : "Show full command"}
+      className="flex size-4 shrink-0 items-center justify-center border border-paper-rule bg-paper text-ink-faint transition-colors hover:border-ink-faint hover:text-ink focus-visible:border-plot-red focus-visible:text-plot-red focus-visible:outline-none"
+    >
+      {expanded ? (
+        <Minus className="size-3" aria-hidden />
+      ) : (
+        <Plus className="size-3" aria-hidden />
+      )}
+    </button>
   );
 }
 
