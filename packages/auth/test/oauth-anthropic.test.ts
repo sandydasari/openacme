@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { tryReimportClaudeCode } from "../src/oauth-anthropic.js";
+import {
+  loginWithClaudeCodeCredentials,
+  tryReimportClaudeCode,
+} from "../src/oauth-anthropic.js";
+import { getOAuthToken } from "../src/refresh.js";
 
 // Drive `readClaudeCodeCredentials` via the real file path it inspects
 // (`$HOME/.claude/.credentials.json`). Tests temporarily override `HOME`
@@ -14,8 +18,12 @@ import { tryReimportClaudeCode } from "../src/oauth-anthropic.js";
 
 let tmp: string;
 let originalHome: string | undefined;
+let originalFetch: typeof globalThis.fetch;
 
-function setClaudeCodeToken(token: string): void {
+function setClaudeCodeToken(
+  token: string,
+  opts: { refreshToken?: string; expiresAt?: number } = {},
+): void {
   const claudeDir = path.join(tmp, "home", ".claude");
   fs.mkdirSync(claudeDir, { recursive: true });
   fs.writeFileSync(
@@ -23,10 +31,10 @@ function setClaudeCodeToken(token: string): void {
     JSON.stringify({
       claudeAiOauth: {
         accessToken: token,
-        refreshToken: "rt-" + token,
-        expiresAt: Date.now() + 3600_000,
+        refreshToken: opts.refreshToken ?? "rt-" + token,
+        expiresAt: opts.expiresAt ?? Date.now() + 3600_000,
       },
-    })
+    }),
   );
 }
 
@@ -35,7 +43,10 @@ function writeAuth(provider: "anthropic" | "openai", entry: object): void {
   let existing: Record<string, unknown> = { version: 1 };
   if (fs.existsSync(file)) {
     try {
-      existing = JSON.parse(fs.readFileSync(file, "utf-8")) as Record<string, unknown>;
+      existing = JSON.parse(fs.readFileSync(file, "utf-8")) as Record<
+        string,
+        unknown
+      >;
     } catch {
       /* fresh */
     }
@@ -54,10 +65,12 @@ beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-auth-test-"));
   fs.mkdirSync(path.join(tmp, "home"), { recursive: true });
   originalHome = process.env["HOME"];
+  originalFetch = globalThis.fetch;
   process.env["HOME"] = path.join(tmp, "home");
 });
 
 afterEach(() => {
+  globalThis.fetch = originalFetch;
   if (originalHome !== undefined) process.env["HOME"] = originalHome;
   else delete process.env["HOME"];
   try {
@@ -87,23 +100,55 @@ describe("tryReimportClaudeCode", () => {
   });
 
   it("returns the active token and writes nothing when Claude Code matches stored entry", () => {
-    setClaudeCodeToken("cc-aaaa");
+    const expiresAt = Date.now() + 3600_000;
+    setClaudeCodeToken("cc-aaaa", { expiresAt });
     writeAuth("anthropic", {
       mode: "claude-code",
       access_token: "cc-aaaa",
-      refresh_token: "rt-existing",
+      refresh_token: "rt-cc-aaaa",
+      expires_at: Math.floor(expiresAt / 1000),
     });
 
     const beforeMtime = fs.statSync(path.join(tmp, "auth.json")).mtimeMs;
     const result = tryReimportClaudeCode(tmp);
     expect(result).toBe("cc-aaaa");
 
-    // No write — refresh_token should still be the original (we'd have
-    // overwritten with "rt-cc-aaaa" if writeEntry had been called).
+    // No write — refresh_token should still be the original.
     const stored = readAuth().anthropic as { refresh_token: string };
-    expect(stored.refresh_token).toBe("rt-existing");
+    expect(stored.refresh_token).toBe("rt-cc-aaaa");
     const afterMtime = fs.statSync(path.join(tmp, "auth.json")).mtimeMs;
     expect(afterMtime).toBe(beforeMtime);
+  });
+
+  it("updates when Claude Code refresh metadata differs even if the access token matches", () => {
+    const expiresAt = Date.now() + 3600_000;
+    setClaudeCodeToken("cc-aaaa", { refreshToken: "rt-new", expiresAt });
+    writeAuth("anthropic", {
+      mode: "claude-code",
+      access_token: "cc-aaaa",
+      refresh_token: "rt-old",
+      expires_at: Math.floor((expiresAt - 3600_000) / 1000),
+    });
+
+    const result = tryReimportClaudeCode(tmp);
+    expect(result).toBe("cc-aaaa");
+    const stored = readAuth().anthropic as {
+      refresh_token: string;
+      expires_at: number;
+    };
+    expect(stored.refresh_token).toBe("rt-new");
+    expect(stored.expires_at).toBe(Math.floor(expiresAt / 1000));
+  });
+
+  it("does not silently import expired Claude Code credentials", () => {
+    setClaudeCodeToken("cc-expired", {
+      refreshToken: "rt-expired",
+      expiresAt: Date.now() - 60_000,
+    });
+
+    const result = tryReimportClaudeCode(tmp);
+    expect(result).toBeNull();
+    expect(fs.existsSync(path.join(tmp, "auth.json"))).toBe(false);
   });
 
   it("writes and returns the new token when Claude Code differs from stored entry", () => {
@@ -128,7 +173,10 @@ describe("tryReimportClaudeCode", () => {
 
     const result = tryReimportClaudeCode(tmp);
     expect(result).toBeNull();
-    const stored = readAuth().anthropic as { mode: string; access_token: string };
+    const stored = readAuth().anthropic as {
+      mode: string;
+      access_token: string;
+    };
     expect(stored.mode).toBe("claude-setup-token");
     expect(stored.access_token).toBe("sk-ant-oat-USER-PASTED");
   });
@@ -141,5 +189,108 @@ describe("tryReimportClaudeCode", () => {
     expect(result).toBe("cc-FRESH");
     const stored = readAuth().anthropic as { access_token: string };
     expect(stored.access_token).toBe("cc-FRESH");
+  });
+});
+
+describe("loginWithClaudeCodeCredentials", () => {
+  it("refreshes expired Claude Code credentials before reporting success", async () => {
+    setClaudeCodeToken("cc-expired", {
+      refreshToken: "rt-valid",
+      expiresAt: Date.now() - 60_000,
+    });
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        access_token: "cc-refreshed",
+        refresh_token: "rt-refreshed",
+        expires_in: 3600,
+      }),
+      text: async () => "",
+    })) as unknown as typeof fetch;
+
+    await expect(loginWithClaudeCodeCredentials(tmp)).resolves.toEqual({
+      source: "claude-code",
+    });
+    const stored = readAuth().anthropic as {
+      access_token: string;
+      refresh_token: string;
+      expires_at?: number;
+    };
+    expect(stored.access_token).toBe("cc-refreshed");
+    expect(stored.refresh_token).toBe("rt-refreshed");
+    expect(stored.expires_at).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  });
+
+  it("restores the previous entry when expired Claude Code refresh is rejected", async () => {
+    setClaudeCodeToken("cc-expired", {
+      refreshToken: "rt-invalid",
+      expiresAt: Date.now() - 60_000,
+    });
+    writeAuth("anthropic", {
+      mode: "claude-setup-token",
+      access_token: "sk-ant-oat-USER-PASTED",
+    });
+    globalThis.fetch = (async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: "invalid_grant" }),
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+
+    await expect(loginWithClaudeCodeCredentials(tmp)).rejects.toThrow(
+      "Anthropic rejected their refresh token",
+    );
+    const stored = readAuth().anthropic as {
+      mode: string;
+      access_token: string;
+    };
+    expect(stored.mode).toBe("claude-setup-token");
+    expect(stored.access_token).toBe("sk-ant-oat-USER-PASTED");
+  });
+});
+
+describe("getOAuthToken Claude Code recovery", () => {
+  it("retries refresh when Claude Code rotates refresh metadata without changing the access token", async () => {
+    const expiresAt = Date.now() + 3600_000;
+    setClaudeCodeToken("cc-same", { refreshToken: "rt-new", expiresAt });
+    writeAuth("anthropic", {
+      mode: "claude-code",
+      access_token: "cc-same",
+      refresh_token: "rt-old",
+      expires_at: Math.floor(expiresAt / 1000),
+    });
+    const refreshBodies: string[] = [];
+    let calls = 0;
+    globalThis.fetch = (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      calls += 1;
+      refreshBodies.push(String(init?.body ?? ""));
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () => JSON.stringify({ error: "invalid_grant" }),
+          json: async () => ({}),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          access_token: "cc-after-refresh",
+          refresh_token: "rt-after-refresh",
+          expires_in: 3600,
+        }),
+        text: async () => "",
+      };
+    }) as unknown as typeof fetch;
+
+    const result = await getOAuthToken("anthropic", tmp, { force: true });
+    expect(result.token).toBe("cc-after-refresh");
+    expect(refreshBodies[0]).toContain("refresh_token=rt-old");
+    expect(refreshBodies[1]).toContain("refresh_token=rt-new");
   });
 });

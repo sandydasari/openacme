@@ -83,18 +83,24 @@ async function loginOpenAI(dataDir: string, deviceFlag: boolean): Promise<void> 
 async function loginAnthropic(dataDir: string): Promise<void> {
   const spin = p.spinner();
   spin.start("Looking for Claude Code credentials");
-  const fromCC = loginWithClaudeCodeCredentials(dataDir);
+  let importError: string | undefined;
+  const fromCC = await loginWithClaudeCodeCredentials(dataDir).catch((e) => {
+    importError = e instanceof Error ? e.message : String(e);
+    return null;
+  });
   if (fromCC) {
     spin.stop("Imported Claude Code credentials.");
     p.outro("Anthropic OAuth complete. Run `openacme chat` to start using Claude subscription quota.");
     return;
   }
-  spin.stop("Claude Code not found.");
+  spin.stop(importError ? "Claude Code credentials unusable." : "Claude Code not found.");
 
   p.note(
-    "We couldn't find Claude Code credentials.\n" +
-    "If you have Claude Code installed, run `claude /login` first, then re-run this command.\n" +
-    "Otherwise, paste an Anthropic OAuth setup token (starts with `sk-ant-oat-`).",
+    (importError
+      ? `${importError}\n`
+      : "We couldn't find Claude Code credentials.\n" +
+        "If you have Claude Code installed, run `claude /login` first, then re-run this command.\n") +
+      "Otherwise, paste an Anthropic OAuth setup token (starts with `sk-ant-oat-`).",
     "Sign in with Claude",
   );
 

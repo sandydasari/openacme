@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { spawnSync } from "node:child_process";
-import { setEntry, getEntry } from "./store.js";
+import { clearEntry, setEntry, getEntry } from "./store.js";
 import { extractOAuthErrorCode } from "./oauth-openai.js";
 import { OAuthRelogin, type OAuthEntry } from "./types.js";
 
@@ -11,6 +11,7 @@ const REFRESH_URLS = [
   "https://platform.claude.com/v1/oauth/token",
   "https://console.anthropic.com/v1/oauth/token",
 ];
+const REFRESH_SKEW_SECONDS = 120;
 
 /** Detect whether a token uses Anthropic's OAuth/Bearer scheme. */
 export function isAnthropicOAuthToken(token: string): boolean {
@@ -90,14 +91,61 @@ export interface AnthropicLoginResult {
   source: "claude-code" | "setup-token";
 }
 
+export function isClaudeCodeEntryExpiring(entry: OAuthEntry): boolean {
+  if (!entry.expires_at) return false;
+  return (
+    entry.expires_at - Math.floor(Date.now() / 1000) < REFRESH_SKEW_SECONDS
+  );
+}
+
+export function sameClaudeCodeAuthMaterial(
+  a: OAuthEntry | undefined,
+  b: OAuthEntry | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return (
+    a.mode === b.mode &&
+    a.access_token === b.access_token &&
+    (a.refresh_token ?? "") === (b.refresh_token ?? "") &&
+    (a.expires_at ?? 0) === (b.expires_at ?? 0) &&
+    (a.account_id ?? "") === (b.account_id ?? "")
+  );
+}
+
 /**
  * Sign in with Claude. Tries Claude Code credentials first, then falls back to
  * a user-provided setup token.
  */
-export function loginWithClaudeCodeCredentials(dataDir: string): AnthropicLoginResult | null {
+export async function loginWithClaudeCodeCredentials(
+  dataDir: string,
+): Promise<AnthropicLoginResult | null> {
   const entry = readClaudeCodeCredentials();
   if (!entry) return null;
+  const previous = getEntry(dataDir, "anthropic");
   setEntry(dataDir, "anthropic", entry);
+  if (isClaudeCodeEntryExpiring(entry)) {
+    if (!entry.refresh_token) {
+      if (previous) setEntry(dataDir, "anthropic", previous);
+      else clearEntry(dataDir, "anthropic");
+      throw new OAuthRelogin(
+        "anthropic",
+        "Claude Code credentials were found but are expired and do not include a refresh token. Run `claude /login`, then re-run `openacme login --provider anthropic`.",
+      );
+    }
+    try {
+      await refreshAnthropic(dataDir);
+    } catch (e) {
+      if (previous) setEntry(dataDir, "anthropic", previous);
+      else clearEntry(dataDir, "anthropic");
+      if (e instanceof OAuthRelogin) {
+        throw new OAuthRelogin(
+          "anthropic",
+          "Claude Code credentials were found, but Anthropic rejected their refresh token. Run `claude /login`, then re-run `openacme login --provider anthropic`.",
+        );
+      }
+      throw e;
+    }
+  }
   return { source: "claude-code" };
 }
 
@@ -108,8 +156,12 @@ export function loginWithClaudeCodeCredentials(dataDir: string): AnthropicLoginR
  *
  *   - Respects an existing **manual setup token** (`mode: "claude-setup-token"`).
  *     The user explicitly pasted that — don't silently swap to Claude Code.
- *   - Idempotent: if the candidate's `access_token` matches the stored
- *     entry, no write happens.
+ *   - Only imports a candidate whose access token is not already expired.
+ *     Explicit login can validate/refresh expired Claude Code entries, but
+ *     silent recovery must not write stale keychain material and call it good.
+ *   - Idempotent: if the candidate's auth material matches the stored
+ *     entry, no write happens. Refresh-token and expiry changes are still
+ *     meaningful even when the access token string is unchanged.
  *
  * Returns the currently-active access token (whether just imported or
  * already in place), or `null` when no Claude Code creds are available
@@ -121,11 +173,12 @@ export function loginWithClaudeCodeCredentials(dataDir: string): AnthropicLoginR
 export function tryReimportClaudeCode(dataDir: string): string | null {
   const candidate = readClaudeCodeCredentials();
   if (!candidate) return null;
+  if (isClaudeCodeEntryExpiring(candidate)) return null;
   const current = getEntry(dataDir, "anthropic");
   if (current && current.mode === "claude-setup-token") {
     return null;
   }
-  if (!current || current.access_token !== candidate.access_token) {
+  if (!sameClaudeCodeAuthMaterial(current, candidate)) {
     setEntry(dataDir, "anthropic", candidate);
   }
   return candidate.access_token;

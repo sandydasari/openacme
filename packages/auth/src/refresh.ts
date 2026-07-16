@@ -1,6 +1,11 @@
 import { getEntry, clearEntry } from "./store.js";
 import { refreshOpenAI } from "./oauth-openai.js";
-import { refreshAnthropic, tryReimportClaudeCode } from "./oauth-anthropic.js";
+import {
+  isClaudeCodeEntryExpiring,
+  refreshAnthropic,
+  sameClaudeCodeAuthMaterial,
+  tryReimportClaudeCode,
+} from "./oauth-anthropic.js";
 import { OAuthRelogin, type OAuthEntry, type OAuthProvider } from "./types.js";
 
 const REFRESH_SKEW_SECONDS = 120;
@@ -57,6 +62,7 @@ export async function getOAuthToken(
 
   if (opts.force || isExpiringSoon(entry)) {
     const beforeToken = entry.access_token;
+    const beforeEntry = entry;
     let pending = inFlight[provider];
     if (!pending) {
       pending = refreshOne(provider, dataDir).finally(() => { delete inFlight[provider]; });
@@ -73,13 +79,27 @@ export async function getOAuthToken(
       // same failed pending promise hit this branch independently;
       // `tryReimportClaudeCode` is idempotent so the second+ caller
       // just sees the active token and decides based on the same
-      // before/after comparison.
+      // before/after comparison. The access token may stay the same while
+      // Claude Code has rotated the refresh token or expiry metadata, so
+      // compare the whole auth material, not only the bearer string.
       if (e instanceof OAuthRelogin && provider === "anthropic") {
         const active = tryReimportClaudeCode(dataDir);
-        if (active && active !== beforeToken) {
-          const fresh = getEntry(dataDir, "anthropic");
-          if (fresh) {
+        const fresh = active ? getEntry(dataDir, "anthropic") : undefined;
+        if (fresh && fresh.access_token !== beforeToken) {
+          return { token: fresh.access_token, accountId: fresh.account_id };
+        }
+        if (fresh && !sameClaudeCodeAuthMaterial(beforeEntry, fresh)) {
+          if (!opts.force && !isClaudeCodeEntryExpiring(fresh)) {
             return { token: fresh.access_token, accountId: fresh.account_id };
+          }
+          try {
+            const refreshed = await refreshOne(provider, dataDir);
+            return { token: refreshed.access_token, accountId: refreshed.account_id };
+          } catch (retryError) {
+            if (retryError instanceof OAuthRelogin) {
+              clearEntry(dataDir, provider);
+            }
+            throw retryError;
           }
         }
       }
