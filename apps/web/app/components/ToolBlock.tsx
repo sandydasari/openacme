@@ -1,5 +1,12 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { ArrowUpRight, ChevronRight, Bell, Clock } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { ArrowUpRight, ChevronRight, Bell, Clock, Minus, Plus } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/app/lib/utils";
 import { Markdown } from "./Markdown";
@@ -78,9 +85,52 @@ function KnownToolBlock({
   toolName: string;
 }) {
   const status = computeStatus(part);
-  const summary = useMemo(
-    () => renderSummary(toolName, part.input, part.output),
-    [toolName, part.input, part.output]
+  const commandDisclosure = useMemo(
+    () => getCommandDisclosure(toolName, part.input),
+    [toolName, part.input]
+  );
+  const commandKey = commandDisclosure
+    ? `${commandDisclosure.label}\u0000${commandDisclosure.command}`
+    : null;
+  const [commandState, setCommandState] = useState<{
+    key: string | null;
+    open: boolean;
+    truncated: boolean;
+  }>({ key: null, open: false, truncated: false });
+  const commandOpen = commandState.key === commandKey ? commandState.open : false;
+  const commandTruncated =
+    commandState.key === commandKey ? commandState.truncated : false;
+  const toggleCommandOpen = useCallback(() => {
+    setCommandState((state) => {
+      const current =
+        state.key === commandKey
+          ? state
+          : { key: commandKey, open: false, truncated: false };
+      return { ...current, open: !current.open };
+    });
+  }, [commandKey]);
+  const setCommandTruncated = useCallback(
+    (truncated: boolean) => {
+      setCommandState((state) => {
+        if (state.key !== commandKey) {
+          return { key: commandKey, open: false, truncated };
+        }
+        return state.truncated === truncated ? state : { ...state, truncated };
+      });
+    },
+    [commandKey]
+  );
+  const summary = renderSummary(
+    toolName,
+    part.input,
+    part.output,
+    commandDisclosure
+      ? {
+          expanded: commandOpen,
+          onToggle: toggleCommandOpen,
+          onTruncationChange: setCommandTruncated,
+        }
+      : undefined
   );
   const body = useMemo(
     () =>
@@ -106,8 +156,17 @@ function KnownToolBlock({
         toolName={toolName}
         status={status}
         summary={summary}
+        summaryHasAction={!!commandDisclosure}
         taskId={taskId}
       />
+      {commandOpen && commandTruncated && commandDisclosure && (
+        <div className="border-t border-paper-rule">
+          <CommandBody
+            command={commandDisclosure.command}
+            label={commandDisclosure.label}
+          />
+        </div>
+      )}
       {body && <div className="border-t border-paper-rule">{body}</div>}
     </div>
   );
@@ -235,11 +294,13 @@ function HeaderRow({
   toolName,
   status,
   summary,
+  summaryHasAction = false,
   taskId,
 }: {
   toolName: string;
   status: Status;
   summary: ReactNode;
+  summaryHasAction?: boolean;
   taskId?: string | null;
 }) {
   return (
@@ -247,7 +308,12 @@ function HeaderRow({
       <StatusDot status={status} />
       <span className="font-mono text-[12px] text-ink shrink-0">{toolName}</span>
       {summary && (
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-soft">
+        <span
+          className={cn(
+            "min-w-0 flex-1 font-mono text-[12px] text-ink-soft",
+            summaryHasAction ? "overflow-hidden" : "truncate"
+          )}
+        >
           {summary}
         </span>
       )}
@@ -343,7 +409,43 @@ function StatusLabel({ status }: { status: Status }) {
 
 // ── Summary line (right of tool name) ───────────────────────────────────────
 
-function renderSummary(name: string, input: unknown, output: unknown): ReactNode {
+interface CommandToggle {
+  expanded: boolean;
+  onToggle: () => void;
+  onTruncationChange: (truncated: boolean) => void;
+}
+
+interface CommandDisclosure {
+  command: string;
+  label: string;
+}
+
+function getCommandDisclosure(
+  toolName: string,
+  input: unknown
+): CommandDisclosure | null {
+  if (!isObj(input)) return null;
+  if (toolName === "shell") {
+    const command = str(input.command);
+    return command ? { command, label: "Command" } : null;
+  }
+  if (toolName === "execute_code") {
+    const command = str(input.code);
+    return command ? { command, label: "Code" } : null;
+  }
+  if (toolName === "process") {
+    const command = str(input.command);
+    return command ? { command, label: "Command" } : null;
+  }
+  return null;
+}
+
+function renderSummary(
+  name: string,
+  input: unknown,
+  output: unknown,
+  commandToggle?: CommandToggle
+): ReactNode {
   if (!isObj(input)) return null;
 
   switch (name) {
@@ -415,12 +517,14 @@ function renderSummary(name: string, input: unknown, output: unknown): ReactNode
     }
     case "shell": {
       const cmd = str(input.command);
-      return cmd ? <CommandChip command={cmd} /> : null;
+      return cmd ? <CommandChip command={cmd} toggle={commandToggle} /> : null;
     }
     case "execute_code": {
       const code = str(input.code) ?? "";
       const first = firstNonEmptyLine(code);
-      return first ? <CommandChip command={first} /> : null;
+      return first ? (
+        <CommandChip command={code} title={code} toggle={commandToggle} />
+      ) : null;
     }
     case "web_search":
     case "session_search": {
@@ -550,7 +654,7 @@ function renderSummary(name: string, input: unknown, output: unknown): ReactNode
           {id && (
             <code className="bg-paper px-1.5 py-px text-[11px] text-ink">{id}</code>
           )}
-          {cmd && <CommandChip command={cmd} />}
+          {cmd && <CommandChip command={cmd} toggle={commandToggle} />}
         </span>
       );
     }
@@ -623,6 +727,7 @@ function renderBody({
       return <FileDiffView files={files} />;
     }
     case "shell":
+      return <ShellOutputView output={output} />;
     case "execute_code":
       return <ShellOutputView output={output} />;
     case "web_search":
@@ -705,16 +810,16 @@ function renderBody({
   }
 }
 
-
-// Body for shell / execute_code — output only. The command/code is already
-// shown as the header summary; repeating it here is noise.
+// Body for shell / execute_code output. The full command/code is available via
+// the header disclosure so routine tool blocks stay compact.
 function ShellOutputView({ output }: { output: unknown }) {
   const out = parseJsonish(output);
   const stdout = out && (str(out.output) ?? str(out.stdout));
   const stderr = out && str(out.stderr);
   const value = out && str(out.value);
   const errMsg = out && str(out.error);
-  if (!stdout && !stderr && !value && !errMsg) return null;
+  const hasOutput = !!(stdout || stderr || value || errMsg);
+  if (!hasOutput) return null;
   return (
     <div className="space-y-2 px-3 py-2">
       {stdout && (
@@ -1091,11 +1196,113 @@ function PathChip({ path }: { path: string }) {
   );
 }
 
-function CommandChip({ command }: { command: string }) {
+function CommandChip({
+  command,
+  title,
+  toggle,
+}: {
+  command: string;
+  title?: string;
+  toggle?: CommandToggle;
+}) {
+  const codeRef = useRef<HTMLElement | null>(null);
+  const truncatedRef = useRef<boolean | null>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const onTruncationChange = toggle?.onTruncationChange;
+  const hasHiddenLines = useMemo(() => hasAdditionalNonEmptyLines(command), [command]);
+
+  const updateTruncation = useCallback(
+    (next: boolean) => {
+      setIsTruncated((prev) => (prev === next ? prev : next));
+      if (truncatedRef.current !== next) {
+        truncatedRef.current = next;
+        onTruncationChange?.(next);
+      }
+    },
+    [onTruncationChange]
+  );
+
+  const measureTruncation = useCallback(() => {
+    const code = codeRef.current;
+    if (!code) return;
+    updateTruncation(hasHiddenLines || code.scrollWidth > code.clientWidth + 1);
+  }, [hasHiddenLines, updateTruncation]);
+
+  useEffect(() => {
+    measureTruncation();
+
+    const code = codeRef.current;
+    if (!code) return;
+
+    let animationFrame = 0;
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(measureTruncation);
+    };
+
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(scheduleMeasure)
+        : null;
+    observer?.observe(code);
+    if (code.parentElement) observer?.observe(code.parentElement);
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [command, measureTruncation]);
+
   return (
-    <code className="truncate font-mono text-[12px] text-ink">
-      {firstNonEmptyLine(command)}
-    </code>
+    <span className="flex min-w-0 max-w-full items-center gap-1">
+      <code
+        ref={codeRef}
+        className="min-w-0 truncate font-mono text-[12px] text-ink"
+        title={title ?? command}
+      >
+        {firstNonEmptyLine(command)}
+      </code>
+      {toggle && isTruncated && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle.onToggle();
+          }}
+          aria-expanded={toggle.expanded}
+          aria-label={toggle.expanded ? "Hide full command" : "Show full command"}
+          title={toggle.expanded ? "Hide full command" : "Show full command"}
+          className="flex size-4 shrink-0 items-center justify-center border border-paper-rule bg-paper text-ink-faint transition-colors hover:border-ink-faint hover:text-ink focus-visible:border-plot-red focus-visible:text-plot-red focus-visible:outline-none"
+        >
+          {toggle.expanded ? (
+            <Minus className="size-3" aria-hidden />
+          ) : (
+            <Plus className="size-3" aria-hidden />
+          )}
+        </button>
+      )}
+    </span>
+  );
+}
+
+function CommandBody({
+  command,
+  label = "Command",
+}: {
+  command: string;
+  label?: string;
+}) {
+  return (
+    <div className="bg-paper-sunk px-3 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+        {label}
+      </div>
+      <pre className="mt-1 overflow-x-auto font-mono text-[11px] leading-snug text-ink whitespace-pre-wrap break-words">
+        {command}
+      </pre>
+    </div>
   );
 }
 
@@ -1125,10 +1332,19 @@ function trim(s: string, max: number): string {
   return s.slice(0, max) + "\n…";
 }
 function firstNonEmptyLine(s: string): string {
-  for (const line of s.split("\n")) {
+  for (const line of s.split(/\r?\n/)) {
     if (line.trim()) return line;
   }
   return s;
+}
+function hasAdditionalNonEmptyLines(s: string): boolean {
+  let foundFirst = false;
+  for (const line of s.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    if (foundFirst) return true;
+    foundFirst = true;
+  }
+  return false;
 }
 function shortPath(p: string): string {
   if (p.length < 60) return p;
