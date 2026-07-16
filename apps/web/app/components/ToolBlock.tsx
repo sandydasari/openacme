@@ -434,7 +434,8 @@ function getCommandDisclosure(
     return command ? { command, label: "Code" } : null;
   }
   if (toolName === "process") {
-    const command = str(input.command) ?? str(parseJsonish(output)?.command);
+    const command =
+      nonEmptyStr(input.command) ?? nonEmptyStr(parseJsonish(output)?.command);
     return command ? { command, label: "Command" } : null;
   }
   return null;
@@ -648,8 +649,8 @@ function renderSummary(
       const a = str(input.action);
       const id = str(input.id);
       const out = parseJsonish(output);
-      const cmd = str(input.command);
-      const recoveredCmd = cmd ? null : str(out?.command);
+      const cmd = nonEmptyStr(input.command);
+      const recoveredCmd = cmd ? null : nonEmptyStr(out?.command);
       return (
         <span className="flex min-w-0 items-center gap-2">
           {a && <span className="text-ink">{a}</span>}
@@ -1378,6 +1379,9 @@ function isObj(v: unknown): v is Record<string, unknown> {
 }
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
+}
+function nonEmptyStr(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
