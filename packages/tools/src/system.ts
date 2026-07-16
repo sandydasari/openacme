@@ -21,6 +21,7 @@ export const SYSTEM_TOOLS = [
   "agent_list",
   "ping_user",
   "defer_session",
+  "render_ui",
 ] as const;
 
 export type SystemTool = (typeof SYSTEM_TOOLS)[number];

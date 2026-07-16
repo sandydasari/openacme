@@ -751,7 +751,7 @@ interface DiffLine {
 interface DiffHunk {
   lines: DiffLine[];
 }
-interface DiffFile {
+export interface DiffFile {
   path: string;
   kind: "add" | "update" | "delete" | "move" | "edit";
   newPath?: string;
@@ -797,7 +797,7 @@ function lineDiffSingleHunk(oldText: string, newText: string): DiffHunk {
   return { lines };
 }
 
-function editToFile(path: string, oldText: string, newText: string): DiffFile {
+export function editToFile(path: string, oldText: string, newText: string): DiffFile {
   const hunk = lineDiffSingleHunk(oldText, newText);
   let added = 0,
     removed = 0;

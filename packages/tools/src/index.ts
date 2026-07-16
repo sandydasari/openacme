@@ -90,5 +90,6 @@ import "./builtins/tasks.js";
 import "./builtins/agent.js";
 import "./builtins/ping.js";
 import "./builtins/defer-session.js";
+import "./builtins/render-ui.js";
 import "./builtins/browser/index.js";
 import "./builtins/email/index.js";

@@ -16,6 +16,8 @@ import {
   PingUserCallout,
   type ToolPart,
 } from "@/app/components/ToolBlock";
+import { RenderUIBlock } from "@/app/components/chat/RenderUIBlock";
+import { ClaudeThinking } from "@/app/components/brainless/claude/claude-thinking";
 import { AgentRef } from "@/app/components/ui/agent-ref";
 import { API_BASE } from "@/app/lib/api";
 import type { FileLinkTarget } from "@/app/files/useFileLinkResolver";
@@ -376,14 +378,7 @@ export const MessageBubble = memo(function MessageBubble({
         streaming={isStreaming}
         createdAt={(message as { createdAt?: number }).createdAt}
       />
-      {parts.length === 0 && isStreaming && (
-        <div className="flex items-center gap-1.5 text-ink-faint">
-          <span className="status-dot bg-current pulse-live" aria-hidden />
-          <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
-            Thinking
-          </span>
-        </div>
-      )}
+      {parts.length === 0 && isStreaming && <ClaudeThinking />}
       <div className="space-y-3">
         {parts.map((part, i) => {
           if (isToolPart(part)) {
@@ -396,6 +391,9 @@ export const MessageBubble = memo(function MessageBubble({
               errorText?: string;
             };
             if (tp.type === "tool-ping_user") return null;
+            if (tp.type === "tool-render_ui") {
+              return <RenderUIBlock key={i} part={tp} />;
+            }
             return <ToolBlock key={i} part={tp} />;
           }
           if ((part as { type?: unknown }).type === "text") {
