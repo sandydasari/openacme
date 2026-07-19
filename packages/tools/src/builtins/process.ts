@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { registry } from "../registry.js";
-import { getCurrentWorkspaceDir } from "../session-context.js";
+import {
+  getCurrentAgentId,
+  getCurrentSessionId,
+  getCurrentWorkspaceDir,
+} from "../session-context.js";
 
 /**
  * Background process management. One tool with an action enum, mirroring
@@ -29,15 +33,32 @@ import { getCurrentWorkspaceDir } from "../session-context.js";
  */
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;        // 5 min
+const DEFAULT_RUN_WAIT_MS = 2 * 60 * 1000;       // 2 min before async notify
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;           // 1 hour
 const DEFAULT_SILENCE_MS = 2 * 60 * 1000;        // 2 min of no output
 const MAX_AGGREGATE_CHARS = 200_000;
 const AGGREGATE_TAIL_CHARS = 2_000;
+const RUN_DETACHED_TAIL_CHARS = 2_000;
 const MAX_PENDING_CHARS = 30_000;
 const MAX_PROCESSES = 64;
 const FINISHED_TTL_MS = 30 * 60 * 1000;          // 30 min after exit
 
 type ProcStatus = "running" | "exited" | "killed" | "timed_out";
+
+interface ProcNotifyTarget {
+  sessionId: string;
+  agentId: string;
+}
+
+export interface ProcessCompletionEvent {
+  sessionId: string;
+  agentId: string;
+  result: Record<string, unknown>;
+}
+
+export interface ProcessBindings {
+  emitCompletion: (event: ProcessCompletionEvent) => void;
+}
 
 interface ProcEntry {
   id: string;
@@ -57,9 +78,16 @@ interface ProcEntry {
   overallTimer: NodeJS.Timeout | null;
   silenceTimer: NodeJS.Timeout | null;
   silenceMs: number;
+  notifyOnExit: ProcNotifyTarget | null;
+  notificationSent: boolean;
 }
 
 const procs = new Map<string, ProcEntry>();
+let bindings: ProcessBindings | null = null;
+
+export function bindProcessEvents(b: ProcessBindings | null): void {
+  bindings = b;
+}
 
 function evictExpired(): void {
   const now = Date.now();
@@ -67,12 +95,13 @@ function evictExpired(): void {
     if (e.status === "running") continue;
     if (e.endedAt && now - e.endedAt > FINISHED_TTL_MS) procs.delete(id);
   }
-  // Hard cap: if still over MAX_PROCESSES, drop oldest finished.
-  if (procs.size <= MAX_PROCESSES) return;
+  // Hard cap: if at capacity, drop oldest finished to make room for the next
+  // start. Running processes are never evicted.
+  if (procs.size < MAX_PROCESSES) return;
   const finished = [...procs.values()]
     .filter((e) => e.status !== "running")
     .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0));
-  while (procs.size > MAX_PROCESSES && finished.length > 0) {
+  while (procs.size >= MAX_PROCESSES && finished.length > 0) {
     const drop = finished.shift()!;
     procs.delete(drop.id);
   }
@@ -174,6 +203,8 @@ function startProc(args: {
     overallTimer: null,
     silenceTimer: null,
     silenceMs: args.silenceTimeoutMs,
+    notifyOnExit: null,
+    notificationSent: false,
   };
   procs.set(id, e);
 
@@ -190,11 +221,17 @@ function startProc(args: {
     if (e.status === "running") {
       e.status = signal ? "killed" : "exited";
     }
+    emitCompletionIfNeeded(e);
   });
   child.on("error", (err) => {
+    if (e.overallTimer) clearTimeout(e.overallTimer);
+    if (e.silenceTimer) clearTimeout(e.silenceTimer);
+    e.overallTimer = null;
+    e.silenceTimer = null;
     appendOutput(e, `\n[spawn error: ${err.message}]\n`);
     e.endedAt = Date.now();
     if (e.status === "running") e.status = "killed";
+    emitCompletionIfNeeded(e);
   });
 
   e.overallTimer = setTimeout(() => killProc(e, "timed_out", "overall"), args.timeoutMs);
@@ -219,12 +256,92 @@ function summary(e: ProcEntry) {
   };
 }
 
+function waitForCompletion(e: ProcEntry): Promise<void> {
+  if (e.endedAt !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      e.child.off("close", done);
+      e.child.off("error", done);
+      resolve();
+    };
+    e.child.once("close", done);
+    e.child.once("error", done);
+  });
+}
+
+function completionError(e: ProcEntry): string | undefined {
+  if (e.status === "timed_out") return "Process timed out";
+  if (e.status === "killed") return "Process was killed";
+  if (e.exitCode !== 0) return `Process exited with code ${e.exitCode}`;
+  return undefined;
+}
+
+function completionResult(e: ProcEntry): Record<string, unknown> {
+  const error = completionError(e);
+  return {
+    success: !error,
+    ...summary(e),
+    ...(error ? { error } : {}),
+    output: e.aggregate,
+  };
+}
+
+function currentNotifyTarget(): ProcNotifyTarget | string {
+  const sessionId = getCurrentSessionId();
+  const agentId = getCurrentAgentId();
+  if (!sessionId || !agentId) {
+    return "process run async notification requires an active session + agent context";
+  }
+  return { sessionId, agentId };
+}
+
+function enableCompletionNotification(e: ProcEntry, target: ProcNotifyTarget): void {
+  e.notifyOnExit = target;
+  emitCompletionIfNeeded(e);
+}
+
+function emitCompletionIfNeeded(e: ProcEntry): void {
+  if (!e.notifyOnExit || e.notificationSent || e.endedAt === null) return;
+  e.notificationSent = true;
+  bindings?.emitCompletion({
+    sessionId: e.notifyOnExit.sessionId,
+    agentId: e.notifyOnExit.agentId,
+    result: completionResult(e),
+  });
+}
+
+async function waitForCompletionOrTimeout(
+  e: ProcEntry,
+  waitMs: number
+): Promise<boolean> {
+  if (e.endedAt !== null) return true;
+  if (waitMs <= 0) return false;
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      e.child.off("close", done);
+      e.child.off("error", done);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      e.child.off("close", done);
+      e.child.off("error", done);
+      resolve(false);
+    }, waitMs);
+    e.child.once("close", done);
+    e.child.once("error", done);
+  });
+}
+
 registry.register({
   name: "process",
   toolset: "terminal",
   runtime: "worker",
   description:
-    "Manage long-running background processes. Actions: " +
+    "Manage shell commands and long-running background processes. Actions: " +
+    "`run` (one-call command runner: waits briefly for quick completion; " +
+    "if still running, keeps the process alive and posts the final " +
+    "stdout/stderr back to this session when it exits), " +
     "`start` (spawn a command, returns id), " +
     "`list` (all active + recently-finished), " +
     "`status` (one process, no output), " +
@@ -233,24 +350,33 @@ registry.register({
     "`write` (send to stdin; `data` may end with \\n), " +
     "`kill` (SIGTERM then SIGKILL).",
   parameters: z.object({
-    action: z.enum(["start", "list", "status", "poll", "log", "write", "kill"]),
+    action: z.enum(["run", "start", "list", "status", "poll", "log", "write", "kill"]),
     id: z.string().optional().describe("Process id (required for all actions except start/list)"),
-    command: z.string().optional().describe("Shell command (required for start)"),
-    cwd: z.string().optional().describe("Working directory (start only; defaults to agent cwd)"),
+    command: z.string().optional().describe("Shell command (required for run/start)"),
+    cwd: z.string().optional().describe("Working directory (run/start only; defaults to agent cwd)"),
     data: z.string().optional().describe("Data to write to stdin (write only)"),
     timeoutMs: z
       .number()
       .min(1000)
       .max(MAX_TIMEOUT_MS)
       .optional()
-      .describe(`Overall hard timeout in ms (start only; default ${DEFAULT_TIMEOUT_MS})`),
+      .describe(`Overall hard timeout in ms (run/start only; default ${DEFAULT_TIMEOUT_MS})`),
     silenceTimeoutMs: z
       .number()
       .min(1000)
       .max(MAX_TIMEOUT_MS)
       .optional()
       .describe(
-        `Kill if no output for this long, ms (start only; default ${DEFAULT_SILENCE_MS})`
+        `Kill if no output for this long, ms (run/start only; default ${DEFAULT_SILENCE_MS})`
+      ),
+    waitMs: z
+      .number()
+      .min(0)
+      .max(MAX_TIMEOUT_MS)
+      .optional()
+      .describe(
+        `For run only: how long this tool call waits before detaching and ` +
+          `posting completion asynchronously (default ${DEFAULT_RUN_WAIT_MS})`
       ),
   }),
   emoji: "⚙️",
@@ -266,6 +392,7 @@ registry.register({
       data?: string;
       timeoutMs?: number;
       silenceTimeoutMs?: number;
+      waitMs?: number;
     };
 
     const need = (id: string | undefined): ProcEntry | string => {
@@ -277,6 +404,52 @@ registry.register({
 
     try {
       switch (a.action) {
+        case "run": {
+          if (!a.command?.trim()) {
+            return JSON.stringify({ error: "command is required for run" });
+          }
+          const e = startProc({
+            command: a.command,
+            cwd: a.cwd,
+            timeoutMs: a.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+            silenceTimeoutMs: a.silenceTimeoutMs ?? DEFAULT_SILENCE_MS,
+          });
+          const completed = await waitForCompletionOrTimeout(
+            e,
+            a.waitMs ?? DEFAULT_RUN_WAIT_MS
+          );
+          if (completed) {
+            e.pending = "";
+            return JSON.stringify(completionResult(e));
+          }
+
+          const target = currentNotifyTarget();
+          const notificationUnavailable =
+            typeof target === "string" || !bindings;
+          if (!notificationUnavailable) {
+            enableCompletionNotification(e, target);
+          }
+          const recentOutput = e.pending.slice(-RUN_DETACHED_TAIL_CHARS);
+          e.pending = "";
+          return JSON.stringify({
+            success: true,
+            ...summary(e),
+            detached: true,
+            willNotify: !notificationUnavailable,
+            ...(notificationUnavailable
+              ? {
+                  warning:
+                    typeof target === "string"
+                      ? target
+                      : "process completion notification is not initialized",
+                }
+              : {}),
+            note: notificationUnavailable
+              ? "Process is still running; use process poll/log/kill to follow up."
+              : "Process is still running; completion will be posted to this session automatically.",
+            recentOutput,
+          });
+        }
         case "start": {
           if (!a.command) {
             return JSON.stringify({ error: "command is required for start" });

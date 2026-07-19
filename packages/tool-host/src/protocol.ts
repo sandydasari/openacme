@@ -49,6 +49,14 @@ export const WorkerMessageSchema = z.union([
   z.object({ id: z.string(), result: z.string() }),
   z.object({ id: z.string(), error: z.string() }),
   z.object({ method: z.literal("ready") }),
+  z.object({
+    method: z.literal("process_completed"),
+    params: z.object({
+      sessionId: z.string(),
+      agentId: z.string(),
+      result: z.record(z.string(), z.unknown()),
+    }),
+  }),
 ]);
 export type WorkerMessage = z.infer<typeof WorkerMessageSchema>;
 

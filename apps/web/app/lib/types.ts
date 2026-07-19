@@ -86,6 +86,7 @@ export const EVENT_KINDS = [
   "task_deleted",
   "scheduler_action",
   "task_completed_run",
+  "process_completed",
   "ping_user",
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];

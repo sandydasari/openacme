@@ -28,6 +28,11 @@ export {
   closeAllShellSessions,
 } from "./internal/shell-session.js";
 export {
+  bindProcessEvents,
+  type ProcessBindings,
+  type ProcessCompletionEvent,
+} from "./builtins/process.js";
+export {
   bindMemory,
   type MemoryBindings,
 } from "./builtins/memory.js";

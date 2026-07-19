@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 import type { Readable, Writable } from "node:stream";
 import { createLogger } from "@openacme/config/logger";
 import type { PathPolicy } from "@openacme/config";
-import type { ToolCallContext, ToolHostDispatcher } from "@openacme/tools";
+import type {
+  ProcessCompletionEvent,
+  ToolCallContext,
+  ToolHostDispatcher,
+} from "@openacme/tools";
 import {
   INIT_ENV_VAR,
   WorkerMessageSchema,
@@ -48,6 +52,8 @@ export interface ToolHostManagerOptions {
    *  cache-served MCP discovery once a real worker exists. Must not
    *  throw; called synchronously after the ready handshake. */
   onWorkerSpawned?: (agentId: string) => void;
+  /** Fired when a detached `process.run` completes inside the worker. */
+  onProcessCompleted?: (event: ProcessCompletionEvent) => void;
 }
 
 // Env keys that never reach the worker (and therefore never reach the
@@ -323,6 +329,15 @@ export class ToolHostManager implements ToolHostDispatcher {
           if (msg.method === "ready") {
             clearTimeout(readyTimer);
             resolve();
+          } else if (msg.method === "process_completed") {
+            try {
+              this.opts.onProcessCompleted?.(msg.params);
+            } catch (e) {
+              log.warn(
+                { err: e, agentId, processId: msg.params.result.id },
+                "process completion handler failed"
+              );
+            }
           }
           return;
         }
