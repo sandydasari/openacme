@@ -82,6 +82,28 @@ describe("process run", () => {
     }
   });
 
+  it("exposes WORKSPACE_HOME and AGENT_HOME", async () => {
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openacme-process-run-"));
+    try {
+      const result = await toolCallContext.run(
+        { sessionId: "s", agentId: "a", workspaceDir },
+        () =>
+          runProcess({
+            action: "run",
+            command:
+              'printf \'workspace=%s\\nagent=%s\\n\' "$WORKSPACE_HOME" "$AGENT_HOME"',
+            timeoutMs: 5000,
+          })
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain(`workspace=${workspaceDir}`);
+      expect(result.output).toContain(`agent=${path.dirname(workspaceDir)}`);
+    } finally {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+    }
+  });
+
   it("times out and returns captured output", async () => {
     const result = await runProcess({
       action: "run",

@@ -7,6 +7,7 @@ import {
   getCurrentSessionId,
   getCurrentWorkspaceDir,
 } from "../session-context.js";
+import { buildToolHomeEnv } from "../tool-env.js";
 
 /**
  * Background process management. One tool with an action enum, mirroring
@@ -168,6 +169,7 @@ function startProc(args: {
   cwd?: string;
   timeoutMs: number;
   silenceTimeoutMs: number;
+  env?: NodeJS.ProcessEnv;
 }): ProcEntry {
   evictExpired();
   if (procs.size >= MAX_PROCESSES) {
@@ -180,6 +182,7 @@ function startProc(args: {
   const effectiveCwd = args.cwd ?? baseCwd;
   const child = spawn(args.command, {
     cwd: effectiveCwd,
+    ...(args.env ? { env: { ...process.env, ...args.env } } : {}),
     shell: process.platform === "win32" ? true : "/bin/bash",
     detached: process.platform !== "win32", // for process-group kill
     stdio: ["pipe", "pipe", "pipe"],
@@ -348,7 +351,8 @@ registry.register({
     "`poll` (status + new output since last poll, then clears pending buffer), " +
     "`log` (full transcript), " +
     "`write` (send to stdin; `data` may end with \\n), " +
-    "`kill` (SIGTERM then SIGKILL).",
+    "`kill` (SIGTERM then SIGKILL). Run commands receive `WORKSPACE_HOME` " +
+    "and `AGENT_HOME` environment variables for stable absolute path references.",
   parameters: z.object({
     action: z.enum(["run", "start", "list", "status", "poll", "log", "write", "kill"]),
     id: z.string().optional().describe("Process id (required for all actions except start/list)"),
@@ -413,6 +417,7 @@ registry.register({
             cwd: a.cwd,
             timeoutMs: a.timeoutMs ?? DEFAULT_TIMEOUT_MS,
             silenceTimeoutMs: a.silenceTimeoutMs ?? DEFAULT_SILENCE_MS,
+            env: buildToolHomeEnv(),
           });
           const completed = await waitForCompletionOrTimeout(
             e,
