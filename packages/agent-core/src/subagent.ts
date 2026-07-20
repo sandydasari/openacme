@@ -13,6 +13,8 @@ import {
   generateObject,
   readUIMessageStream,
   stepCountIs,
+  streamObject,
+  type LanguageModelUsage,
   type StopCondition,
   type ToolSet,
   type UIMessage,
@@ -231,19 +233,53 @@ async function runStructured<S extends ZodTypeAny>(
   const startedAt = Date.now();
   try {
     const subagentModel = resolveSubagentModel(args.parent.config.model);
-    const result = await generateObject({
-      model: args.parent.resolveModel(subagentModel),
-      system: args.system,
-      schema: args.schema,
-      messages: [{ role: "user", content: args.user }],
-      maxOutputTokens: args.maxOutputTokens,
-      abortSignal: combined,
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: `${args.parent.config.id}:subagent.structured`,
-      },
-    });
-    if (args.usage && result.usage) {
+    let object: z.infer<S>;
+    let usage: LanguageModelUsage | undefined;
+
+    if (usesStreamingStructuredOutput(subagentModel)) {
+      const result = streamObject({
+        model: args.parent.resolveModel(subagentModel),
+        system: args.system,
+        schema: args.schema,
+        messages: [{ role: "user", content: args.user }],
+        maxOutputTokens: args.maxOutputTokens,
+        abortSignal: combined,
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: `${args.parent.config.id}:subagent.structured`,
+        },
+      });
+      const streamFinished = drainStream(result.fullStream);
+      try {
+        object = (await result.object) as z.infer<S>;
+      } finally {
+        await streamFinished.catch(() => {
+          // The object promise carries the meaningful failure for callers.
+        });
+      }
+      try {
+        usage = await result.usage;
+      } catch {
+        // Structured result is authoritative; usage is best-effort metadata.
+      }
+    } else {
+      const result = await generateObject({
+        model: args.parent.resolveModel(subagentModel),
+        system: args.system,
+        schema: args.schema,
+        messages: [{ role: "user", content: args.user }],
+        maxOutputTokens: args.maxOutputTokens,
+        abortSignal: combined,
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: `${args.parent.config.id}:subagent.structured`,
+        },
+      });
+      object = result.object as z.infer<S>;
+      usage = result.usage;
+    }
+
+    if (args.usage && usage) {
       args.parent.reportUsage({
         agentId: args.parent.config.id,
         sessionId: args.usage.sessionId,
@@ -251,12 +287,12 @@ async function runStructured<S extends ZodTypeAny>(
         model: subagentModel,
         taskId: args.usage.taskId,
         tokens: {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          totalTokens: result.usage.totalTokens,
-          cachedInputTokens: result.usage.inputTokenDetails?.cacheReadTokens,
-          cacheWriteTokens: result.usage.inputTokenDetails?.cacheWriteTokens,
-          reasoningTokens: result.usage.outputTokenDetails?.reasoningTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens,
+          cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens,
+          reasoningTokens: usage.outputTokenDetails?.reasoningTokens,
         },
         steps: 1,
         durationMs: Date.now() - startedAt,
@@ -265,12 +301,12 @@ async function runStructured<S extends ZodTypeAny>(
     return {
       mode: "structured",
       status: "completed",
-      object: result.object as z.infer<S>,
-      usage: result.usage
+      object,
+      usage: usage
         ? {
-            inputTokens: result.usage.inputTokens,
-            outputTokens: result.usage.outputTokens,
-            totalTokens: result.usage.totalTokens,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
           }
         : undefined,
     };
@@ -288,5 +324,18 @@ async function runStructured<S extends ZodTypeAny>(
       object: null,
       error: e instanceof Error ? e.message : String(e),
     };
+  }
+}
+
+function usesStreamingStructuredOutput(model: {
+  provider?: string;
+  auth?: string;
+}): boolean {
+  return model.provider === "openai" && model.auth === "oauth";
+}
+
+async function drainStream(stream: AsyncIterable<unknown>): Promise<void> {
+  for await (const _ of stream) {
+    // Draining drives the SDK stream pipeline so final object/usage promises resolve.
   }
 }
