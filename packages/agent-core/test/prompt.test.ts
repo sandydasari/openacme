@@ -299,6 +299,8 @@ describe("Workspace section (per-agent default cwd)", () => {
     });
     expect(prompt).toContain("## Workspace");
     expect(prompt).toContain("/data/agents/alice/workspace");
+    expect(prompt).toContain("WORKSPACE_HOME");
+    expect(prompt).toContain("AGENT_HOME");
     expect(prompt).toContain("persist");
   });
 

@@ -60,7 +60,7 @@ export class ShellSession {
   private currentCwd: string;
   lastUsedAt = Date.now();
 
-  constructor(public readonly initialCwd: string) {
+  constructor(public readonly initialCwd: string, private readonly baseEnv: NodeJS.ProcessEnv = {}) {
     this.currentCwd = initialCwd;
   }
 
@@ -78,7 +78,7 @@ export class ShellSession {
     // — no surprise aliases from a developer's ~/.bashrc bleeding in.
     const proc = spawn("/bin/bash", ["--norc", "--noprofile"], {
       cwd: fs.existsSync(this.currentCwd) ? this.currentCwd : this.initialCwd,
-      env: { ...process.env, PS1: "" },
+      env: { ...process.env, ...this.baseEnv, PS1: "" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     proc.unref();
@@ -281,13 +281,14 @@ function pruneTrackedIfFull(): void {
 export function getShellSession(
   agentId: string,
   sessionId: string,
-  initialCwd: string
+  initialCwd: string,
+  baseEnv: NodeJS.ProcessEnv = {}
 ): ShellSession {
   const key = `${agentId}:${sessionId}`;
   let s = sessions.get(key);
   if (!s) {
     pruneTrackedIfFull();
-    s = new ShellSession(initialCwd);
+    s = new ShellSession(initialCwd, baseEnv);
     sessions.set(key, s);
   }
   // The caller is about to exec — make room under the live cap and make

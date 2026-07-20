@@ -339,6 +339,9 @@ export function buildSystemPrompt(options: {
     parts.push(
       `\n## Workspace\nYour workspace directory is \`${options.workspaceDir}\`. ` +
         `Shell commands, file ops, and the Python REPL default to this location. ` +
+        `Shell and process commands also receive \`WORKSPACE_HOME\` for this ` +
+        `directory and \`AGENT_HOME\` for its parent, so prefer those when ` +
+        `you need stable absolute paths. ` +
         `Your shell maintains state across calls in this session — \`cd\`, ` +
         `exported environment variables, and shell functions all persist. ` +
         `Absolute paths are allowed; what you can actually read and write ` +
