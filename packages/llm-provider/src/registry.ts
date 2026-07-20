@@ -26,6 +26,7 @@ import {
 import { anthropicCacheMiddleware } from "./anthropic-cache.js";
 
 const log = createLogger("llm-provider");
+const MAX_OAUTH_ERROR_BODY_CHARS = 4_000;
 
 function resolveDataDir(): string {
   const fromEnv = process.env["OPENACME_DATA_DIR"];
@@ -66,6 +67,55 @@ function noteAccount(
 function maskAccount(id: string): string {
   if (id.length <= 8) return id;
   return `${id.slice(0, 4)}…${id.slice(-4)}`;
+}
+
+async function logOpenAIOAuthErrorResponse(
+  res: Response,
+  url: string | URL
+): Promise<void> {
+  if (res.ok) return;
+  let responseBody: string | undefined;
+  try {
+    responseBody = truncateDiagnostic(await res.clone().text());
+  } catch (err) {
+    responseBody = `<<failed to read response body: ${
+      err instanceof Error ? err.message : String(err)
+    }>>`;
+  }
+  log.warn(
+    {
+      provider: "openai",
+      auth: "oauth",
+      url: String(url),
+      status: res.status,
+      statusText: res.statusText,
+      responseHeaders: pickDiagnosticHeaders(res.headers),
+      responseBody,
+    },
+    "openai oauth error response"
+  );
+}
+
+function pickDiagnosticHeaders(headers: Headers): Record<string, string> {
+  const names = [
+    "cf-ray",
+    "openai-processing-ms",
+    "x-openai-request-id",
+    "x-request-id",
+    "x-stainless-request-id",
+  ];
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    const value = headers.get(name);
+    if (value) out[name] = value;
+  }
+  return out;
+}
+
+function truncateDiagnostic(value: string): string {
+  return value.length <= MAX_OAUTH_ERROR_BODY_CHARS
+    ? value
+    : `${value.slice(0, MAX_OAUTH_ERROR_BODY_CHARS)}... [truncated]`;
 }
 
 /** Models that 400 if temperature/top_p/top_k are set. Mirrors Hermes' list. */
@@ -334,6 +384,7 @@ const providerFactories: Record<
               throw e;
             }
           }
+          await logOpenAIOAuthErrorResponse(res, url as string | URL);
           return res;
         },
       });
