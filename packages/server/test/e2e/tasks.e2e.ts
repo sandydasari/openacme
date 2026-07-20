@@ -106,4 +106,52 @@ describe("autonomous dispatch (e2e)", () => {
 
     sse.close();
   });
+
+  it("surfaces autonomous model errors into the session", async () => {
+    const session = srv.manager.sessionStore.create("worker");
+    const sessionId = session.id;
+    const sse = await openSSE(`${srv.baseUrl}/api/sessions/${sessionId}/stream`);
+
+    const messageId = randomUUID();
+    srv.manager.inboxStore.deliver({
+      agentId: "worker",
+      kind: "user_message",
+      source: "user",
+      sourceId: messageId,
+      relatedSession: sessionId,
+      payload: {
+        id: messageId,
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: "break autonomous turn [[mock:error:autonomous failure]]",
+          },
+        ],
+      },
+    });
+
+    try {
+      await sse.waitFor(isState("running"), 8_000);
+      await sse.waitFor(isState("idle"), 12_000);
+
+      await waitUntil(async () => {
+        const messages = await c.messages(sessionId);
+        return messages.some((m) =>
+          m.role === "assistant" &&
+          m.parts.some((p) => p?.type === "data-upstream-error")
+        );
+      });
+      const assistant = (await c.messages(sessionId)).find((m) =>
+        m.role === "assistant" &&
+        m.parts.some((p) => p?.type === "data-upstream-error")
+      );
+      const errorPart = assistant!.parts.find(
+        (p) => p?.type === "data-upstream-error"
+      );
+      expect(errorPart.data.message).toContain("autonomous failure");
+    } finally {
+      sse.close();
+    }
+  });
 });
