@@ -31,6 +31,7 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { resolveShell } from "./shell-executable.js";
 
 export interface ShellExecResult {
   output: string;
@@ -68,15 +69,14 @@ export class ShellSession {
     return this.pending !== null;
   }
 
-  /** True while a bash subprocess is attached. */
+  /** True while a shell subprocess is attached. */
   get live(): boolean {
     return this.proc !== null;
   }
 
-  private spawnBash(): ChildProcessWithoutNullStreams {
-    // --norc / --noprofile keep bash predictable across user environments
-    // — no surprise aliases from a developer's ~/.bashrc bleeding in.
-    const proc = spawn("/bin/bash", ["--norc", "--noprofile"], {
+  private spawnShell(): ChildProcessWithoutNullStreams {
+    const shell = resolveShell();
+    const proc = spawn(shell.command, shell.args, {
       cwd: fs.existsSync(this.currentCwd) ? this.currentCwd : this.initialCwd,
       env: { ...process.env, ...this.baseEnv, PS1: "" },
       stdio: ["pipe", "pipe", "pipe"],
@@ -151,7 +151,7 @@ export class ShellSession {
 
     if (!this.proc || this.dead) {
       this.dead = false;
-      this.proc = this.spawnBash();
+      this.proc = this.spawnShell();
     }
 
     const uuid = randomUUID().replace(/-/g, "").slice(0, 16);

@@ -8,6 +8,7 @@ import {
 } from "../session-context.js";
 import { getShellSession } from "../internal/shell-session.js";
 import { buildToolHomeEnv } from "../tool-env.js";
+import { resolveShellForExec } from "../internal/shell-executable.js";
 
 const DESTRUCTIVE_PATTERNS = /(?:^|\s|&&|\|\||;|`)(?:rm\s|rmdir\s|cp\s|mv\s|sed\s+-i|truncate\s|dd\s|shred\s|git\s+(?:reset|clean|checkout)\s)/;
 
@@ -100,7 +101,7 @@ registry.register({
         timeout,
         encoding: "utf-8",
         maxBuffer: 1024 * 1024 * 10, // 10MB
-        shell: "/bin/bash",
+        shell: resolveShellForExec(),
         cwd: baseCwd,
         env: { ...process.env, ...toolHomeEnv },
         stdio: ["pipe", "pipe", "pipe"],

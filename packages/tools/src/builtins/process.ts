@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { registry } from "../registry.js";
 import { getCurrentWorkspaceDir } from "../session-context.js";
 import { buildToolHomeEnv } from "../tool-env.js";
+import { resolveShellForSpawn } from "../internal/shell-executable.js";
 
 /**
  * Background process management. One tool with an action enum, mirroring
@@ -153,7 +154,7 @@ function startProc(args: {
   const child = spawn(args.command, {
     cwd: effectiveCwd,
     env: { ...process.env, ...buildToolHomeEnv() },
-    shell: process.platform === "win32" ? true : "/bin/bash",
+    shell: resolveShellForSpawn(),
     detached: process.platform !== "win32", // for process-group kill
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -194,6 +195,10 @@ function startProc(args: {
     }
   });
   child.on("error", (err) => {
+    if (e.overallTimer) clearTimeout(e.overallTimer);
+    if (e.silenceTimer) clearTimeout(e.silenceTimer);
+    e.overallTimer = null;
+    e.silenceTimer = null;
     appendOutput(e, `\n[spawn error: ${err.message}]\n`);
     e.endedAt = Date.now();
     if (e.status === "running") e.status = "killed";
