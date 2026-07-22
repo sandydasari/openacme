@@ -2,6 +2,7 @@ import { generateText, type UIMessage, type UIMessagePart } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 import { getModel } from "@openacme/llm-provider";
 import type { ModelConfig } from "@openacme/config";
+import { extractErrorText } from "./error-classifier.js";
 import type { CompressionConfig } from "./types.js";
 
 /**
@@ -990,8 +991,7 @@ function modelLabel(m: ModelConfig): string {
 }
 
 function errorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return String(e);
+  return extractErrorText(e);
 }
 
 export interface CompressOpts {

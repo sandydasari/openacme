@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigSchema } from "@openacme/config";
 import {
   createDatabase,
+  createCommentStore,
   createSessionStore,
   createInboxStore,
 } from "@openacme/db";
@@ -56,7 +57,9 @@ beforeEach(() => {
   db = createDatabase(config);
   sessionStore = createSessionStore(db);
   inboxStore = createInboxStore(db);
-  taskStore = new TaskStore(path.join(dataDir, "tasks"));
+  taskStore = new TaskStore(path.join(dataDir, "tasks"), {
+    commentStore: createCommentStore(db),
+  });
   dispatcher = null;
 });
 
@@ -279,6 +282,33 @@ describe("Dispatcher failure handling", () => {
     // Park backoff is 5 minutes.
     expect(retryAt).toBeGreaterThan(Date.now() + 4 * 60_000);
     expect(retryAt).toBeLessThan(Date.now() + 6 * 60_000);
+  });
+
+  it("parks plain object turn errors with a readable provider message", async () => {
+    const { manager } = fakeManager(["a1"], async () => {
+      throw {
+        status: 400,
+        error: {
+          message: "Unsupported model gpt-5.2 for OpenAI OAuth",
+          type: "invalid_request_error",
+        },
+      };
+    });
+    const { task } = await makeBoundTask("a1", {
+      status: "in_progress",
+    });
+
+    const d = makeDispatcher(manager);
+    await d.start();
+    await d.drain(5_000);
+
+    const parked = taskStore.get(task.id);
+    expect(parked?.status).toBe("blocked");
+    const comments = taskStore.listComments(task.id, { kinds: ["system"] });
+    expect(comments.at(-1)?.body).toContain(
+      "Unsupported model gpt-5.2 for OpenAI OAuth"
+    );
+    expect(comments.at(-1)?.body).not.toContain("[object Object]");
   });
 
   it("startup sweep resets stale in_progress tasks to open", async () => {

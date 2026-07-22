@@ -28,7 +28,7 @@
  */
 
 import type { TaskStore, Task } from "@openacme/tasks";
-import { AutonomousTurnTimeout } from "@openacme/agent-core";
+import { AutonomousTurnTimeout, extractErrorText } from "@openacme/agent-core";
 import type { SessionStore, InboxStore } from "@openacme/db";
 import { createLogger } from "@openacme/config/logger";
 import type { AgentManager } from "./agent-manager.js";
@@ -420,7 +420,7 @@ export class Dispatcher {
     try {
       await agent.runAutonomous({ sessionId });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = extractErrorText(e);
       const isTimeout = e instanceof AutonomousTurnTimeout;
       if (!isTimeout) {
         log.warn({ sessionId, message }, "autonomous turn failed");
