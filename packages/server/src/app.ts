@@ -2032,20 +2032,30 @@ async function runChatTurn(args: {
         // Error branch: stream failed mid-turn (provider 4xx/5xx, network
         // drop, etc.). Append an upstream-error part so the user sees what
         // failed; preserve whatever assembled before the failure.
-        const parts = !capturedError || signal.aborted
-          ? ensureStepBoundaries(
-              finalizeOrphanToolParts(
-                responseMessage.parts as UIMessage["parts"]
-              )
-            )
-          : [
-              ...ensureStepBoundaries(
-                finalizeOrphanToolParts(
-                  responseMessage.parts as UIMessage["parts"]
-                )
-              ),
-              buildUpstreamErrorPart(capturedError, agentId, manager),
-            ];
+        const baseParts = ensureStepBoundaries(
+          finalizeOrphanToolParts(
+            responseMessage.parts as UIMessage["parts"]
+          )
+        );
+        let parts = baseParts;
+        if (capturedError && !signal.aborted) {
+          const upstreamErrorPart = buildUpstreamErrorPart(
+            capturedError,
+            agentId,
+            manager
+          );
+          log.warn(
+            {
+              sessionId,
+              agentId,
+              provider: upstreamErrorPart.data.provider,
+              statusCode: upstreamErrorPart.data.statusCode,
+              message: upstreamErrorPart.data.message,
+            },
+            "chat turn upstream provider error"
+          );
+          parts = [...baseParts, upstreamErrorPart];
+        }
         manager.messageStore.append(sessionId, {
           id: responseMessage.id,
           role: responseMessage.role as "user" | "assistant",
