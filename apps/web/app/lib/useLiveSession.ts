@@ -7,7 +7,8 @@ import { API_BASE } from "./api";
  * Subscribe to a per-session SSE channel. Feeds `ui_message_part` chunks
  * into `readUIMessageStream` for live assembly; accepts pre-assembled
  * UIMessages via `messages_appended`. Both upsert by id so chunks and
- * the end-of-turn canonical broadcast converge.
+ * the end-of-turn canonical broadcast converge. Metadata updates such as
+ * `session_title` are delivered as callbacks.
  *
  * `whenConnected()` resolves on the EventSource's `open` event for the
  * current sessionId — callers await it before posting /api/chat so the
@@ -36,6 +37,8 @@ export function useLiveSession(
     /** A queued user message was cancelled (via DELETE /queued/:id).
      *  Other tabs drop their chip. */
     onInboxCancelled?: (item: { messageId: string }) => void;
+    /** Session title was generated after the post-turn metadata write. */
+    onSessionTitle?: (title: string) => void;
   }
 ): { state: "running" | "idle"; whenConnected: () => Promise<void> } {
   const [state, setState] = useState<"running" | "idle">("idle");
@@ -46,11 +49,13 @@ export function useLiveSession(
   const onDataPartRef = useRef(opts?.onDataPart);
   const onInboxQueuedRef = useRef(opts?.onInboxQueued);
   const onInboxCancelledRef = useRef(opts?.onInboxCancelled);
+  const onSessionTitleRef = useRef(opts?.onSessionTitle);
   setMessagesRef.current = setMessages;
   onTaskEventRef.current = opts?.onTaskEvent;
   onDataPartRef.current = opts?.onDataPart;
   onInboxQueuedRef.current = opts?.onInboxQueued;
   onInboxCancelledRef.current = opts?.onInboxCancelled;
+  onSessionTitleRef.current = opts?.onSessionTitle;
   // Promise that resolves on the current EventSource's `open`. Replaced
   // on every sessionId change so callers always await the live one.
   const connectedRef = useRef<{ promise: Promise<void>; resolve: () => void }>(
@@ -218,6 +223,16 @@ export function useLiveSession(
           const env = JSON.parse(e.data) as { state?: "running" | "idle" };
           if (env.state === "running" || env.state === "idle") {
             setState(env.state);
+          }
+        } catch {
+          /* ignore */
+        }
+      },
+      session_title: (e) => {
+        try {
+          const env = JSON.parse(e.data) as { title?: unknown };
+          if (typeof env.title === "string" && env.title.trim()) {
+            onSessionTitleRef.current?.(env.title);
           }
         } catch {
           /* ignore */

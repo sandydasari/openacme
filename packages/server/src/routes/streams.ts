@@ -2,8 +2,9 @@
  * SSE routes for live workforce + per-session streams.
  *
  * - `GET /api/sessions/:id/stream` — per-session push channel. Emits
- *   `ui_message_part`, `messages_appended`, `session_state`, and
- *   `task_event` envelopes. Replays the broadcaster's ring buffer on
+ *   `ui_message_part`, `messages_appended`, `session_state`,
+ *   `session_title`, and `task_event` envelopes. Replays the
+ *   broadcaster's ring buffer on
  *   reconnect (Last-Event-ID present) so a brief disconnect doesn't
  *   drop a streaming turn. Fresh connections are forward-only — past
  *   messages come from DB history, not the buffer.

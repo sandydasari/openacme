@@ -277,9 +277,8 @@ function lastIsUnansweredAutonomousWake(
  * the stream and persistence.
  */
 /** Structural subset of the server's SessionBroadcaster used by
- *  `runAutonomous` to push UIMessage stream chunks + appended messages
- *  to SSE subscribers. Kept in agent-core so the package stays free
- *  of a runtime dep on @openacme/server. */
+ *  agent-core to push live session updates to SSE subscribers. Kept in
+ *  agent-core so the package stays free of a runtime dep on @openacme/server. */
 export interface AutonomousBroadcaster {
   broadcast(
     sessionId: string,
@@ -294,6 +293,7 @@ export interface AutonomousBroadcaster {
             metadata?: unknown;
           }>;
         }
+      | { kind: "session_title"; title: string }
   ): void;
 }
 
@@ -1673,7 +1673,7 @@ export class Agent {
       const fallback = sliceFallbackTitle(opts.sessionMessages);
       if (!fallback) return;
       try {
-        this.sessionStore.updateTitle(opts.sessionId, fallback);
+        this.writeSessionTitle(opts.sessionId, fallback);
       } catch (e) {
         log.warn(
           { err: e, agentId: this.config.id, sessionId: opts.sessionId },
@@ -1692,7 +1692,7 @@ export class Agent {
     })
       .then((title) => {
         if (title) {
-          this.sessionStore.updateTitle(opts.sessionId, title);
+          this.writeSessionTitle(opts.sessionId, title);
           return;
         }
         writeFallback();
@@ -1707,6 +1707,14 @@ export class Agent {
       .finally(() => {
         this.titleInProgress.delete(opts.sessionId);
       });
+  }
+
+  private writeSessionTitle(sessionId: string, title: string): void {
+    this.sessionStore.updateTitle(sessionId, title);
+    this.broadcaster?.broadcast(sessionId, {
+      kind: "session_title",
+      title,
+    });
   }
 
   /** Get conversation history for a session as persisted UIMessages. */

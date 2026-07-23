@@ -1,6 +1,7 @@
 /**
  * In-memory per-session pub/sub for live updates to web clients.
- * Shared by the scheduler (session_state), event store (task_event),
+ * Shared by the scheduler (session_state), title writer
+ * (session_title), event store (task_event),
  * both /api/chat and Agent.runAutonomous (ui_message_part chunks +
  * messages_appended for user/auto messages), and the SSE routes.
  *
@@ -48,6 +49,11 @@ export type SessionBroadcastEvent =
   | {
       kind: "session_state";
       state: "running" | "idle";
+    }
+  | {
+      /** Session metadata changed after a post-turn title write. */
+      kind: "session_title";
+      title: string;
     }
   | {
       kind: "task_event";
