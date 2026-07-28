@@ -8,7 +8,10 @@ import { SITE_NAME } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Changelog",
   description: `What's new in ${SITE_NAME}, release by release.`,
-  alternates: { types: { "application/rss+xml": "/changelog/rss.xml" } },
+  alternates: {
+    canonical: "/changelog",
+    types: { "application/rss+xml": "/changelog/rss.xml" },
+  },
 };
 
 export default function ChangelogPage() {

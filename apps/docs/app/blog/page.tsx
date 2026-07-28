@@ -7,7 +7,10 @@ import { SITE_NAME } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Blog",
   description: `Notes, releases, and ideas from the ${SITE_NAME} team.`,
-  alternates: { types: { "application/rss+xml": "/blog/rss.xml" } },
+  alternates: {
+    canonical: "/blog",
+    types: { "application/rss+xml": "/blog/rss.xml" },
+  },
 };
 
 export default function BlogIndex() {

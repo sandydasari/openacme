@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/json-ld";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import { Logomark, Wordmark } from "@/components/logo";
 import { AmbientVideo } from "@/components/landing/AmbientVideo";
 import {
@@ -104,9 +107,37 @@ const SPECS: [string, string][] = [
   ["Price", "Free — you pay only your model provider"],
 ];
 
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
+
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col overflow-x-clip">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebSite",
+              name: SITE_NAME,
+              url: SITE_URL,
+              description: SITE_DESCRIPTION,
+            },
+            {
+              "@type": "SoftwareApplication",
+              name: SITE_NAME,
+              url: SITE_URL,
+              description: SITE_DESCRIPTION,
+              applicationCategory: "DeveloperApplication",
+              operatingSystem: "macOS, Linux",
+              license: "https://opensource.org/license/mit",
+              offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+              sameAs: ["https://github.com/sandydasari/openacme"],
+            },
+          ],
+        }}
+      />
       <div className="relative mx-auto w-full max-w-6xl border-x border-paper-rule">
         {/* HERO */}
         <section className="relative overflow-hidden">

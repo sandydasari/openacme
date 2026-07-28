@@ -5,8 +5,10 @@ import { blogSource } from "@/lib/source";
 import { getMDXComponents } from "@/mdx-components";
 import { AuthorBadge } from "@/components/author-badge";
 import { Comments } from "@/components/comments";
+import { JsonLd } from "@/components/json-ld";
 import { formatDate } from "@/lib/format";
-import { SITE_NAME } from "@/lib/site";
+import { getAuthor } from "@/lib/authors";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 export default async function BlogPost(props: {
   params: Promise<{ slug: string }>;
@@ -17,9 +19,30 @@ export default async function BlogPost(props: {
 
   const MDX = page.data.body;
   const tags = page.data.tags ?? [];
+  const author = getAuthor(page.data.author);
+  const url = `${SITE_URL}/blog/${slug}`;
 
   return (
     <main className="flex flex-1 flex-col">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          headline: page.data.title,
+          description: page.data.description,
+          url,
+          mainEntityOfPage: url,
+          datePublished: page.data.date,
+          image: `${SITE_URL}${page.data.image ?? "/og/default.png"}`,
+          keywords: tags,
+          author: {
+            "@type": "Person",
+            name: author.name,
+            ...(author.url ? { url: author.url } : {}),
+          },
+          publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+        }}
+      />
       <article className="mx-auto w-full max-w-3xl px-6 pt-12 pb-20 sm:pt-16">
         <Link
           href="/blog"
