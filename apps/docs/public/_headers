@@ -19,3 +19,16 @@
 /install.sh
   Content-Type: text/x-shellscript; charset=utf-8
   Cache-Control: public, max-age=3600
+
+# LLM-facing text surfaces — short TTL so content edits roll out fast.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/md/*
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=3600

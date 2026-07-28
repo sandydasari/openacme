@@ -8,11 +8,15 @@ import { z } from "zod";
 
 export const docs = defineDocs({
   dir: "content/docs",
+  docs: {
+    postprocess: { includeProcessedMarkdown: true },
+  },
 });
 
 export const blog = defineCollections({
   type: "doc",
   dir: "content/blog",
+  postprocess: { includeProcessedMarkdown: true },
   schema: frontmatterSchema.extend({
     date: z.string(),
     author: z.string(),
