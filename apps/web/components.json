@@ -10,6 +10,9 @@
     "cssVariables": true,
     "prefix": ""
   },
+  "registries": {
+    "@brainless": "https://brainless.swerdlow.dev/r/{name}.json"
+  },
   "aliases": {
     "components": "@/app/components",
     "utils": "@/app/lib/utils",
