@@ -267,16 +267,22 @@ async function runOAuthLogin(
   // Anthropic: try Claude Code first, fall back to setup-token paste.
   const spin = p.spinner();
   spin.start("Looking for Claude Code credentials");
-  const fromCC = loginWithClaudeCodeCredentials(dataDir);
+  let importError: string | undefined;
+  const fromCC = await loginWithClaudeCodeCredentials(dataDir).catch((e) => {
+    importError = e instanceof Error ? e.message : String(e);
+    return null;
+  });
   if (fromCC) {
     spin.stop("Imported Claude Code credentials.");
     return "ok";
   }
-  spin.stop("Claude Code not found.");
+  spin.stop(importError ? "Claude Code credentials unusable." : "Claude Code not found.");
 
   p.note(
-    "If you have Claude Code installed, run `claude /login` first, then re-run setup.\n" +
-    "Otherwise, paste an Anthropic OAuth setup token (starts with `sk-ant-oat-`).",
+    (importError
+      ? `${importError}\n`
+      : "If you have Claude Code installed, run `claude /login` first, then re-run setup.\n") +
+      "Otherwise, paste an Anthropic OAuth setup token (starts with `sk-ant-oat-`).",
     "Sign in with Claude",
   );
 

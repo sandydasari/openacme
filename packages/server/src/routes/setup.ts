@@ -120,7 +120,7 @@ export function registerSetupRoutes(app: Hono, opts: SetupRoutesOptions): void {
       return c.json({ error: "importNow must be true" }, 400);
     }
     try {
-      const result = loginWithClaudeCodeCredentials(opts.dataDir);
+      const result = await loginWithClaudeCodeCredentials(opts.dataDir);
       if (!result) {
         return c.json({ error: "no Claude Code credentials found" }, 404);
       }
