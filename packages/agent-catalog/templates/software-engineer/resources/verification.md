@@ -33,7 +33,7 @@ The user is making decisions based on what you report. A false "all tests pass" 
 
 This one is non-negotiable: **open it in a browser**. Type-checks and unit tests verify code correctness, not feature correctness.
 
-1. Start the dev server (use `process` to background it if it's not already running).
+1. Start the dev server with `process` action `start` if it needs to stay running while you use the browser. For a one-shot build or bounded verification command, use `process` action `run` so the completed output returns to the conversation without manual polling.
 2. Open the page. The `playwright-cli` skill is the right tool — it drives a real browser interactively without you writing a Playwright script.
 3. Click through the golden path of the feature you changed.
 4. Try one edge case (empty state, error state, narrow viewport).

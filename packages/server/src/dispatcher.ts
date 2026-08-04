@@ -80,6 +80,9 @@ export class Dispatcher {
   /** True between `start()` and `stop()`. */
   private running = false;
   private timer: NodeJS.Timeout | null = null;
+  /** A signal arrived while an agent chain was busy. Run one pass as
+   *  soon as the chain frees so the inbox row is picked up promptly. */
+  private kickAfterChain = false;
 
   constructor(opts: DispatcherOptions) {
     this.taskStore = opts.taskStore;
@@ -176,6 +179,16 @@ export class Dispatcher {
     if (!this.running) return;
     this.tickSafe().catch((e) =>
       log.warn({ err: e, sessionId }, "post-interactive tick threw")
+    );
+  }
+
+  /** Run one scheduler pass soon without waiting for the 60s floor.
+   *  Used after server-side completion signals land in the inbox. */
+  kick(reason = "manual"): void {
+    if (!this.running) return;
+    if (this.chains.size > 0) this.kickAfterChain = true;
+    this.tickSafe().catch((e) =>
+      log.warn({ err: e, reason }, "dispatcher kick threw")
     );
   }
 
@@ -396,6 +409,15 @@ export class Dispatcher {
           kind: "session_state",
           state: "idle",
         });
+      }
+      if (this.kickAfterChain) {
+        this.kickAfterChain = false;
+        this.tickSafe().catch((e) =>
+          log.warn(
+            { err: e, sessionId },
+            "post-chain dispatcher kick threw"
+          )
+        );
       }
     });
     this.chains.set(agentId, promise);

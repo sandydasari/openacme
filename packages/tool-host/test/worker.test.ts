@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ToolHostManager } from "../src/manager.js";
-import type { ToolCallContext } from "@openacme/tools";
+import type { ProcessCompletionEvent, ToolCallContext } from "@openacme/tools";
 import type { PathPolicy } from "@openacme/config";
 
 function policyFor(dir: string) {
@@ -23,6 +23,19 @@ function policyFor(dir: string) {
   });
 }
 
+async function waitUntil(
+  fn: () => boolean,
+  timeoutMs = 3000
+): Promise<void> {
+  const started = Date.now();
+  while (!fn()) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error("timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 describe("tool-host worker round-trips (real child process)", () => {
   // Each test spawns a real worker (node + tsx transpile); cold spawns on slow
   // CI runners exceed vitest's 5s default. The assertions already retry.
@@ -31,6 +44,7 @@ describe("tool-host worker round-trips (real child process)", () => {
   let dir: string;
   let manager: ToolHostManager;
   let ctx: ToolCallContext;
+  let completions: ProcessCompletionEvent[];
 
   beforeEach(() => {
     // realpath: sandbox rules match real paths, and macOS tmp lives
@@ -46,9 +60,11 @@ describe("tool-host worker round-trips (real child process)", () => {
     fs.writeFileSync(path.join(dir, "secrets", "token.txt"), "topsecret");
     fs.mkdirSync(path.join(dir, "protected"), { recursive: true });
     fs.writeFileSync(path.join(dir, "protected", "system.txt"), "do not touch");
+    completions = [];
     manager = new ToolHostManager({
       dataDir: dir,
       compilePolicyFor: policyFor(dir),
+      onProcessCompleted: (event) => completions.push(event),
     });
     ctx = { sessionId: "sess-1", agentId: "zoe", workspaceDir };
   });
@@ -188,5 +204,31 @@ describe("tool-host worker round-trips (real child process)", () => {
     expect(JSON.parse(a).output).toBe("A");
     expect(JSON.parse(b).error).toBeTruthy();
     expect(JSON.parse(c).output).toBe("C");
+  });
+
+  it("emits completion for process run after it detaches", async () => {
+    const started = JSON.parse(
+      await manager.dispatch(
+        "process",
+        {
+          action: "run",
+          command: "sleep 0.1; printf 'finished\\n'",
+          waitMs: 0,
+          timeoutMs: 5000,
+        },
+        ctx
+      )
+    );
+    expect(started.success).toBe(true);
+    expect(started.status).toBe("running");
+    expect(started.detached).toBe(true);
+    expect(started.willNotify).toBe(true);
+
+    await waitUntil(() => completions.length === 1);
+    expect(completions[0]?.sessionId).toBe("sess-1");
+    expect(completions[0]?.agentId).toBe("zoe");
+    expect(completions[0]?.result.success).toBe(true);
+    expect(completions[0]?.result.status).toBe("exited");
+    expect(completions[0]?.result.output).toContain("finished");
   });
 });

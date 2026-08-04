@@ -210,6 +210,15 @@ export function summarizeEventPayload(
       const next = p.next_fire ? ` — next fire ${String(p.next_fire)}` : "";
       return `run ${runs} done${next}`;
     }
+    case "process_completed": {
+      const id = p.id ? String(p.id) : "process";
+      const status = p.status ? String(p.status) : "completed";
+      const exitCode =
+        p.exitCode === null || p.exitCode === undefined
+          ? ""
+          : ` exit ${String(p.exitCode)}`;
+      return `${id} ${status}${exitCode}`;
+    }
     case "ping_user": {
       const excerpt = p.message ? String(p.message).slice(0, 80) : "";
       return excerpt

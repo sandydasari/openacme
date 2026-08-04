@@ -66,6 +66,7 @@ import {
   deleteSessionToolCalls,
   SYSTEM_TOOLS,
   EMAIL_TOOL_NAMES,
+  type ProcessCompletionEvent,
 } from "@openacme/tools";
 import { ToolHostManager } from "@openacme/tool-host";
 import * as fs from "node:fs";
@@ -501,6 +502,9 @@ export class AgentManager {
       onWorkerSpawned: (agentId) => {
         void this.refreshStdioMcpAfterSpawn(agentId);
       },
+      onProcessCompleted: (event) => {
+        this.handleProcessCompleted(event);
+      },
     });
     bindToolHost(this.toolHostManager);
 
@@ -605,6 +609,42 @@ export class AgentManager {
     } catch (e) {
       log.warn({ err: e }, "tool-overflow sweep failed");
     }
+  }
+
+  private handleProcessCompleted(event: ProcessCompletionEvent): void {
+    const session = this.sessionStore.get(event.sessionId);
+    if (!session) {
+      log.warn(
+        {
+          sessionId: event.sessionId,
+          agentId: event.agentId,
+          processId: event.result.id,
+        },
+        "dropping process completion for missing session"
+      );
+      return;
+    }
+    if (session.agentId !== event.agentId) {
+      log.warn(
+        {
+          sessionId: event.sessionId,
+          sessionAgentId: session.agentId,
+          eventAgentId: event.agentId,
+          processId: event.result.id,
+        },
+        "dropping process completion for mismatched session agent"
+      );
+      return;
+    }
+
+    this.eventStore.append({
+      sessionId: event.sessionId,
+      agentId: event.agentId,
+      actor: null,
+      kind: "process_completed",
+      payload: event.result,
+    });
+    this.dispatcher.kick("process_completed");
   }
 
   /**

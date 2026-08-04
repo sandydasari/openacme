@@ -19,6 +19,7 @@ import * as readline from "node:readline";
 import {
   registry,
   toolCallContext,
+  bindProcessEvents,
   closeShellSession,
   closeAllShellSessions,
   type ToolCallContext,
@@ -36,6 +37,12 @@ import {
 function send(msg: WorkerMessage): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
+
+bindProcessEvents({
+  emitCompletion: (event) => {
+    send({ method: "process_completed", params: event });
+  },
+});
 
 // The sandbox redirects TMPDIR (srt uses /tmp/claude) but doesn't create
 // it; the shell/python tools write temp files there.

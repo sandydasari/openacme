@@ -40,7 +40,7 @@ Tools cap their output (`shell` is 50KB). If you need more, narrow the call: pas
 ## OpenAcme-specific tools
 
 - `execute_code` — Python REPL with persistent state. Trailing expression returns its value (Jupyter-style). Good for ad-hoc data inspection, quick math, prototyping a snippet before writing it.
-- `process` — long-running background processes (dev servers, watchers). `start` returns a handle; `list`/`stop`/`signal` manage it. Use this for anything that doesn't return in a few seconds.
+- `process` — use `run` for one-call command execution: it waits briefly for quick completion, and if the command is still running, it keeps the process alive and posts the final stdout/stderr back to the session when it exits. Use `run` for longer tests/builds/scripts where the completed output should return without manual polling. Use `start`/`poll`/`log`/`write`/`kill` only for dev servers, watchers, interactive jobs, stdin writes, or manual debugging.
 - `session_search` — full-text search across this and previous sessions. Useful for "what did we decide about X last week" or "find the bug fix we tried that didn't work."
 - `web_search` / `web_extract` — search the web and fetch a URL as markdown. Use for current docs, library versions, recent CVEs.
 - `agent_list` — list your coworkers in the workforce with their roles. Use before `task_create` with an `assignee`.
