@@ -3,6 +3,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { registry } from "../registry.js";
 import { getCurrentWorkspaceDir } from "../session-context.js";
+import { buildToolHomeEnv } from "../tool-env.js";
+import { resolveShellForSpawn } from "../internal/shell-executable.js";
 
 /**
  * Background process management. One tool with an action enum, mirroring
@@ -151,7 +153,8 @@ function startProc(args: {
   const effectiveCwd = args.cwd ?? baseCwd;
   const child = spawn(args.command, {
     cwd: effectiveCwd,
-    shell: process.platform === "win32" ? true : "/bin/bash",
+    env: { ...process.env, ...buildToolHomeEnv() },
+    shell: resolveShellForSpawn(),
     detached: process.platform !== "win32", // for process-group kill
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -192,6 +195,10 @@ function startProc(args: {
     }
   });
   child.on("error", (err) => {
+    if (e.overallTimer) clearTimeout(e.overallTimer);
+    if (e.silenceTimer) clearTimeout(e.silenceTimer);
+    e.overallTimer = null;
+    e.silenceTimer = null;
     appendOutput(e, `\n[spawn error: ${err.message}]\n`);
     e.endedAt = Date.now();
     if (e.status === "running") e.status = "killed";
@@ -231,7 +238,8 @@ registry.register({
     "`poll` (status + new output since last poll, then clears pending buffer), " +
     "`log` (full transcript), " +
     "`write` (send to stdin; `data` may end with \\n), " +
-    "`kill` (SIGTERM then SIGKILL).",
+    "`kill` (SIGTERM then SIGKILL). Started commands receive `WORKSPACE_HOME` " +
+    "and `AGENT_HOME` environment variables for stable absolute path references.",
   parameters: z.object({
     action: z.enum(["start", "list", "status", "poll", "log", "write", "kill"]),
     id: z.string().optional().describe("Process id (required for all actions except start/list)"),

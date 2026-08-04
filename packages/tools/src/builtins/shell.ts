@@ -7,6 +7,8 @@ import {
   getCurrentSessionId,
 } from "../session-context.js";
 import { getShellSession } from "../internal/shell-session.js";
+import { buildToolHomeEnv } from "../tool-env.js";
+import { resolveShellForExec } from "../internal/shell-executable.js";
 
 const DESTRUCTIVE_PATTERNS = /(?:^|\s|&&|\|\||;|`)(?:rm\s|rmdir\s|cp\s|mv\s|sed\s+-i|truncate\s|dd\s|shred\s|git\s+(?:reset|clean|checkout)\s)/;
 
@@ -23,7 +25,8 @@ registry.register({
     "installing packages, checking system state, and any terminal operations. " +
     "Runs from your agent's workspace dir by default. State persists across " +
     "calls in this session — `cd`, exported env vars, shell functions, and " +
-    "history are preserved.",
+    "history are preserved. Commands receive `WORKSPACE_HOME` and `AGENT_HOME` " +
+    "environment variables for stable absolute path references.",
   parameters: z.object({
     command: z.string().describe("The shell command to execute"),
     timeout: z
@@ -49,11 +52,12 @@ registry.register({
     const workspaceDir = getCurrentWorkspaceDir();
     const agentId = getCurrentAgentId();
     const sessionId = getCurrentSessionId();
+    const toolHomeEnv = buildToolHomeEnv(workspaceDir);
 
     // Persistent path: a real bash subprocess per (agentId, sessionId)
     // so `cd`, env vars, and shell functions survive across calls.
     if (workspaceDir && agentId && sessionId) {
-      const session = getShellSession(agentId, sessionId, workspaceDir);
+      const session = getShellSession(agentId, sessionId, workspaceDir, toolHomeEnv);
       try {
         const res = await session.exec(command, timeout);
         const trimmed = res.output.trimEnd();
@@ -97,8 +101,9 @@ registry.register({
         timeout,
         encoding: "utf-8",
         maxBuffer: 1024 * 1024 * 10, // 10MB
-        shell: "/bin/bash",
+        shell: resolveShellForExec(),
         cwd: baseCwd,
+        env: { ...process.env, ...toolHomeEnv },
         stdio: ["pipe", "pipe", "pipe"],
       });
 

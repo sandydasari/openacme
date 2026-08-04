@@ -5,6 +5,7 @@ import * as os from "node:os";
 import { registry } from "../src/registry.js";
 import { toolCallContext } from "../src/session-context.js";
 import { closeAllShellSessions } from "../src/internal/shell-session.js";
+import { _resetProcessRegistry } from "../src/builtins/process.js";
 // Side-effect imports — each tool self-registers at module load.
 import "../src/builtins/shell.js";
 import "../src/builtins/file.js";
@@ -14,6 +15,7 @@ import "../src/builtins/apply-patch.js";
 afterEach(() => {
   // Reap any per-(agent, session) bash subprocesses spawned during the test.
   closeAllShellSessions();
+  _resetProcessRegistry();
 });
 
 // `<dataDir>/agents/<id>/workspace/` is the default cwd for the agent's
@@ -119,6 +121,76 @@ describe("shell — cwd defaults to workspace", () => {
     expect(
       res.output === cwd || res.output === path.join("/private", cwd)
     ).toBe(true);
+  });
+
+  it("exposes WORKSPACE_HOME and AGENT_HOME in persistent shell sessions", async () => {
+    const ctx = {
+      sessionId: "sess-home-env",
+      agentId: "agent-home-env",
+      workspaceDir,
+    };
+    const res = await toolCallContext.run(ctx, () =>
+      runTool<{ success: boolean; output: string }>("shell", {
+        command:
+          'printf \'workspace=%s\\nagent=%s\\n\' "$WORKSPACE_HOME" "$AGENT_HOME"',
+        timeout: 5000,
+      }),
+    );
+    expect(res.success).toBe(true);
+    expect(res.output).toContain(`workspace=${workspaceDir}`);
+    expect(res.output).toContain(`agent=${path.dirname(workspaceDir)}`);
+  });
+
+  it("exposes WORKSPACE_HOME and AGENT_HOME in non-persistent shell executions", async () => {
+    const res = await toolCallContext.run(
+      { sessionId: "", agentId: "", workspaceDir },
+      () =>
+        runTool<{ success: boolean; output: string }>("shell", {
+          command:
+            'printf \'workspace=%s\\nagent=%s\\n\' "$WORKSPACE_HOME" "$AGENT_HOME"',
+          timeout: 5000,
+        }),
+    );
+    expect(res.success).toBe(true);
+    expect(res.output).toContain(`workspace=${workspaceDir}`);
+    expect(res.output).toContain(`agent=${path.dirname(workspaceDir)}`);
+  });
+});
+
+describe("process — home environment", () => {
+  it("exposes WORKSPACE_HOME and AGENT_HOME to started processes", async () => {
+    const started = await withWorkspace(workspaceDir, () =>
+      runTool<{ success: boolean; id: string }>("process", {
+        action: "start",
+        command:
+          'printf \'workspace=%s\\nagent=%s\\n\' "$WORKSPACE_HOME" "$AGENT_HOME"',
+        timeoutMs: 5000,
+        silenceTimeoutMs: 5000,
+      }),
+    );
+    expect(started.success).toBe(true);
+
+    let output = "";
+    let status = "running";
+    for (let i = 0; i < 20 && status === "running"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const polled = await withWorkspace(workspaceDir, () =>
+        runTool<{ success: boolean; status: string; output: string }>(
+          "process",
+          {
+            action: "poll",
+            id: started.id,
+          },
+        ),
+      );
+      expect(polled.success).toBe(true);
+      output += polled.output;
+      status = polled.status;
+    }
+
+    expect(status).not.toBe("running");
+    expect(output).toContain(`workspace=${workspaceDir}`);
+    expect(output).toContain(`agent=${path.dirname(workspaceDir)}`);
   });
 });
 
