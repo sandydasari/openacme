@@ -13,7 +13,7 @@ import {
 import { MemoryStore } from "@openacme/memory";
 import { TaskStore } from "@openacme/tasks";
 import type { ToolRegistry } from "@openacme/tools";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import { Agent } from "../src/agent.js";
 import type { AgentConfig } from "../src/types.js";
 import { runSubagent } from "../src/subagent.js";
@@ -41,7 +41,7 @@ function freshDb() {
   return db;
 }
 
-function makeAgent(): Agent {
+function makeAgent(model?: Partial<AgentConfig["model"]>): Agent {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openacme-subagent-"));
   const db = freshDb();
   const sessionStore = createSessionStore(db);
@@ -54,6 +54,7 @@ function makeAgent(): Agent {
       model: "test",
       apiKey: "x",
       auth: "api_key",
+      ...model,
     },
     persona: "test",
     tools: [],
@@ -307,6 +308,32 @@ function modelReturning(obj: unknown): MockLanguageModelV3 {
   });
 }
 
+function streamingModelReturning(obj: unknown): MockLanguageModelV3 {
+  return new MockLanguageModelV3({
+    doGenerate: async () => {
+      throw new Error("doGenerate should not be used");
+    },
+    doStream: async () => {
+      const id = "txt-1";
+      return {
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id },
+            { type: "text-delta", id, delta: JSON.stringify(obj) },
+            { type: "text-end", id },
+            {
+              type: "finish",
+              finishReason: "stop",
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ],
+        }),
+      };
+    },
+  });
+}
+
 describe("runSubagent (structured mode)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -328,6 +355,27 @@ describe("runSubagent (structured mode)", () => {
     if (out.mode === "structured") {
       expect(out.object).toEqual({ selected: ["a", "b"] });
     }
+  });
+
+  it("streams structured output for OpenAI OAuth", async () => {
+    const agent = makeAgent({ auth: "oauth" });
+    const model = streamingModelReturning({ selected: ["oauth"] });
+    getModelMock.mockReturnValue(model);
+
+    const out = await runSubagent({
+      mode: "structured",
+      parent: agent,
+      system: "system",
+      user: "user",
+      schema: PickSchema,
+    });
+
+    expect(out.status).toBe("completed");
+    if (out.mode === "structured") {
+      expect(out.object).toEqual({ selected: ["oauth"] });
+    }
+    expect(model.doStreamCalls.length).toBe(1);
+    expect(model.doGenerateCalls.length).toBe(0);
   });
 
   it("returns null + failed on schema mismatch", async () => {
