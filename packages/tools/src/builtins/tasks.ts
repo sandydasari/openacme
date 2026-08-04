@@ -396,8 +396,11 @@ const TASK_UPDATE_DESCRIPTION =
   "- Snooze: `start_at` to a future ISO timestamp when you need to back off and " +
   "  re-evaluate later (e.g., world-state isn't ready). Don't set start_at as " +
   "  part of normal handoff.\n\n" +
-  "BEFORE marking `done`: leave a `task_comment(id, body, kind: \"result\")` with " +
-  "the canonical answer. The next agent that depends on this task reads it from " +
+  "For ordinary progress, blockers, errors, corrections, or partial updates, " +
+  "call `task_comment` with `id`, `body`, and `mode: \"comment\"` (or omit " +
+  "`mode`; comment is the default).\n\n" +
+  "BEFORE marking `done`: leave a `task_comment(id, body, mode: \"result\")` with " +
+  "the single canonical final answer. The next agent that depends on this task reads it from " +
   "there. (Soft warning if you skip this — some tasks legitimately have no " +
   "textual result, just an artifact in the world.)\n\n" +
   "When you mark a non-recurring task `done`, dependents auto-flip from blocked to open. " +
@@ -510,7 +513,7 @@ registry.register({
       if (warnMissingResult) {
         out.warning =
           "Marked done without a result comment. If this task produced output, " +
-          "leave a `task_comment(id, body, kind: \"result\")` so the assigner " +
+          "leave a `task_comment(id, body, mode: \"result\")` so the assigner " +
           "and dependents can find the answer. Some tasks have no textual " +
           "result (the artifact is in the world); in that case ignore this warning.";
       }
@@ -532,15 +535,15 @@ registry.register({
 // ── task_comment ─────────────────────────────────────────────────────
 
 const TASK_COMMENT_DESCRIPTION =
-  "Leave a comment on a task. Comments are the discussion thread — questions " +
-  "between assigner and assignee, mid-flight notes, status check-ins, and the " +
-  "canonical result at completion. The body of the task is the SPEC (one " +
-  "voice); comments are the conversation (multi-voice, append-only).\n\n" +
-  "When you finish an assigned task, leave one final comment with " +
-  "`kind: \"result\"` containing the answer (the doc, the number, the " +
-  "summary, or a pointer to the artifact you produced). The agent or human " +
-  "depending on this task reads the result from there. Only the assignee can " +
-  "leave a `result` comment.\n\n" +
+  "Leave a comment on a task. This single tool has two modes:\n" +
+  "1. Ordinary comments — progress, checkpoints, blockers, errors, corrections, " +
+  "and partial updates. For these, set `mode: \"comment\"` or omit `mode`; " +
+  "comment is the default.\n" +
+  "2. Result comments — the assignee's single canonical final answer for the " +
+  "task. For this, include `mode: \"result\"` immediately before marking the " +
+  "task done.\n\n" +
+  "The body of the task is the SPEC (one voice); comments are the conversation " +
+  "(multi-voice, append-only). Only the assignee can leave a `result` comment.\n\n" +
   "Comments are append-only: no edit, no delete. If a previous comment was " +
   "wrong, leave a follow-up that corrects it.";
 
@@ -551,12 +554,13 @@ registry.register({
   parameters: z.object({
     id: TaskIdParam.describe("Task id (sequence number, e.g. 14)."),
     body: z.string().min(1).describe("Comment body (markdown)."),
-    kind: z
-      .enum(["result"])
+    mode: z
+      .enum(["comment", "result"])
       .optional()
+      .default("comment")
       .describe(
-        '"result" marks this comment as the canonical answer at task completion. ' +
-          "Only the assignee can leave a result comment. Omit for normal discussion."
+        '"comment" is for progress, checkpoints, blockers, errors, corrections, and partial updates. ' +
+          '"result" is only for the assignee\'s final answer at task completion.'
       ),
   }),
   emoji: "💬",
@@ -565,7 +569,16 @@ registry.register({
     const b = requireBindings();
     if ("error" in b) return JSON.stringify({ ok: false, error: b.error });
 
-    const a = args as { id: string | number; body: string; kind?: "result" };
+    const a = args as {
+      id: string | number;
+      body: string;
+      mode?: "comment" | "result";
+      /**
+       * Backward compatibility for callers built against the old schema.
+       * Not exposed in the current model-facing schema.
+       */
+      kind?: "result";
+    };
     const id = taskId(a.id);
     const agentId = getCurrentAgentId();
     if (!agentId) {
@@ -577,6 +590,16 @@ registry.register({
 
     // Belt-and-braces with the Zod schema — blocks any path that bypasses
     // validation from forging system-authored comments.
+    if (
+      a.mode !== undefined &&
+      a.mode !== "comment" &&
+      a.mode !== "result"
+    ) {
+      return JSON.stringify({
+        ok: false,
+        error: `Invalid comment mode ${JSON.stringify(a.mode)}: only "comment" or "result" is allowed.`,
+      });
+    }
     if (a.kind !== undefined && a.kind !== "result") {
       return JSON.stringify({
         ok: false,
@@ -589,7 +612,9 @@ registry.register({
       return JSON.stringify({ ok: false, error: `Task ${id} not found.` });
     }
 
-    if (a.kind === "result" && task.assignee !== agentId) {
+    const kind = a.mode === "result" || a.kind === "result" ? "result" : null;
+
+    if (kind === "result" && task.assignee !== agentId) {
       return JSON.stringify({
         ok: false,
         error:
@@ -602,7 +627,7 @@ registry.register({
         taskId: id,
         author: agentId,
         body: a.body,
-        kind: a.kind ?? null,
+        kind,
       });
       if (!comment) {
         return JSON.stringify({
