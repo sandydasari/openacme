@@ -75,10 +75,12 @@ export function useHomeStream(): {
     });
     const onAny = () => refresh();
     es.addEventListener("session_state", onAny);
+    es.addEventListener("session_title", onAny);
     es.addEventListener("task_event", onAny);
     // ui_message_part is per-token noise — don't refetch on each.
     return () => {
       es.removeEventListener("session_state", onAny);
+      es.removeEventListener("session_title", onAny);
       es.removeEventListener("task_event", onAny);
       es.close();
     };

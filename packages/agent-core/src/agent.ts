@@ -54,6 +54,10 @@ import {
   ensureStepBoundaries,
   finalizeOrphanToolParts,
 } from "./messages.js";
+import {
+  extractErrorText,
+  extractStatusCode,
+} from "./error-classifier.js";
 import type {
   AgentConfig,
   MessageMetadata,
@@ -64,6 +68,20 @@ import type {
 const log = createLogger("agent-core.agent");
 
 const DEFAULT_AUTONOMOUS_TIMEOUT_MS = 5 * 60 * 1000;
+const UPSTREAM_ERROR_MAX_CHARS = 4096;
+
+function buildUpstreamErrorPart(err: unknown, provider?: string) {
+  const statusCode = extractStatusCode(err);
+  const raw = extractErrorText(err);
+  const message =
+    raw.length > UPSTREAM_ERROR_MAX_CHARS
+      ? raw.slice(0, UPSTREAM_ERROR_MAX_CHARS)
+      : raw;
+  return {
+    type: "data-upstream-error" as const,
+    data: { provider, statusCode, message },
+  };
+}
 
 /**
  * Sum per-step provider-reported cost (OpenRouter usage accounting puts
@@ -259,9 +277,8 @@ function lastIsUnansweredAutonomousWake(
  * the stream and persistence.
  */
 /** Structural subset of the server's SessionBroadcaster used by
- *  `runAutonomous` to push UIMessage stream chunks + appended messages
- *  to SSE subscribers. Kept in agent-core so the package stays free
- *  of a runtime dep on @openacme/server. */
+ *  agent-core to push live session updates to SSE subscribers. Kept in
+ *  agent-core so the package stays free of a runtime dep on @openacme/server. */
 export interface AutonomousBroadcaster {
   broadcast(
     sessionId: string,
@@ -276,6 +293,7 @@ export interface AutonomousBroadcaster {
             metadata?: unknown;
           }>;
         }
+      | { kind: "session_title"; title: string }
   ): void;
 }
 
@@ -362,6 +380,26 @@ export class Agent {
       this.onUsage(report);
     } catch (e) {
       log.warn({ err: e, agentId: this.config.id }, "usage report failed");
+    }
+  }
+
+  private surfaceAutonomousError(sessionId: string, err: unknown): void {
+    const msg = {
+      id: randomUUID(),
+      role: "assistant" as const,
+      parts: [buildUpstreamErrorPart(err, this.config.model.provider)],
+    };
+    try {
+      this.messageStore.append(sessionId, msg);
+      this.broadcaster?.broadcast(sessionId, {
+        kind: "messages_appended",
+        messages: [msg],
+      });
+    } catch (e) {
+      log.warn(
+        { err: e, sessionId, agentId: this.config.id },
+        "runAutonomous: failed to surface upstream error"
+      );
     }
   }
 
@@ -739,6 +777,7 @@ export class Agent {
     let timedOut = false;
     let usage: TokenUsage | undefined;
     let assistantMessage: UIMessage | null = null;
+    let capturedError: unknown = null;
 
     const recall = inProgress
       ? await this.applyMemoryRecall({
@@ -835,6 +874,9 @@ export class Agent {
         history,
         signal: timeoutAbort.signal,
         prepareStep,
+        onError: ({ error }) => {
+          capturedError = error;
+        },
         usage: { kind: "autonomous", taskId: usageTask?.id },
       });
 
@@ -972,6 +1014,7 @@ export class Agent {
         if (externalAbort) {
           externalAbort.removeEventListener("abort", onExternalAbort);
         }
+        this.surfaceAutonomousError(sessionId, capturedError ?? e);
         throw e;
       }
     } finally {
@@ -987,6 +1030,13 @@ export class Agent {
       );
     }
     if (!assistantMessage) {
+      this.surfaceAutonomousError(
+        sessionId,
+        capturedError ??
+          new Error(
+            `Autonomous turn in session ${sessionId} produced no assistant message`
+          )
+      );
       throw new Error(
         `Autonomous turn in session ${sessionId} produced no assistant message`
       );
@@ -994,7 +1044,12 @@ export class Agent {
 
     // User message was pre-persisted + pre-broadcast above so any
     // `ping_user` events fired during the turn aren't auto-resolved.
-    const assistantParts = assistantMessage.parts as UIMessage["parts"];
+    const assistantParts = capturedError
+      ? [
+          ...(assistantMessage.parts as UIMessage["parts"]),
+          buildUpstreamErrorPart(capturedError, this.config.model.provider),
+        ]
+      : (assistantMessage.parts as UIMessage["parts"]);
     if (assistantParts.length > 0) {
       const sanitized = ensureStepBoundaries(
         finalizeOrphanToolParts(assistantParts)
@@ -1020,11 +1075,19 @@ export class Agent {
           },
         ],
       });
-      const stored = this.messageStore.getHistory(sessionId);
-      this.fireExtractor({
-        sessionId,
-        sessionMessages: stored as unknown as UIMessage[],
-      });
+      if (!capturedError) {
+        const stored = this.messageStore.getHistory(sessionId);
+        this.fireExtractor({
+          sessionId,
+          sessionMessages: stored as unknown as UIMessage[],
+        });
+      }
+    }
+
+    if (capturedError) {
+      throw new Error(
+        extractErrorText(capturedError) || "Autonomous upstream provider error"
+      );
     }
 
     // No cursor advance — inbox-drain-and-delete is the new
@@ -1610,7 +1673,7 @@ export class Agent {
       const fallback = sliceFallbackTitle(opts.sessionMessages);
       if (!fallback) return;
       try {
-        this.sessionStore.updateTitle(opts.sessionId, fallback);
+        this.writeSessionTitle(opts.sessionId, fallback);
       } catch (e) {
         log.warn(
           { err: e, agentId: this.config.id, sessionId: opts.sessionId },
@@ -1629,7 +1692,7 @@ export class Agent {
     })
       .then((title) => {
         if (title) {
-          this.sessionStore.updateTitle(opts.sessionId, title);
+          this.writeSessionTitle(opts.sessionId, title);
           return;
         }
         writeFallback();
@@ -1644,6 +1707,14 @@ export class Agent {
       .finally(() => {
         this.titleInProgress.delete(opts.sessionId);
       });
+  }
+
+  private writeSessionTitle(sessionId: string, title: string): void {
+    this.sessionStore.updateTitle(sessionId, title);
+    this.broadcaster?.broadcast(sessionId, {
+      kind: "session_title",
+      title,
+    });
   }
 
   /** Get conversation history for a session as persisted UIMessages. */

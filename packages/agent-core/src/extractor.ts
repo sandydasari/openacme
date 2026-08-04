@@ -11,6 +11,7 @@ import {
   scanMemoryFiles,
 } from "@openacme/memory";
 import type { Agent } from "./agent.js";
+import { extractErrorText } from "./error-classifier.js";
 import { runSubagent, type ForkedSubagentResult } from "./subagent.js";
 
 const EXTRACTOR_STEP_CAP = 10;
@@ -143,7 +144,7 @@ export async function runExtractor(
   } catch (e) {
     return {
       status: "failed",
-      error: e instanceof Error ? e.message : String(e),
+      error: extractErrorText(e),
     };
   }
 

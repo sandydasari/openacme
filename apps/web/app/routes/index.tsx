@@ -307,6 +307,9 @@ function ChatPage() {
       onInboxCancelled: ({ messageId }) => {
         setQueuedMessages((q) => q.filter((m) => m.id !== messageId));
       },
+      onSessionTitle: (title) => {
+        setActiveSessionTitle(title);
+      },
     }
   );
   const isLiveRunning = liveSession.state === "running";
@@ -330,7 +333,7 @@ function ChatPage() {
     fetch(`${API_BASE}/api/sessions/${sid}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { title?: string | null } | null) => {
-        if (data) setActiveSessionTitle(data.title ?? null);
+        if (data?.title) setActiveSessionTitle(data.title);
       })
       .catch(() => {});
   }, [isLiveRunning, activeSessionId]);

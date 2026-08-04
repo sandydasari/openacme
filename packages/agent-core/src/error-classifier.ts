@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { APICallError } from "ai";
 
 /**
@@ -80,27 +81,168 @@ export function extractStatusCode(err: unknown): number | undefined {
   return undefined;
 }
 
-/** Original-case error text for surfacing to humans. Concatenates
- *  `message` + `responseBody` so OpenRouter's `metadata.raw` wrapping
- *  of upstream provider errors is included verbatim. Walks one-hop
- *  `.cause` chain to find a wrapped APICallError — `streamText` often
- *  hands `onError` a generic Error whose `cause` is the real
- *  APICallError with the response body attached. */
-export function extractErrorText(err: unknown): string {
+/** Original-case error text for surfacing to humans. Handles SDK Error /
+ *  APICallError instances and nested provider error objects. If no semantic
+ *  error text can be found, falls back to `dumpUnknown()` so plain objects
+ *  never surface as `[object Object]`. */
+const DUMP_MAX_CHARS = 4096;
+
+function isUsefulErrorText(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed !== "[object Object]";
+}
+
+function truncateDump(text: string): string {
+  return text.length > DUMP_MAX_CHARS
+    ? `${text.slice(0, DUMP_MAX_CHARS)}...[truncated]`
+    : text;
+}
+
+function objectEntries(value: object): Array<[string, unknown]> {
+  return Object.keys(value).map((key) => {
+    try {
+      return [key, (value as Record<string, unknown>)[key]];
+    } catch (e) {
+      return [key, `[threw while reading property: ${String(e)}]`];
+    }
+  });
+}
+
+function normalizeForDump(value: unknown, seen: WeakSet<object>): unknown {
+  if (
+    value == null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "symbol") return value.toString();
+  if (typeof value === "function") return `[Function ${value.name || "anonymous"}]`;
+  if (typeof value !== "object") return String(value);
+  if (seen.has(value)) return "[Circular]";
+  seen.add(value);
+
+  if (value instanceof Error) {
+    const errorDump: Record<string, unknown> = {
+      name: value.name || "Error",
+    };
+    if (isUsefulErrorText(value.message)) errorDump.message = value.message;
+    if (value.cause && value.cause !== value) {
+      errorDump.cause = normalizeForDump(value.cause, seen);
+    }
+    for (const [key, child] of objectEntries(value)) {
+      if (!(key in errorDump)) errorDump[key] = normalizeForDump(child, seen);
+    }
+    return errorDump;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForDump(item, seen));
+  }
+
+  const dump: Record<string, unknown> = {};
+  for (const [key, child] of objectEntries(value)) {
+    dump[key] = normalizeForDump(child, seen);
+  }
+  return dump;
+}
+
+function dumpUnknown(value: unknown): string {
+  try {
+    const normalized = normalizeForDump(value, new WeakSet<object>());
+    const json = JSON.stringify(normalized);
+    if (json && isUsefulErrorText(json)) return truncateDump(json);
+  } catch {
+    // Fall through to inspect/String.
+  }
+
+  try {
+    const inspected = inspect(value, {
+      breakLength: 120,
+      colors: false,
+      depth: 6,
+      getters: false,
+      maxArrayLength: 50,
+      maxStringLength: DUMP_MAX_CHARS,
+    });
+    if (isUsefulErrorText(inspected)) return truncateDump(inspected);
+  } catch {
+    // Fall through to String(value).
+  }
+
+  const text = String(value);
+  return isUsefulErrorText(text) ? truncateDump(text) : "Unknown error";
+}
+
+function extractNestedErrorText(
+  value: unknown,
+  seen: WeakSet<object>
+): string {
+  if (value == null) return "";
+  const inner = extractErrorTextInner(value, seen);
+  return isUsefulErrorText(inner) ? inner : "";
+}
+
+function extractErrorTextInner(
+  err: unknown,
+  seen: WeakSet<object>
+): string {
   if (typeof err === "string") return err;
+  if (
+    typeof err === "number" ||
+    typeof err === "boolean" ||
+    typeof err === "bigint"
+  ) {
+    return String(err);
+  }
+  if (err == null) return String(err);
   if (APICallError.isInstance(err)) {
-    const parts = [err.message ?? "", err.responseBody ?? ""].filter(Boolean);
+    const parts = [
+      err.message ?? "",
+      typeof err.responseBody === "string"
+        ? err.responseBody
+        : extractNestedErrorText(err.responseBody, seen),
+    ].filter((part) => isUsefulErrorText(part));
     return parts.join("\n").trim();
   }
+  if (err instanceof Error) {
+    if (err.cause && err.cause !== err) {
+      const inner = extractErrorTextInner(err.cause, seen);
+      if (isUsefulErrorText(inner)) return inner;
+    }
+    if (isUsefulErrorText(err.message)) return err.message;
+    return dumpUnknown(err);
+  }
   if (err && typeof err === "object") {
-    const e = err as { message?: string; cause?: unknown };
+    if (seen.has(err)) return "";
+    seen.add(err);
+    const e = err as Record<string, unknown>;
     if (e.cause && e.cause !== err) {
-      const inner = extractErrorText(e.cause);
+      const inner = extractErrorTextInner(e.cause, seen);
+      if (isUsefulErrorText(inner)) return inner;
+    }
+    for (const key of [
+      "message",
+      "error",
+      "responseBody",
+      "body",
+      "data",
+      "detail",
+      "details",
+      "errors",
+    ]) {
+      const inner = extractNestedErrorText(e[key], seen);
       if (inner) return inner;
     }
-    return e.message ?? String(err);
+    return dumpUnknown(err);
   }
-  return String(err);
+  return dumpUnknown(err);
+}
+
+export function extractErrorText(err: unknown): string {
+  return extractErrorTextInner(err, new WeakSet()).trim();
 }
 
 function extractText(err: unknown): string {
