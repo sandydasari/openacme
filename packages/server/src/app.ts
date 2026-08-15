@@ -380,6 +380,20 @@ export async function createApp(
     return c.json(messages);
   });
 
+  app.get("/api/sessions/:id/events", (c) => {
+    // Session-scoped event log (ping_resolved et al.). Lazy on session
+    // existence like the SSE stream — unknown ids just return []. The chat
+    // page reads this on load to learn which pings Acme proactively closed;
+    // in-session resolves also arrive live via the SSE `task_event` stream.
+    const id = c.req.param("id");
+    const limitRaw = Number(new URL(c.req.url).searchParams.get("limit") ?? "200");
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 200;
+    const events = manager.eventStore.recentForSession(id, 0, limit);
+    // recentForSession returns DESC; reverse for chronological display.
+    return c.json({ events: [...events].reverse() });
+  });
+
   app.get("/api/sessions/:id", (c) => {
     // Session metadata (title, agent id, timestamps). Used by the chat
     // header to render the session title instead of just the id slug.

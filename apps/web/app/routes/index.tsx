@@ -104,6 +104,18 @@ function statusLabel(submitting: boolean, running: boolean, hasAgent: boolean): 
   return hasAgent ? "Ready" : "No agent";
 }
 
+/** Pull the `reason` string out of a `ping_resolved` event payload (a
+ *  JSON string), or "" when absent/unparseable. */
+function parsePingResolvedReason(payload: string | null | undefined): string {
+  if (!payload) return "";
+  try {
+    const p = JSON.parse(payload) as { reason?: unknown };
+    return typeof p.reason === "string" ? p.reason : "";
+  } catch {
+    return "";
+  }
+}
+
 export const Route = createFileRoute("/")({
   validateSearch: z.object({
     session: z.coerce.string().optional(),
@@ -267,10 +279,30 @@ function ChatPage() {
     >
   >({});
 
+  // `ping_resolved` events (unix-seconds + reason) seen for the active
+  // session — seeded from /events on load, appended live via onTaskEvent.
+  // A ping the user never answered, whose message predates one of these,
+  // renders as "Closed by Acme" instead of a standing red request.
+  const [pingResolvedAts, setPingResolvedAts] = useState<
+    { at: number; reason: string }[]
+  >([]);
+
   const liveSession = useLiveSession(
     activeSessionId || null,
     activeSessionId ? setMessages : null,
     {
+      // Acme proactively closed a "Waiting for you" request mid-view —
+      // record it so the ping bubble flips from red to "Closed by Acme".
+      onTaskEvent: (event) => {
+        if (event.kind !== "ping_resolved") return;
+        setPingResolvedAts((prev) => [
+          ...prev,
+          {
+            at: event.createdAt ?? Math.floor(Date.now() / 1000),
+            reason: parsePingResolvedReason(event.payload),
+          },
+        ]);
+      },
       onDataPart: (part) => {
         if (part.type === "data-status") {
           const data = part.data as {
@@ -461,6 +493,7 @@ function ChatPage() {
   useEffect(() => {
     if (!activeSessionId) {
       setMessages([]);
+      setPingResolvedAts([]);
       setHistoryLoading(false);
       return;
     }
@@ -469,6 +502,7 @@ function ChatPage() {
       // persisted yet, and we already appended the optimistic user
       // bubble. Fetching would clobber that with an empty array.
       freshSessionIdRef.current = null;
+      setPingResolvedAts([]);
       setHistoryLoading(false);
       return;
     }
@@ -476,6 +510,7 @@ function ChatPage() {
     // previous session's messages stay visible until the fetch resolves,
     // which makes session switches feel like "old chat is still here".
     setMessages([]);
+    setPingResolvedAts([]);
     setHistoryLoading(true);
     const ctrl = new AbortController();
     fetch(`${API_BASE}/api/sessions/${activeSessionId}/messages`, { signal: ctrl.signal })
@@ -488,6 +523,21 @@ function ChatPage() {
         if ((e as Error).name === "AbortError") return;
         setHistoryLoading(false);
         toast.error("Failed to load messages");
+      });
+    // Seed proactively-closed pings so the badge survives reload (the SSE
+    // stream only replays from the connection point onward).
+    fetch(`${API_BASE}/api/sessions/${activeSessionId}/events`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { events?: Array<{ kind: string; payload: string | null; createdAt: number }> } | null) => {
+        if (!data?.events) return;
+        setPingResolvedAts(
+          data.events
+            .filter((e) => e.kind === "ping_resolved")
+            .map((e) => ({ at: e.createdAt, reason: parsePingResolvedReason(e.payload) }))
+        );
+      })
+      .catch(() => {
+        /* badge degrades to live-only; not worth a toast */
       });
     return () => ctrl.abort();
   }, [activeSessionId, setMessages]);
@@ -1114,24 +1164,37 @@ function ChatPage() {
             className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
           >
             <div className="mx-auto max-w-3xl px-3 py-4 md:px-6 md:py-6">
-              {messages.map((msg, i) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  agent={activeAgent}
-                  isStreaming={
-                    isStreaming &&
-                    msg.role === "assistant" &&
-                    i === messages.length - 1
-                  }
-                  pingAnswered={messages
-                    .slice(i + 1)
-                    .some((m) => m.role === "user")}
-                  fileLinks={fileLinks}
-                  onOpenFile={setPreviewTarget}
-                  skills={orderedSkills}
-                />
-              ))}
+              {messages.map((msg, i) => {
+                const answeredLater = messages
+                  .slice(i + 1)
+                  .some((m) => m.role === "user");
+                // Unanswered ping whose assistant message predates a
+                // ping_resolved → Acme closed it. (ping_resolved always
+                // lands well after the bubble, so >= is safe.)
+                const createdAt = (msg as { createdAt?: number }).createdAt;
+                const withdrawal =
+                  !answeredLater && createdAt != null
+                    ? pingResolvedAts.find((r) => r.at >= createdAt)
+                    : undefined;
+                return (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    agent={activeAgent}
+                    isStreaming={
+                      isStreaming &&
+                      msg.role === "assistant" &&
+                      i === messages.length - 1
+                    }
+                    pingAnswered={answeredLater}
+                    pingWithdrawn={withdrawal != null}
+                    pingWithdrawnReason={withdrawal?.reason}
+                    fileLinks={fileLinks}
+                    onOpenFile={setPreviewTarget}
+                    skills={orderedSkills}
+                  />
+                );
+              })}
               {error && (
                 <div role="alert" className="mt-4 border border-destructive bg-paper-sunk px-3 py-2 font-mono text-[12px] text-destructive section-enter">
                   <span className="mr-2 text-[10px] uppercase tracking-[0.08em]">Error</span>

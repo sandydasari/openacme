@@ -216,6 +216,11 @@ export function summarizeEventPayload(
         ? `${e.agentId} pinged user: "${excerpt}"`
         : `${e.agentId} pinged user`;
     }
+    case "ping_resolved": {
+      const by = (p.resolvedBy && String(p.resolvedBy)) || e.actor || "system";
+      const reason = p.reason ? `: "${String(p.reason).slice(0, 80)}"` : "";
+      return `ping closed by ${by}${reason}`;
+    }
     default:
       return `actor ${e.agentId}`;
   }

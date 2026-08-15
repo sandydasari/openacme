@@ -59,6 +59,8 @@ import {
   bindEmail,
   bindAgentTool,
   bindPingUser,
+  bindPingAdmin,
+  bindWithdrawPing,
   bindDeferSession,
   bindToolHost,
   closeAllShellSessions,
@@ -325,6 +327,42 @@ export class AgentManager {
           actor: agentId,
           payload: { message },
         });
+      },
+    });
+
+    // Acme-only ping administration over the workforce-wide "Waiting for
+    // you" list. `list` surfaces every outstanding ping with its age;
+    // `resolve` retires one the user no longer needs to answer by emitting
+    // a `ping_resolved` event the waiting query treats as a clear.
+    bindPingAdmin({
+      list: () => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        return this.eventStore.unresolvedPingsBySession().map((p) => ({
+          sessionId: p.sessionId,
+          agentId: p.agentId,
+          agentName: this.agentStore.get(p.agentId)?.name ?? p.agentId,
+          sessionTitle: this.sessionStore.get(p.sessionId)?.title ?? null,
+          message: p.message,
+          ageSeconds: Math.max(0, nowSec - p.createdAt),
+        }));
+      },
+      resolve: (sessionId, reason, resolvedBy) =>
+        this.resolvePingForSession(sessionId, reason, resolvedBy),
+    });
+
+    // The asking agent's own self-heal path: when an agent is woken (the
+    // task it pinged about changed) and the question is now moot, it
+    // withdraws its own request. `ownerMustBe` guards to the caller's own
+    // pings — no cross-agent authority, unlike Acme's resolve_ping.
+    bindWithdrawPing({
+      withdraw: (sessionId, agentId, reason) => {
+        const cleared = this.resolvePingForSession(
+          sessionId,
+          reason,
+          agentId,
+          agentId
+        );
+        return cleared ? { message: cleared.message } : null;
       },
     });
 
@@ -605,6 +643,37 @@ export class AgentManager {
     } catch (e) {
       log.warn({ err: e }, "tool-overflow sweep failed");
     }
+  }
+
+  /** Retire the outstanding ping on `sessionId` by emitting a
+   *  `ping_resolved` the waiting query treats as a clear. When
+   *  `ownerMustBe` is set, only the ping belonging to that agent is
+   *  cleared (the self-withdraw guard); omit it for the unscoped
+   *  platform path. `actor` = the waiting agent so the close wakes no
+   *  one. Returns the cleared ping, or null when there's nothing
+   *  matching to close. */
+  private resolvePingForSession(
+    sessionId: string,
+    reason: string,
+    resolvedBy: string,
+    ownerMustBe?: string
+  ): { agentId: string; message: string } | null {
+    const ping = this.eventStore
+      .unresolvedPingsBySession()
+      .find((p) => p.sessionId === sessionId);
+    if (!ping) return null;
+    if (ownerMustBe && ping.agentId !== ownerMustBe) return null;
+    // `actor` = the waiting agent (not the resolver): closing a ping
+    // must not wake anyone, and echo-suppression keys off the event's
+    // own session. Resolver is recorded in the payload for the trail.
+    this.eventStore.append({
+      sessionId,
+      agentId: ping.agentId,
+      actor: ping.agentId,
+      kind: "ping_resolved",
+      payload: { resolvedBy, reason, message: ping.message },
+    });
+    return { agentId: ping.agentId, message: ping.message };
   }
 
   /**
