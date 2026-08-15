@@ -87,6 +87,7 @@ import "./builtins/process.js";
 import "./builtins/skill.js";
 import "./builtins/memory.js";
 import "./builtins/tasks.js";
+import "./builtins/task-plan.js";
 import "./builtins/agent.js";
 import "./builtins/ping.js";
 import "./builtins/defer-session.js";
